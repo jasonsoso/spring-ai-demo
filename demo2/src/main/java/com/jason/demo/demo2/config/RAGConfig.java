@@ -59,7 +59,7 @@ public class RAGConfig {
 
     /**
      * 配置电商客服专用 ChatClient（使用 DeepSeek 模型，集成电商客服系统提示词）
-     * Embedding 使用智谱 embedding-2 模型（通过 spring.ai.model.embedding.text=zhipuai 配置）
+     * Embedding 使用智谱 embedding-2（通过 spring.ai.model.embedding.text=openai + OpenAI 兼容 API 配置）
      */
     @Bean("ecommerceChatClient")
     public ChatClient ecommerceChatClient(ChatClient.Builder chatClientBuilder) {

@@ -1508,7 +1508,7 @@
             <div class="mysql-memory-flow">
                 <span>userId 隔离会话</span><span class="arrow">→</span>
                 <span>JDBC 读取 MySQL 记忆</span><span class="arrow">→</span>
-                <span>message / prompt 模式</span><span class="arrow">→</span>
+                <span>MessageChatMemoryAdvisor 模式</span><span class="arrow">→</span>
                 <span>DeepSeek 生成</span><span class="arrow">→</span>
                 <span>写回 spring_ai_chat_memory</span>
             </div>
@@ -1518,7 +1518,7 @@
                 <div class="card-body">
                     <ul class="knowledge-list">
                         <li><strong>持久化稳定</strong>：使用 JdbcChatMemoryRepository 写入 MySQL，服务重启后记忆不丢失</li>
-                        <li><strong>多模式兼容</strong>：支持 MessageChatMemoryAdvisor 和 PromptChatMemoryAdvisor 动态切换</li>
+                        <li><strong>记忆模式</strong>：使用 MessageChatMemoryAdvisor 持久化记忆（Spring AI 2.0）</li>
                         <li><strong>多用户隔离</strong>：通过 userId 作为 conversationId 区分不同用户记忆</li>
                         <li><strong>模型保持原状</strong>：Chat 走 DeepSeek，Embedding 仍走智谱 embedding-2</li>
                     </ul>
@@ -1543,7 +1543,7 @@
                     <div class="sample-questions">
                         <button class="memory-sample-btn" onclick="fillMysqlMemoryTest(1)">测试1：首次写入 MySQL</button>
                         <button class="memory-sample-btn" onclick="fillMysqlMemoryTest(2)">测试2：复用长期记忆</button>
-                        <button class="memory-sample-btn" onclick="fillMysqlMemoryTest(3)">测试3：Prompt 模式</button>
+                        <button class="memory-sample-btn" onclick="fillMysqlMemoryTest(3)">测试3：memoryType 兼容测试</button>
                     </div>
                 </div>
             </div>

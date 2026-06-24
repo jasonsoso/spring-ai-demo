@@ -3,7 +3,6 @@ package com.jason.demo.demo2.service;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
-import org.springframework.ai.chat.client.advisor.PromptChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -31,19 +30,16 @@ public class MysqlMemoryTripAgentService {
     private final ChatMemory mysqlChatMemory;
     private final JdbcChatMemoryRepository jdbcChatMemoryRepository;
     private final MessageChatMemoryAdvisor messageChatMemoryAdvisor;
-    private final PromptChatMemoryAdvisor promptChatMemoryAdvisor;
 
     public MysqlMemoryTripAgentService(
             ChatClient.Builder chatClientBuilder,
             @Qualifier("mysqlChatMemory") ChatMemory mysqlChatMemory,
             JdbcChatMemoryRepository jdbcChatMemoryRepository,
-            @Qualifier("mysqlMessageChatMemoryAdvisor") MessageChatMemoryAdvisor messageChatMemoryAdvisor,
-            @Qualifier("mysqlPromptChatMemoryAdvisor") PromptChatMemoryAdvisor promptChatMemoryAdvisor) {
+            @Qualifier("mysqlMessageChatMemoryAdvisor") MessageChatMemoryAdvisor messageChatMemoryAdvisor) {
         this.chatClient = chatClientBuilder.build();
         this.mysqlChatMemory = mysqlChatMemory;
         this.jdbcChatMemoryRepository = jdbcChatMemoryRepository;
         this.messageChatMemoryAdvisor = messageChatMemoryAdvisor;
-        this.promptChatMemoryAdvisor = promptChatMemoryAdvisor;
     }
 
     /**
@@ -51,21 +47,11 @@ public class MysqlMemoryTripAgentService {
      *
      * @param userId     用户唯一标识，即 conversationId
      * @param demand     出行需求
-     * @param memoryType 记忆类型：message / prompt
+     * @param memoryType 记忆类型（保留 API 兼容，Spring AI 2.0 统一使用 message 模式）
      * @return 个性化行程规划
      */
     public String planTripWithMysqlMemory(String userId, String demand, String memoryType) {
         try {
-            if ("prompt".equalsIgnoreCase(memoryType)) {
-                return chatClient.prompt()
-                        .system(SYSTEM_PROMPT)
-                        .user(demand)
-                        .advisors(promptChatMemoryAdvisor)
-                        .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, userId))
-                        .call()
-                        .content();
-            }
-
             return chatClient.prompt()
                     .system(SYSTEM_PROMPT)
                     .user(demand)
@@ -79,16 +65,10 @@ public class MysqlMemoryTripAgentService {
         }
     }
 
-    /**
-     * 清除指定用户的 MySQL 持久化记忆。
-     */
     public void clearUserMemory(String userId) {
         mysqlChatMemory.clear(userId);
     }
 
-    /**
-     * 查询所有对话 ID，便于自测确认记忆是否写入。
-     */
     public List<String> listAllConversationIds() {
         return jdbcChatMemoryRepository.findConversationIds();
     }

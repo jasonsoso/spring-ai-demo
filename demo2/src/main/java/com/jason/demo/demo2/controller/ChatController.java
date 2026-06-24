@@ -1,6 +1,6 @@
 package com.jason.demo.demo2.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.jason.demo.demo2.model.ChatRequest;
 import com.jason.demo.demo2.model.ChatResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,7 +20,7 @@ public class ChatController {
     private final ChatClient chatClient;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private JsonMapper jsonMapper;
 
     public ChatController(ChatClient.Builder chatClientBuilder) {
         this.chatClient = chatClientBuilder.build();
@@ -53,7 +53,7 @@ public class ChatController {
                                 chatResponse.setCode(200);
                                 chatResponse.setMessage("streaming");
 
-                                String json = objectMapper.writeValueAsString(chatResponse);
+                                String json = jsonMapper.writeValueAsString(chatResponse);
                                 emitter.send(SseEmitter.event().data(json).build());
                             } catch (IOException e) {
                                 emitter.completeWithError(e);

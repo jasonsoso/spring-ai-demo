@@ -28,7 +28,7 @@ public class MysqlAgentController {
      * MySQL 记忆行程规划接口。
      */
     @Operation(summary = "MySQL 持久化记忆行程规划",
-            description = "通过 userId 关联 MySQL 持久化记忆，支持 message / prompt 两种记忆模式")
+            description = "通过 userId 关联 MySQL 持久化记忆；memoryType 参数保留兼容，Spring AI 2.0 统一使用 MessageChatMemoryAdvisor")
     @GetMapping("/plan")
     public Map<String, Object> planTrip(
             @Parameter(description = "用户唯一标识", example = "1001")
