@@ -163,6 +163,7 @@ public class RagOptimizedService {
         }
 
         return targetIndexes.stream()
+                .filter(index -> index >= 0 && index < docChunks.size())
                 .map(docChunks::get)
                 .collect(Collectors.toList());
     }

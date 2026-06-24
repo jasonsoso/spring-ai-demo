@@ -44,7 +44,7 @@ public class McpChatController {
     public void init() {
         try {
             this.chatClient = chatClientBuilder
-                    .defaultToolCallbacks(mcpToolCallbackProvider)
+                    .defaultTools(mcpToolCallbackProvider)
                     .build();
             log.info("[MCP Client] ChatClient 构建完成");
         } catch (Exception e) {
