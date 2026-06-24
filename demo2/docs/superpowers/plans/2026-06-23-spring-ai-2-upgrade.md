@@ -1,8 +1,8 @@
-# Spring Boot 4 + Spring AI 2.0 升级 Implementation Plan
+﻿# Spring Boot 4 + Spring AI 2.0 升级 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 将 spring-ai-demo 从 Java 17 + Spring Boot 3.5.14 + Spring AI 1.1.7 升级到 Java 21 + Spring Boot 4.1.x + Spring AI 2.0.0，保持全部 REST API 与演示功能可用。
+**Goal:** 将 demo2 从 Java 17 + Spring Boot 3.5.14 + Spring AI 1.1.7 升级到 Java 21 + Spring Boot 4.1.x + Spring AI 2.0.0，保持全部 REST API 与演示功能可用。
 
 **Architecture:** 采用 OpenRewrite 自动化处理 Boot 4 / Jackson 3 / Spring AI 2.0 批量变更，再手动修补 PromptChatMemoryAdvisor 移除、MCP SDK 2.0 兼容、Milvus exclude 等编译/运行时问题。业务分层（Controller → Service/Config → Spring AI）不变。
 
@@ -27,7 +27,7 @@
 | 文件 | 职责 | 变更 |
 |------|------|------|
 | `pom.xml` | 依赖与构建 | Boot 4.1、AI 2.0、Java 21、SpringDoc 3、OpenRewrite 插件 |
-| `DemoApplication.java` | 启动类 | 可能更新 Milvus auto-config exclude 类名 |
+| `Demo2Application.java` | 启动类 | 可能更新 Milvus auto-config exclude 类名 |
 | `config/MysqlMemoryConfig.java` | MySQL 记忆 Bean | 删除 `PromptChatMemoryAdvisor` Bean |
 | `service/MysqlMemoryTripAgentService.java` | MySQL Agent 业务 | 统一 `MessageChatMemoryAdvisor`，兼容 `memoryType` |
 | `controller/ChatController.java` | 流式聊天 | Jackson 3 import 修复 |
@@ -63,7 +63,7 @@ Expected: 输出包含 `version "21` 或更高
 
 Run:
 ```powershell
-cd d:\ai\demo
+cd d:\ai\demo2\demo2
 git checkout -b feature/spring-ai-2-upgrade
 ```
 Expected: `Switched to a new branch 'feature/spring-ai-2-upgrade'`
@@ -246,9 +246,9 @@ git commit -m "refactor: apply OpenRewrite Spring AI 2.0 migration"
 ### Task 5: 移除 PromptChatMemoryAdvisor，统一 MessageChatMemoryAdvisor
 
 **Files:**
-- Modify: `src/main/java/com/jason/demo/demo/config/MysqlMemoryConfig.java`
-- Modify: `src/main/java/com/jason/demo/demo/service/MysqlMemoryTripAgentService.java`
-- Modify: `src/main/java/com/jason/demo/demo/controller/MysqlAgentController.java`
+- Modify: `src/main/java/com/jason/demo/demo2/config/MysqlMemoryConfig.java`
+- Modify: `src/main/java/com/jason/demo/demo2/service/MysqlMemoryTripAgentService.java`
+- Modify: `src/main/java/com/jason/demo/demo2/controller/MysqlAgentController.java`
 
 **Interfaces:**
 - Consumes: `ChatMemory mysqlChatMemory` Bean（`MysqlMemoryConfig`）
@@ -259,7 +259,7 @@ git commit -m "refactor: apply OpenRewrite Spring AI 2.0 migration"
 完整替换为：
 
 ```java
-package com.jason.demo.demo.config;
+package com.jason.demo.demo2.config;
 
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -351,19 +351,19 @@ Expected: 无 `PromptChatMemoryAdvisor` 相关 ERROR
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add src/main/java/com/jason/demo/demo/config/MysqlMemoryConfig.java `
-        src/main/java/com/jason/demo/demo/service/MysqlMemoryTripAgentService.java `
-        src/main/java/com/jason/demo/demo/controller/MysqlAgentController.java
+git add src/main/java/com/jason/demo/demo2/config/MysqlMemoryConfig.java `
+        src/main/java/com/jason/demo/demo2/service/MysqlMemoryTripAgentService.java `
+        src/main/java/com/jason/demo/demo2/controller/MysqlAgentController.java
 git commit -m "fix: replace removed PromptChatMemoryAdvisor with MessageChatMemoryAdvisor"
 ```
 
 ---
 
-### Task 6: 修复 Jackson 3 与 DemoApplication
+### Task 6: 修复 Jackson 3 与 Demo2Application
 
 **Files:**
-- Modify: `src/main/java/com/jason/demo/demo/controller/ChatController.java`
-- Modify: `src/main/java/com/jason/demo/demo/DemoApplication.java`（若编译报错）
+- Modify: `src/main/java/com/jason/demo/demo2/controller/ChatController.java`
+- Modify: `src/main/java/com/jason/demo/demo2/Demo2Application.java`（若编译报错）
 
 **Interfaces:**
 - Consumes: Spring Boot 4 自动配置的 `ObjectMapper` Bean
@@ -397,7 +397,7 @@ public ChatController(ChatClient.Builder chatClientBuilder, JsonMapper jsonMappe
 ```
 并将 `objectMapper.writeValueAsString(...)` 改为 `jsonMapper.writeValueAsString(...)`。
 
-- [ ] **Step 2: 检查 DemoApplication Milvus exclude**
+- [ ] **Step 2: 检查 Demo2Application Milvus exclude**
 
 若编译报错 `MilvusVectorStoreAutoConfiguration` 找不到，在 IDE 或 Maven 错误信息中查找新类全名，更新：
 
@@ -418,8 +418,8 @@ Expected: BUILD SUCCESS
 - [ ] **Step 4: Commit**
 
 ```powershell
-git add src/main/java/com/jason/demo/demo/controller/ChatController.java
-# 若 DemoApplication 有改动也 add
+git add src/main/java/com/jason/demo/demo2/controller/ChatController.java
+# 若 Demo2Application 有改动也 add
 git commit -m "fix: align Jackson 3 imports and Milvus auto-config exclude"
 ```
 
@@ -428,9 +428,9 @@ git commit -m "fix: align Jackson 3 imports and Milvus auto-config exclude"
 ### Task 7: 修复 MCP SDK 2.0 编译问题（若有）
 
 **Files:**
-- Modify: `src/main/java/com/jason/demo/demo/mcp/client/config/McpClientInitializer.java`
-- Modify: `src/main/java/com/jason/demo/demo/mcp/server/config/McpServerConfig.java`
-- Modify: `src/main/java/com/jason/demo/demo/mcp/client/controller/McpChatController.java`（若 API 变更）
+- Modify: `src/main/java/com/jason/demo/demo2/mcp/client/config/McpClientInitializer.java`
+- Modify: `src/main/java/com/jason/demo/demo2/mcp/server/config/McpServerConfig.java`
+- Modify: `src/main/java/com/jason/demo/demo2/mcp/client/controller/McpChatController.java`（若 API 变更）
 - Modify: `src/main/resources/application.properties`（若 MCP 配置项 rename）
 
 **Interfaces:**
@@ -461,11 +461,11 @@ mvnw.cmd compile 2>&1 | Select-String -Pattern "mcp|Mcp"
 
 确认以下配置项仍有效（若 rename 则更新）：
 ```properties
-spring.ai.mcp.server.name=demo-mcp-server
+spring.ai.mcp.server.name=demo2-mcp-server
 spring.ai.mcp.server.tool-callback-converter=false
 spring.ai.mcp.client.enabled=true
 spring.ai.mcp.client.initialized=false
-spring.ai.mcp.client.sse.connections.local-server.url=http://localhost:8080
+spring.ai.mcp.client.sse.connections.local-server.url=http://localhost:8081
 ```
 
 - [ ] **Step 5: 编译 + Commit（若有改动）**
@@ -481,7 +481,7 @@ git commit -m "fix: align MCP SDK 2.0 APIs and configuration"
 ### Task 8: 全量编译与单元测试
 
 **Files:**
-- Test: `src/test/java/com/jason/demo/demo/DemoApplicationTests.java`
+- Test: `src/test/java/com/jason/demo/demo2/Demo2ApplicationTests.java`
 
 **Interfaces:**
 - Consumes: Task 5–7 的全部修复
@@ -504,7 +504,7 @@ Run:
 ```powershell
 mvnw.cmd test
 ```
-Expected: `DemoApplicationTests.contextLoads` PASS
+Expected: `Demo2ApplicationTests.contextLoads` PASS
 
 若 `contextLoads` 失败：
 1. 阅读 Caused by 链
@@ -594,43 +594,43 @@ Run:
 ```powershell
 mvnw.cmd spring-boot:run
 ```
-Expected: 应用在 `:8080` 启动，无 ERROR 级 bean 初始化失败
+Expected: 应用在 `:8081` 启动，无 ERROR 级 bean 初始化失败
 
 - [ ] **Step 2: 基础模块冒烟（无需 Milvus）**
 
 ```powershell
 # Swagger
-curl -s -o NUL -w "%{http_code}" http://localhost:8080/swagger-ui.html
+curl -s -o NUL -w "%{http_code}" http://localhost:8081/swagger-ui.html
 # 期望 200 或 302
 
 # 聊天（需 DeepSeek Key）
-curl -s -X POST http://localhost:8080/ai/chat -H "Content-Type: application/json" -d "{\"message\":\"hello\"}"
+curl -s -X POST http://localhost:8081/ai/chat -H "Content-Type: application/json" -d "{\"message\":\"hello\"}"
 ```
 
 - [ ] **Step 3: MCP 冒烟（应用完全启动后等待 3–5 秒）**
 
 ```powershell
-curl "http://localhost:8080/mcp/client/tools"
-curl "http://localhost:8080/mcp/client/chat?message=北京天气怎么样"
+curl "http://localhost:8081/mcp/client/tools"
+curl "http://localhost:8081/mcp/client/chat?message=北京天气怎么样"
 ```
 
 - [ ] **Step 4: Milvus 依赖模块（需 Docker Milvus + 智谱 Key）**
 
 ```powershell
-curl "http://localhost:8080/rag/optimized/ask?question=户外登山需要什么装备"
-curl "http://localhost:8080/ecommerce/service/chat/precise?question=退换货政策是什么"
+curl "http://localhost:8081/rag/optimized/ask?question=户外登山需要什么装备"
+curl "http://localhost:8081/ecommerce/service/chat/precise?question=退换货政策是什么"
 ```
 
 - [ ] **Step 5: MySQL 记忆模块（需 MySQL）**
 
 ```powershell
-curl "http://localhost:8080/agent/mysql/trip/plan?userId=1001&demand=周末厦门游&memoryType=message"
-curl "http://localhost:8080/agent/mysql/trip/list-conversations"
+curl "http://localhost:8081/agent/mysql/trip/plan?userId=1001&demand=周末厦门游&memoryType=message"
+curl "http://localhost:8081/agent/mysql/trip/list-conversations"
 ```
 
 - [ ] **Step 6: 前端整体验证**
 
-浏览器打开 `http://localhost:8080`，逐 Tab 点击测试。
+浏览器打开 `http://localhost:8081`，逐 Tab 点击测试。
 
 - [ ] **Step 7: 记录验证结果**
 
