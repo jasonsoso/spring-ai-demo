@@ -1,0 +1,2539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spring AI Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .app-container {
+            width: 900px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        /* Tab 导航 */
+        .tab-nav {
+            display: flex;
+            background: #f8f8f8;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 16px;
+            border: none;
+            background: transparent;
+            font-size: 15px;
+            font-weight: 500;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-bottom: 3px solid transparent;
+        }
+
+        .tab-btn:hover { background: #f0f0f0; }
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: white;
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: flex; flex-direction: column; }
+
+        /* ========== 聊天区域 ========== */
+        .chat-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            color: white;
+        }
+        .chat-header h1 { font-size: 22px; font-weight: 600; }
+        .chat-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+        .chat-messages {
+            height: 450px;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f5f5f5;
+        }
+
+        .message { margin-bottom: 16px; display: flex; align-items: flex-start; }
+        .message.user { justify-content: flex-end; }
+        .message.assistant { justify-content: flex-start; }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .chat-input-container {
+            padding: 16px 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .chat-input-form { display: flex; gap: 12px; }
+
+        .chat-input-form input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 24px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .chat-input-form input:focus { border-color: #667eea; }
+
+        /* ========== Embedding 区域 ========== */
+        .embedding-header {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            padding: 20px;
+            color: white;
+        }
+        .embedding-header h1 { font-size: 22px; font-weight: 600; }
+        .embedding-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+        .embedding-body {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            border: 1px solid #e8e8e8;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .card-title {
+            padding: 12px 16px;
+            background: #f8f8f8;
+            font-weight: 600;
+            font-size: 14px;
+            color: #444;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        .card-body { padding: 16px; }
+
+        .form-row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+        .form-row:last-child { margin-bottom: 0; }
+
+        .form-row label { font-size: 14px; color: #555; min-width: 70px; }
+
+        .form-row input, .form-row select {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .form-row input:focus, .form-row select:focus { border-color: #11998e; }
+
+        .result-box {
+            background: #f8fffe;
+            border: 1px solid #d0f0ea;
+            border-radius: 8px;
+            padding: 14px;
+            font-size: 14px;
+            color: #333;
+            min-height: 60px;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+
+        .result-box.loading { color: #999; font-style: italic; }
+        .result-box.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+        .knowledge-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .knowledge-list li {
+            padding: 10px 14px;
+            background: #f0fdf8;
+            border-left: 3px solid #11998e;
+            border-radius: 0 8px 8px 0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        /* ========== 通用按钮 ========== */
+        .btn {
+            padding: 10px 28px;
+            border: none;
+            border-radius: 24px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled { background: #ccc !important; cursor: not-allowed; transform: none !important; }
+
+        .typing::after {
+            content: '...';
+            animation: typing 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes typing {
+            0%, 100% { content: ''; }
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+        }
+
+        .welcome-message {
+            text-align: center;
+            color: #666;
+            padding: 60px 20px;
+        }
+
+        .welcome-message h2 { font-size: 18px; margin-bottom: 8px; color: #333; }
+        .welcome-message p { font-size: 14px; }
+
+        /* ========== RAG 区域 ========== */
+        .rag-header {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            padding: 20px;
+            color: white;
+        }
+        .rag-header h1 { font-size: 22px; font-weight: 600; }
+        .rag-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+        .rag-body {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .rag-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: #666;
+            padding: 12px;
+            background: #fff8fb;
+            border-radius: 8px;
+        }
+
+        .rag-flow span {
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #f0d0e0;
+            border-radius: 16px;
+            white-space: nowrap;
+        }
+
+        .rag-flow .arrow { color: #f5576c; font-weight: bold; border: none; background: none; padding: 0; }
+
+        .sample-questions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .sample-btn {
+            padding: 6px 14px;
+            border: 1px solid #f0d0e0;
+            border-radius: 16px;
+            background: #fff8fb;
+            color: #c0445a;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sample-btn:hover {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .btn-rag {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .rag-answer {
+            background: #fff8fb;
+            border: 1px solid #f0d0e0;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            min-height: 80px;
+            white-space: pre-wrap;
+        }
+
+        .rag-answer.loading { color: #999; font-style: italic; }
+        .rag-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+        .rag-answer .label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 6px;
+        }
+
+        .rag-answer .question-text {
+            color: #c0445a;
+            font-weight: 500;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #f0d0e0;
+        }
+
+        /* ========== 电商客服 RAG 区域 ========== */
+        .ecommerce-header {
+            background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+            padding: 20px;
+            color: white;
+        }
+        .ecommerce-header h1 { font-size: 22px; font-weight: 600; }
+        .ecommerce-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+        .ecommerce-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: #666;
+            padding: 12px;
+            background: #fffbf0;
+            border-radius: 8px;
+        }
+
+        .ecommerce-flow span {
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #ffe0a0;
+            border-radius: 16px;
+            white-space: nowrap;
+        }
+
+        .ecommerce-flow .arrow { color: #f7971e; font-weight: bold; border: none; background: none; padding: 0; }
+
+        .ecommerce-sample-btn {
+            padding: 6px 14px;
+            border: 1px solid #ffe0a0;
+            border-radius: 16px;
+            background: #fffbf0;
+            color: #b06a00;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .ecommerce-sample-btn:hover {
+            background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .btn-ecommerce {
+            background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+            color: white;
+        }
+
+        .ecommerce-answer {
+            background: #fffbf0;
+            border: 1px solid #ffe0a0;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            min-height: 80px;
+            white-space: pre-wrap;
+        }
+
+        .ecommerce-answer.loading { color: #999; font-style: italic; }
+        .ecommerce-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+        .ecommerce-answer .label { font-size: 12px; color: #999; margin-bottom: 6px; }
+        .ecommerce-answer .question-text {
+            color: #b06a00;
+            font-weight: 500;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #ffe0a0;
+        }
+        .ecommerce-answer .mode-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .ecommerce-answer .mode-badge.precise { background: #e8f4fd; color: #1a6fa0; }
+        .ecommerce-answer .mode-badge.enhanced { background: #edf7ed; color: #2d6a2d; }
+
+        .mode-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+
+        .mode-radio {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border: 2px solid #ffe0a0;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .mode-radio input[type="radio"] { display: none; }
+        .mode-radio.selected {
+            border-color: #f7971e;
+            background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+            color: white;
+            font-weight: 600;
+        }
+
+        /* ========== Agent 行程规划区域 ========== */
+        .agent-header {
+            background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%);
+            padding: 20px;
+            color: white;
+        }
+        .agent-header h1 { font-size: 22px; font-weight: 600; }
+        .agent-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+        .agent-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: #666;
+            padding: 12px;
+            background: #f0f9fc;
+            border-radius: 8px;
+        }
+
+        .agent-flow span {
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #b8e0ea;
+            border-radius: 16px;
+            white-space: nowrap;
+        }
+
+        .agent-flow .arrow { color: #2193b0; font-weight: bold; border: none; background: none; padding: 0; }
+
+        .agent-sample-btn {
+            padding: 6px 14px;
+            border: 1px solid #b8e0ea;
+            border-radius: 16px;
+            background: #f0f9fc;
+            color: #1a7a96;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .agent-sample-btn:hover {
+            background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .btn-agent {
+            background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%);
+            color: white;
+        }
+
+        .agent-answer {
+            background: #f0f9fc;
+            border: 1px solid #b8e0ea;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            min-height: 80px;
+            white-space: pre-wrap;
+        }
+
+        .agent-answer.loading { color: #999; font-style: italic; }
+        .agent-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+        .agent-answer .label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 6px;
+        }
+
+        .agent-answer .demand-text {
+            color: #1a7a96;
+            font-weight: 500;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #b8e0ea;
+        }
+
+        .agent-answer .agent-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%);
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+
+        /* ========== Agent 记忆行程区域 ========== */
+        .memory-header {
+            background: linear-gradient(135deg, #834d9b 0%, #d04ed6 100%);
+            padding: 20px;
+            color: white;
+        }
+        .memory-header h1 { font-size: 22px; font-weight: 600; }
+        .memory-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+        .memory-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: #666;
+            padding: 12px;
+            background: #faf5fc;
+            border-radius: 8px;
+        }
+
+        .memory-flow span {
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #e0c8ea;
+            border-radius: 16px;
+            white-space: nowrap;
+        }
+
+        .memory-flow .arrow { color: #834d9b; font-weight: bold; border: none; background: none; padding: 0; }
+
+        .memory-sample-btn {
+            padding: 6px 14px;
+            border: 1px solid #e0c8ea;
+            border-radius: 16px;
+            background: #faf5fc;
+            color: #6b3d7a;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .memory-sample-btn:hover {
+            background: linear-gradient(135deg, #834d9b 0%, #d04ed6 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .btn-memory {
+            background: linear-gradient(135deg, #834d9b 0%, #d04ed6 100%);
+            color: white;
+        }
+
+        .btn-memory-outline {
+            background: white;
+            color: #834d9b;
+            border: 2px solid #d04ed6;
+        }
+
+        .memory-answer {
+            background: #faf5fc;
+            border: 1px solid #e0c8ea;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            min-height: 80px;
+            white-space: pre-wrap;
+        }
+
+        .memory-answer.loading { color: #999; font-style: italic; }
+        .memory-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+        .memory-answer .label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 6px;
+        }
+
+        .memory-answer .demand-text {
+            color: #6b3d7a;
+            font-weight: 500;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #e0c8ea;
+        }
+
+        .memory-answer .memory-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            background: linear-gradient(135deg, #834d9b 0%, #d04ed6 100%);
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-bottom: 12px;
+            margin-right: 8px;
+        }
+
+        .memory-test-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .memory-test-steps li {
+            padding: 10px 14px;
+            background: #faf5fc;
+            border-left: 3px solid #834d9b;
+            border-radius: 0 8px 8px 0;
+            font-size: 14px;
+            color: #333;
+            list-style: none;
+        }
+
+        /* ========== Agent Tools 工具调用区域 ========== */
+        .agent-tools-header {
+            background: linear-gradient(135deg, #0f3443 0%, #34e89e 100%);
+            padding: 20px;
+            color: white;
+        }
+        .agent-tools-header h1 { font-size: 22px; font-weight: 600; }
+        .agent-tools-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+        .agent-tools-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: #666;
+            padding: 12px;
+            background: #f0fdf8;
+            border-radius: 8px;
+        }
+
+        .agent-tools-flow span {
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #a0dfc8;
+            border-radius: 16px;
+            white-space: nowrap;
+        }
+
+        .agent-tools-flow .arrow { color: #0f3443; font-weight: bold; border: none; background: none; padding: 0; }
+
+        .agent-tools-sample-btn {
+            padding: 6px 14px;
+            border: 1px solid #a0dfc8;
+            border-radius: 16px;
+            background: #f0fdf8;
+            color: #0f5c3a;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .agent-tools-sample-btn:hover {
+            background: linear-gradient(135deg, #0f3443 0%, #34e89e 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .btn-agent-tools {
+            background: linear-gradient(135deg, #0f3443 0%, #34e89e 100%);
+            color: white;
+        }
+
+        .agent-tools-answer {
+            background: #f0fdf8;
+            border: 1px solid #a0dfc8;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            min-height: 80px;
+            white-space: pre-wrap;
+        }
+
+        .agent-tools-answer.loading { color: #999; font-style: italic; }
+        .agent-tools-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+        .agent-tools-answer .label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 6px;
+        }
+
+        .agent-tools-answer .demand-text {
+            color: #0f5c3a;
+            font-weight: 500;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #a0dfc8;
+        }
+
+        .agent-tools-answer .tools-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            background: linear-gradient(135deg, #0f3443 0%, #34e89e 100%);
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+
+        /* ========== MySQL 持久化记忆区域 ========== */
+        .mysql-memory-header {
+            background: linear-gradient(135deg, #1f4037 0%, #99f2c8 100%);
+            padding: 20px;
+            color: white;
+        }
+        .mysql-memory-header h1 { font-size: 22px; font-weight: 600; }
+        .mysql-memory-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+        .mysql-memory-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: #666;
+            padding: 12px;
+            background: #f2fbf7;
+            border-radius: 8px;
+        }
+
+        .mysql-memory-flow span {
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #bce8d4;
+            border-radius: 16px;
+            white-space: nowrap;
+        }
+
+        .mysql-memory-flow .arrow { color: #1f4037; font-weight: bold; border: none; background: none; padding: 0; }
+        .btn-mysql-memory {
+            background: linear-gradient(135deg, #1f4037 0%, #99f2c8 100%);
+            color: white;
+        }
+        .btn-mysql-memory-outline {
+            background: white;
+            color: #1f4037;
+            border: 2px solid #99f2c8;
+        }
+        .mysql-memory-answer {
+            background: #f2fbf7;
+            border: 1px solid #bce8d4;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            min-height: 80px;
+            white-space: pre-wrap;
+        }
+        .mysql-memory-answer.loading { color: #999; font-style: italic; }
+        .mysql-memory-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+        .mysql-memory-answer .label { font-size: 12px; color: #999; margin-bottom: 6px; }
+        .mysql-memory-answer .demand-text {
+            color: #1f4037;
+            font-weight: 500;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #bce8d4;
+        }
+        .mysql-memory-answer .mysql-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            background: linear-gradient(135deg, #1f4037 0%, #99f2c8 100%);
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-bottom: 12px;
+            margin-right: 8px;
+        }
+
+        /* ========== MCP Client 聊天区域 ========== */
+        .mcp-header {
+            background: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%);
+            padding: 20px;
+            color: white;
+        }
+        .mcp-header h1 { font-size: 22px; font-weight: 600; }
+        .mcp-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+        .mcp-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: #666;
+            padding: 12px;
+            background: #f5f3ff;
+            border-radius: 8px;
+        }
+
+        .mcp-flow span {
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #c8b8f0;
+            border-radius: 16px;
+            white-space: nowrap;
+        }
+
+        .mcp-flow .arrow { color: #4776E6; font-weight: bold; border: none; background: none; padding: 0; }
+
+        .mcp-sample-btn {
+            padding: 6px 14px;
+            border: 1px solid #c8b8f0;
+            border-radius: 16px;
+            background: #f5f3ff;
+            color: #5a3db5;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .mcp-sample-btn:hover {
+            background: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .btn-mcp {
+            background: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%);
+            color: white;
+        }
+
+        .btn-mcp-outline {
+            background: white;
+            color: #4776E6;
+            border: 2px solid #8E54E9;
+        }
+
+        .mcp-answer {
+            background: #f5f3ff;
+            border: 1px solid #c8b8f0;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            min-height: 80px;
+            white-space: pre-wrap;
+        }
+
+        .mcp-answer.loading { color: #999; font-style: italic; }
+        .mcp-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+        .mcp-answer .label { font-size: 12px; color: #999; margin-bottom: 6px; }
+        .mcp-answer .question-text {
+            color: #5a3db5;
+            font-weight: 500;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #c8b8f0;
+        }
+        .mcp-answer .mcp-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            background: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%);
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-bottom: 12px;
+            margin-right: 6px;
+        }
+
+        .tools-tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tools-tag {
+            padding: 5px 12px;
+            background: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%);
+            color: white;
+            border-radius: 12px;
+            font-size: 13px;
+        }
+
+        /* ========== 多 Agent 协作区域 ========== */
+        .multi-agent-header {
+            background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%);
+            padding: 20px;
+            color: white;
+        }
+        .multi-agent-header h1 { font-size: 22px; font-weight: 600; }
+        .multi-agent-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+        .multi-agent-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            font-size: 12px;
+            color: #666;
+            padding: 12px;
+            background: #fff5f5;
+            border-radius: 8px;
+        }
+        .multi-agent-flow span {
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #ffc0c0;
+            border-radius: 16px;
+            white-space: nowrap;
+        }
+        .multi-agent-flow .arrow { color: #FF416C; font-weight: bold; border: none; background: none; padding: 0; }
+
+        .multi-agent-sample-btn {
+            padding: 6px 14px;
+            border: 1px solid #ffc0c0;
+            border-radius: 16px;
+            background: #fff5f5;
+            color: #c0002a;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .multi-agent-sample-btn:hover {
+            background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .btn-multi-agent {
+            background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%);
+            color: white;
+        }
+
+        .multi-agent-answer {
+            background: #fff5f5;
+            border: 1px solid #ffc0c0;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            min-height: 80px;
+            white-space: pre-wrap;
+        }
+        .multi-agent-answer.loading { color: #999; font-style: italic; }
+        .multi-agent-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+        .agent-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .agent-card {
+            border: 1px solid #e8e8e8;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .agent-card-title {
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            color: white;
+        }
+        .agent-card-title.attraction { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .agent-card-title.dining     { background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%); color: #333; }
+        .agent-card-title.accommodation { background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%); }
+        .agent-card-title.transport  { background: linear-gradient(135deg, #834d9b 0%, #d04ed6 100%); }
+        .agent-card-body {
+            padding: 10px 12px;
+            font-size: 13px;
+            color: #444;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+
+        .final-plan-box {
+            background: #fff5f5;
+            border: 2px solid #FF416C;
+            border-radius: 10px;
+            padding: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            white-space: pre-wrap;
+        }
+
+        .multi-agent-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%);
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-bottom: 12px;
+            margin-right: 6px;
+        }
+
+        .coordinator-box {
+            background: #f0f0ff;
+            border: 1px solid #c8c0f0;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #333;
+            margin-bottom: 12px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+
+    <!-- Tab 导航 -->
+    <div class="tab-nav">
+        <button class="tab-btn active" data-tab="chat" onclick="switchTab('chat')">💬 AI 聊天（DeepSeek）</button>
+        <button class="tab-btn" data-tab="embedding" onclick="switchTab('embedding')">🔢 Embedding 向量化（智普AI）</button>
+        <button class="tab-btn" data-tab="rag" onclick="switchTab('rag')">📖 RAG 基础版</button>
+        <button class="tab-btn" data-tab="rag-opt" onclick="switchTab('rag-opt')">🚀 RAG 优化版 (Milvus)</button>
+        <button class="tab-btn" data-tab="ecommerce" onclick="switchTab('ecommerce')">🛒 电商客服 RAG</button>
+        <button class="tab-btn" data-tab="agent" onclick="switchTab('agent')">🤖 Agent 行程规划</button>
+        <button class="tab-btn" data-tab="agent-memory" onclick="switchTab('agent-memory')">🧠 Agent 记忆行程</button>
+        <button class="tab-btn" data-tab="agent-mysql-memory" onclick="switchTab('agent-mysql-memory')">💾 DB 持久化记忆</button>
+        <button class="tab-btn" data-tab="agent-tools" onclick="switchTab('agent-tools')">🔧 Agent Tools 工具调用</button>
+        <button class="tab-btn" data-tab="mcp" onclick="switchTab('mcp')">🔌 MCP Client 聊天</button>
+        <button class="tab-btn" data-tab="multi-agent" onclick="switchTab('multi-agent')">🤝 多 Agent 协作</button>
+    </div>
+
+    <!-- ========== 聊天 Tab ========== -->
+    <div id="tab-chat" class="tab-content active">
+        <div class="chat-header">
+            <h1>AI 聊天助手</h1>
+            <p>基于 Spring AI + DeepSeek 的流式对话</p>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <h2>欢迎使用 AI 聊天助手！</h2>
+                <p>请在下方输入您的问题，我会尽力为您解答。</p>
+            </div>
+        </div>
+        <div class="chat-input-container">
+            <form class="chat-input-form" id="chatForm">
+                <input type="text" id="messageInput" placeholder="输入您的问题..." autocomplete="off" required>
+                <button type="submit" id="sendButton" class="btn btn-primary">发送</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========== Embedding Tab ========== -->
+    <div id="tab-embedding" class="tab-content">
+        <div class="embedding-header">
+            <h1>Embedding 向量化</h1>
+            <p>基于 Spring AI + 智普AI (embedding-2) 的文本向量化与相似度计算</p>
+        </div>
+        <div class="embedding-body">
+
+            <!-- 知识库 -->
+            <div class="card">
+                <div class="card-title">📚 本地知识库（用于相似度匹配）</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li>海边露营需准备防水帐篷、防潮垫、速干衣和便携炊具。</li>
+                        <li>山地徒步要携带登山杖、防滑鞋、双肩包和应急医疗包。</li>
+                        <li>城市漫游推荐骑行共享单车，打卡老街区和小众咖啡馆。</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 相似文本查找 -->
+            <div class="card">
+                <div class="card-title">🔍 相似文本查找</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>查询文本</label>
+                        <input type="text" id="queryInput" placeholder="如：露营装备怎么选？" value="推荐一款入门级露营装备">
+                    </div>
+                    <div class="form-row">
+                        <label>相似度算法</label>
+                        <select id="algorithmSelect">
+                            <option value="COSINE">余弦相似度（COSINE）- 默认推荐</option>
+                            <option value="EUCLIDEAN">欧氏距离（EUCLIDEAN）- 适合低维</option>
+                            <option value="MANHATTAN">曼哈顿距离（MANHATTAN）- 抗噪声</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-success" id="similarityBtn" onclick="findSimilarity()">查找最相似文本</button>
+                    </div>
+                    <div id="similarityResult" class="result-box">点击按钮开始查找...</div>
+                </div>
+            </div>
+
+            <!-- 文本向量化 -->
+            <div class="card">
+                <div class="card-title">📐 文本向量化（查看原始向量）</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>输入文本</label>
+                        <input type="text" id="embeddingInput" placeholder="输入要向量化的文本" value="推荐一款入门级露营装备">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-success" id="embeddingBtn" onclick="getEmbedding()">获取向量</button>
+                    </div>
+                    <div id="embeddingResult" class="result-box">点击按钮获取向量...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ========== RAG Tab ========== -->
+    <div id="tab-rag" class="tab-content">
+        <div class="rag-header">
+            <h1>RAG 本地知识库问答</h1>
+            <p>检索增强生成：智谱 Embedding 检索 + DeepSeek 生成回答</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="rag-flow">
+                <span>加载知识库</span><span class="arrow">→</span>
+                <span>向量化检索 Top2</span><span class="arrow">→</span>
+                <span>拼接上下文</span><span class="arrow">→</span>
+                <span>DeepSeek 生成</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📚 本地知识库（outdoor-travel-safety-guide.txt）</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>露营安全</strong>：选址、防火、防虫、应急</li>
+                        <li><strong>徒步安全</strong>：路线规划、装备要求、环境应对、体能管理</li>
+                        <li><strong>城市漫游安全</strong>：交通、选址、应急</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例问题</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="sample-btn" onclick="fillRagQuestion('露营选址有什么安全要求？')">露营选址要求</button>
+                        <button class="sample-btn" onclick="fillRagQuestion('徒步时遇到暴雨该怎么办？')">暴雨应对</button>
+                        <button class="sample-btn" onclick="fillRagQuestion('城市骑行需要注意什么？')">城市骑行</button>
+                        <button class="sample-btn" onclick="fillRagQuestion('徒步需要准备哪些装备？')">徒步装备</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 提问测试</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>你的问题</label>
+                        <input type="text" id="ragQuestionInput" placeholder="输入问题，如：露营防火要注意什么？"
+                               value="露营选址有什么安全要求？">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-rag" id="ragAskBtn" onclick="askRag()">开始 RAG 问答</button>
+                    </div>
+                    <div id="ragResult" class="rag-answer">点击按钮开始测试，首次请求需向量化知识库，约需 10~15 秒...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ========== RAG 优化版 Tab (Milvus) ========== -->
+    <div id="tab-rag-opt" class="tab-content">
+        <div class="rag-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <h1>RAG 优化版 · Milvus 向量数据库</h1>
+            <p>TokenTextSplitter 语义切分 + Milvus 持久化 + Top5 阈值过滤 + 相邻片段扩展</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="rag-flow">
+                <span>Token 切分 (800)</span><span class="arrow">→</span>
+                <span>Milvus 向量入库</span><span class="arrow">→</span>
+                <span>Top5 + 阈值 0.05</span><span class="arrow">→</span>
+                <span>相邻片段扩展</span><span class="arrow">→</span>
+                <span>DeepSeek 生成</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">✨ 相比基础版的优化点</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>向量持久化</strong>：Milvus 存储，服务重启后数据不丢失</li>
+                        <li><strong>语义切分</strong>：TokenTextSplitter 按 Token 切分，保留分隔符</li>
+                        <li><strong>噪声过滤</strong>：相似度阈值过滤低相关片段</li>
+                        <li><strong>上下文连贯</strong>：自动扩展相邻片段，回答更完整</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例问题</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="sample-btn" onclick="fillRagOptQuestion('户外旅行中露营、徒步、城市漫游分别有哪些核心安全注意事项？')">三类场景安全</button>
+                        <button class="sample-btn" onclick="fillRagOptQuestion('徒步时遇到野生动物该怎么处理？')">野生动物应对</button>
+                        <button class="sample-btn" onclick="fillRagOptQuestion('室内健身房锻炼有哪些安全要点？')">低相关问题测试</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 提问测试</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>你的问题</label>
+                        <input type="text" id="ragOptQuestionInput" placeholder="输入问题..."
+                               value="户外旅行中露营、徒步、城市漫游分别有哪些核心安全注意事项？">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-rag" id="ragOptAskBtn" onclick="askRagOptimized()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">开始优化版 RAG 问答</button>
+                    </div>
+                    <div id="ragOptResult" class="rag-answer">点击按钮开始测试，首次启动需向 Milvus 入库，请确保 Milvus 已运行...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ========== 电商客服 RAG Tab ========== -->
+    <div id="tab-ecommerce" class="tab-content">
+        <div class="ecommerce-header">
+            <h1>电商客服智能知识库 RAG</h1>
+            <p>智谱 Embedding (embedding-2) 检索 + DeepSeek 生成 · 双 Advisor 模式：精准条款查询 & 复杂场景增强</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="ecommerce-flow">
+                <span>电商知识库文档</span><span class="arrow">→</span>
+                <span>TikaDocumentReader 解析</span><span class="arrow">→</span>
+                <span>Token 切分 (600)</span><span class="arrow">→</span>
+                <span>Milvus 向量存储</span><span class="arrow">→</span>
+                <span>Advisor 检索增强</span><span class="arrow">→</span>
+                <span>DeepSeek 生成</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📚 知识库覆盖范围（ecommerce-knowledge-base.txt）</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>退换货政策</strong>：7天无理由退换、质量问题退换、VIP专属政策、特殊商品规则</li>
+                        <li><strong>物流服务</strong>：包邮政策（普通/偏远地区）、配送时效、物流异常处理</li>
+                        <li><strong>订单管理</strong>：地址修改、订单取消、状态追踪</li>
+                        <li><strong>促销规则</strong>：双11大促、满减优惠、优惠券、积分抵扣</li>
+                        <li><strong>客服支持</strong>：联系方式、售后服务标准、退款时效</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔀 检索模式选择</div>
+                <div class="card-body">
+                    <div class="mode-selector">
+                        <label class="mode-radio selected" id="modeLabel-precise" onclick="selectEcommerceMode('precise')">
+                            <input type="radio" name="ecommerceMode" value="precise" checked>
+                            🎯 精准条款查询（QuestionAnswerAdvisor）
+                        </label>
+                        <label class="mode-radio" id="modeLabel-enhanced" onclick="selectEcommerceMode('enhanced')">
+                            <input type="radio" name="ecommerceMode" value="enhanced">
+                            🔍 复杂场景增强（RetrievalAugmentationAdvisor）
+                        </label>
+                    </div>
+                    <div style="font-size:13px;color:#999;margin-top:6px;">
+                        精准模式适合：查具体条款（包邮条件、退换时限）；增强模式适合：组合/流程类问题（VIP退换货、改地址）
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例问题</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="ecommerce-sample-btn" onclick="fillEcommerceQuestion('新疆地区订单多少金额包邮？')">偏远地区包邮</button>
+                        <button class="ecommerce-sample-btn" onclick="fillEcommerceQuestion('双11买的口红拆封了能退吗？我是VIP用户？')">VIP退换货</button>
+                        <button class="ecommerce-sample-btn" onclick="fillEcommerceQuestion('我刚下单还没发货，想修改收货地址可以吗？')">未发货改地址</button>
+                        <button class="ecommerce-sample-btn" onclick="fillEcommerceQuestion('买了数码产品拆封后发现有质量问题怎么办？')">数码产品质保</button>
+                        <button class="ecommerce-sample-btn" onclick="fillEcommerceQuestion('怎么办理信用卡？')">无关问题测试</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 提问测试</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>你的问题</label>
+                        <input type="text" id="ecommerceQuestionInput" placeholder="输入电商咨询问题..."
+                               value="新疆地区订单多少金额包邮？">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-ecommerce" id="ecommerceAskBtn" onclick="askEcommerce()">开始电商客服 RAG 问答</button>
+                    </div>
+                    <div id="ecommerceResult" class="ecommerce-answer">选择检索模式并输入问题，点击按钮开始测试...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ========== Agent 行程规划 Tab ========== -->
+    <div id="tab-agent" class="tab-content">
+        <div class="agent-header">
+            <h1>智能行程规划 Agent</h1>
+            <p>Spring AI Agent 入门 · DeepSeek 推理 + 系统提示词任务拆解</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="agent-flow">
+                <span>接收出行需求</span><span class="arrow">→</span>
+                <span>Agent 意图解析</span><span class="arrow">→</span>
+                <span>任务拆解规划</span><span class="arrow">→</span>
+                <span>DeepSeek 生成行程</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">✨ Agent 核心能力</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>自主规划</strong>：将模糊出行需求拆解为按天、按时段的可执行行程</li>
+                        <li><strong>偏好适配</strong>：贴合景点类型、饮食禁忌、交通方式等个性化要求</li>
+                        <li><strong>实用提示</strong>：补充预约要求、开放时间、穿搭建议等落地信息</li>
+                        <li><strong>模型配置</strong>：Chat 走 DeepSeek，Embedding 仍走智谱 embedding-2（其他 Tab 使用）</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例需求</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="agent-sample-btn" onclick="fillAgentDemand('周末两天北京短途游，2人，偏好人文景点，不吃辣，交通以地铁为主')">北京周末游</button>
+                        <button class="agent-sample-btn" onclick="fillAgentDemand('单日西安历史文化游，1人，喜欢古建筑，素食主义者，希望行程宽松')">西安文化游</button>
+                        <button class="agent-sample-btn" onclick="fillAgentDemand('准备周末家庭野餐，3大1小，需要采购清单和活动安排')">家庭野餐</button>
+                        <button class="agent-sample-btn" onclick="fillAgentDemand('三天两夜成都美食之旅，2人，不吃内脏，喜欢川菜但不要太辣')">成都美食游</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 行程规划测试</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>出行需求</label>
+                        <input type="text" id="agentDemandInput" placeholder="描述你的出行需求，如：周末两天北京短途游..."
+                               value="周末两天北京短途游，2人，偏好人文景点，不吃辣，交通以地铁为主">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-agent" id="agentPlanBtn" onclick="planTrip()">开始 Agent 行程规划</button>
+                    </div>
+                    <div id="agentResult" class="agent-answer">输入出行需求并点击按钮，Agent 将自动拆解并生成完整行程方案...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ========== Agent 记忆行程 Tab ========== -->
+    <div id="tab-agent-memory" class="tab-content">
+        <div class="memory-header">
+            <h1>带记忆能力的智能行程规划 Agent</h1>
+            <p>Spring AI MessageChatMemoryAdvisor · DeepSeek 聊天 · 智谱 embedding-2（其他 Tab）</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="memory-flow">
+                <span>userId 隔离记忆</span><span class="arrow">→</span>
+                <span>加载历史偏好</span><span class="arrow">→</span>
+                <span>DeepSeek 推理</span><span class="arrow">→</span>
+                <span>更新记忆窗口</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">✨ 记忆能力说明</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>偏好复用</strong>：首次说明「不吃辣、偏好自然景点」后，后续查询无需重复</li>
+                        <li><strong>多用户隔离</strong>：不同 userId 的记忆互不干扰（如 1001 / 1002）</li>
+                        <li><strong>记忆窗口</strong>：InMemoryChatMemoryRepository，最多保留 20 条消息</li>
+                        <li><strong>模型配置</strong>：Chat 走 DeepSeek，Embedding 仍走智谱 embedding-2</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📋 文章推荐测试步骤</div>
+                <div class="card-body">
+                    <ul class="memory-test-steps">
+                        <li><strong>测试 1（存偏好）</strong>：userId=1001，首次说明成都游偏好 → 点击「测试1：首次存偏好」</li>
+                        <li><strong>测试 2（复用记忆）</strong>：保持 userId=1001，不重复偏好 → 点击「测试2：复用记忆」</li>
+                        <li><strong>测试 3（用户隔离）</strong>：切换 userId=1002，不同偏好 → 点击「测试3：多用户隔离」</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="memory-sample-btn" onclick="fillMemoryTest(1)">测试1：首次存偏好</button>
+                        <button class="memory-sample-btn" onclick="fillMemoryTest(2)">测试2：复用记忆</button>
+                        <button class="memory-sample-btn" onclick="fillMemoryTest(3)">测试3：多用户隔离</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 带记忆行程规划测试</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>用户 ID</label>
+                        <input type="text" id="memoryUserIdInput" placeholder="如 1001、1002" value="1001">
+                    </div>
+                    <div class="form-row">
+                        <label>出行需求</label>
+                        <input type="text" id="memoryDemandInput" placeholder="描述出行需求..."
+                               value="周末两天成都短途游，2人，偏好自然景点，不吃辣，交通以地铁和打车为主">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                            <button class="btn btn-memory" id="memoryPlanBtn" onclick="planTripWithMemory()">开始带记忆规划</button>
+                            <button class="btn btn-memory-outline" id="memoryClearBtn" onclick="clearUserMemory()">清除该用户记忆</button>
+                        </div>
+                    </div>
+                    <div id="memoryResult" class="memory-answer">输入 userId 和出行需求，Agent 将自动加载并更新该用户的聊天记忆...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ========== Agent MySQL 持久化记忆 Tab ========== -->
+    <div id="tab-agent-mysql-memory" class="tab-content">
+        <div class="mysql-memory-header">
+            <h1>DB 持久化记忆 Agent</h1>
+            <p>Spring AI JDBC ChatMemoryRepository · MySQL 长期记忆 · DeepSeek 聊天 · 智谱 embedding-2（其他 Tab）</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="mysql-memory-flow">
+                <span>userId 隔离会话</span><span class="arrow">→</span>
+                <span>JDBC 读取 MySQL 记忆</span><span class="arrow">→</span>
+                <span>message / prompt 模式</span><span class="arrow">→</span>
+                <span>DeepSeek 生成</span><span class="arrow">→</span>
+                <span>写回 spring_ai_chat_memory</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">✨ 文章整合点</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>持久化稳定</strong>：使用 JdbcChatMemoryRepository 写入 MySQL，服务重启后记忆不丢失</li>
+                        <li><strong>多模式兼容</strong>：支持 MessageChatMemoryAdvisor 和 PromptChatMemoryAdvisor 动态切换</li>
+                        <li><strong>多用户隔离</strong>：通过 userId 作为 conversationId 区分不同用户记忆</li>
+                        <li><strong>模型保持原状</strong>：Chat 走 DeepSeek，Embedding 仍走智谱 embedding-2</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📋 文章推荐测试步骤</div>
+                <div class="card-body">
+                    <ul class="memory-test-steps">
+                        <li><strong>测试 1（MySQL 存记忆）</strong>：userId=1001，首次说明厦门游偏好 → 点击「测试1：首次写入 MySQL」</li>
+                        <li><strong>测试 2（重启后复用）</strong>：保持 userId=1001，不重复偏好规划泉州游 → 可重启服务后再点击验证长期记忆</li>
+                        <li><strong>测试 3（prompt 模式）</strong>：memoryType=prompt，验证 Prompt 封装模式也能复用记忆</li>
+                        <li><strong>测试 4（清除/查询）</strong>：清除用户记忆，或查询当前 MySQL 中已有 conversationId</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="memory-sample-btn" onclick="fillMysqlMemoryTest(1)">测试1：首次写入 MySQL</button>
+                        <button class="memory-sample-btn" onclick="fillMysqlMemoryTest(2)">测试2：复用长期记忆</button>
+                        <button class="memory-sample-btn" onclick="fillMysqlMemoryTest(3)">测试3：Prompt 模式</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 MySQL 持久化记忆测试</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>用户 ID</label>
+                        <input type="text" id="mysqlMemoryUserIdInput" placeholder="如 1001、user_999" value="1001">
+                    </div>
+                    <div class="form-row">
+                        <label>记忆类型</label>
+                        <select id="mysqlMemoryTypeSelect">
+                            <option value="message">message：角色对话模式</option>
+                            <option value="prompt">prompt：Prompt 封装模式</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>出行需求</label>
+                        <input type="text" id="mysqlMemoryDemandInput" placeholder="描述出行需求..."
+                               value="周末两天厦门游，2人，偏好海滨景点，不吃海鲜，交通以地铁和网约车为主">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                            <button class="btn btn-mysql-memory" id="mysqlMemoryPlanBtn" onclick="planTripWithMysqlMemory()">开始 DB 记忆规划</button>
+                            <button class="btn btn-mysql-memory-outline" id="mysqlMemoryListBtn" onclick="listMysqlConversations()">查询会话 ID</button>
+                            <button class="btn btn-mysql-memory-outline" id="mysqlMemoryClearBtn" onclick="clearMysqlMemory()">清除该用户 DB 记忆</button>
+                        </div>
+                    </div>
+                    <div id="mysqlMemoryResult" class="mysql-memory-answer">请先确认本地 MySQL 已创建 spring_ai_agent 数据库，再点击按钮开始测试...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ========== MCP Client 聊天 Tab ========== -->
+    <div id="tab-mcp" class="tab-content">
+        <div class="mcp-header">
+            <h1>MCP Client 聊天</h1>
+            <p>同一服务内 MCP Server + MCP Client · SSE 传输 · DeepSeek 对话 · 智谱 embedding-2</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="mcp-flow">
+                <span>用户提问</span><span class="arrow">→</span>
+                <span>MCP Client（DeepSeek）</span><span class="arrow">→</span>
+                <span>SSE 调用 MCP Server</span><span class="arrow">→</span>
+                <span>getWeather / recommendAttractions</span><span class="arrow">→</span>
+                <span>整合生成回答</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">✨ MCP 架构说明</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>同一服务</strong>：MCP Server 和 MCP Client 运行在同一个 Spring Boot 实例中</li>
+                        <li><strong>SSE 传输</strong>：Client 通过 http://localhost:8080/sse 与 Server 通信</li>
+                        <li><strong>延迟初始化</strong>：ApplicationReadyEvent 触发后 Client 才连接 Server（避免启动竞争）</li>
+                        <li><strong>模型配置</strong>：Chat 走 DeepSeek，Embedding 仍走智谱 embedding-2</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔧 MCP Server 已注册工具</div>
+                <div class="card-body">
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                        <button class="btn btn-mcp-outline" onclick="loadMcpTools()" id="loadMcpToolsBtn">查询工具列表</button>
+                        <span style="font-size:13px;color:#999;">点击按钮从 /mcp/client/tools 获取实时工具列表</span>
+                    </div>
+                    <div id="mcpToolsList" class="tools-tag-list">
+                        <span style="color:#999;font-size:13px;">点击上方按钮加载工具列表...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例问题</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="mcp-sample-btn" onclick="fillMcpQuestion('北京今天天气怎么样？')">单工具·天气查询</button>
+                        <button class="mcp-sample-btn" onclick="fillMcpQuestion('推荐几个上海的人文景点')">单工具·景点推荐</button>
+                        <button class="mcp-sample-btn" onclick="fillMcpQuestion('帮我规划广州周末一日游，先查天气，再推荐景点，生成完整行程')">多工具·天气+景点+行程</button>
+                        <button class="mcp-sample-btn" onclick="fillMcpQuestion('成都下雨吗？如果下雨推荐室内景点')">天气影响决策</button>
+                        <button class="mcp-sample-btn" onclick="fillMcpQuestion('西安有哪些好玩的？帮我查天气并推荐几个景点')">综合查询</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 MCP 工具调用测试</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>你的问题</label>
+                        <input type="text" id="mcpQuestionInput" placeholder="输入问题，如：帮我规划北京周末游，查天气并推荐景点..."
+                               value="帮我规划广州周末一日游，先查天气，再推荐景点，生成完整行程">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-mcp" id="mcpAskBtn" onclick="askMcp()">开始 MCP 工具调用对话</button>
+                    </div>
+                    <div id="mcpResult" class="mcp-answer">选择示例或输入问题，MCP Client 将通过 SSE 调用 MCP Server 工具，结合 DeepSeek 生成回答...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ========== 多 Agent 协作 Tab ========== -->
+    <div id="tab-multi-agent" class="tab-content">
+        <div class="multi-agent-header">
+            <h1>多 Agent 协作行程规划</h1>
+            <p>Spring AI 实战：Supervisor-Worker 模式 · 1协调+4专项并行+1合并 · DeepSeek 驱动 · 智谱 Embedding 不变</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="multi-agent-flow">
+                <span>用户需求</span><span class="arrow">→</span>
+                <span>🧠 Coordinator 拆解</span><span class="arrow">→</span>
+                <span>⚡并行执行</span><span class="arrow">→</span>
+                <span>🗺️景点Agent</span>
+                <span>🍜餐饮Agent</span>
+                <span>🏨住宿Agent</span>
+                <span>🚌交通Agent</span>
+                <span class="arrow">→</span>
+                <span>🔀 Synthesizer 整合</span><span class="arrow">→</span>
+                <span>✅完整行程</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">✨ 多 Agent 协作架构说明</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>CoordinatorAgent（协调者）</strong>：提炼需求关键要素（目的地/天数/预算/偏好），供专项 Agent 参考</li>
+                        <li><strong>4 个 Worker Agent 并行执行</strong>：AttractionAgent（景点）、DiningAgent（餐饮）、AccommodationAgent（住宿）、TransportAgent（交通）同时调用 DeepSeek</li>
+                        <li><strong>SynthesizerAgent（合并器）</strong>：整合四个专项结果，生成完整、连贯的最终行程方案</li>
+                        <li><strong>模型配置保持原状</strong>：Chat→DeepSeek，Embedding→智谱 embedding-2（本 Tab 无需调用 Embedding）</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例（注意：6次 LLM 调用，约需 20~60 秒）</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="multi-agent-sample-btn" onclick="fillMultiAgentDemand('五一假期4天云南大理+丽江游，2人，预算8000元，偏好自然风光和少数民族文化，不吃辣，交通以飞机+租车为主')">云南大理丽江游</button>
+                        <button class="multi-agent-sample-btn" onclick="fillMultiAgentDemand('暑假7天海南三亚亲子游，2大1小（5岁），预算15000元，偏好海滩+主题乐园，不吃海鲜，以打车为主')">三亚亲子游</button>
+                        <button class="multi-agent-sample-btn" onclick="fillMultiAgentDemand('国庆3天西安历史文化游，4人，预算10000元，偏好古建筑和陕西美食，吃辣，地铁+步行')">西安历史游</button>
+                        <button class="multi-agent-sample-btn" onclick="fillMultiAgentDemand('周末2天上海周边苏州游，2人，预算3000元，偏好园林和水乡古镇，不吃辣，高铁+打车')">苏州园林游</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 多 Agent 协作规划测试</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>出行需求</label>
+                        <input type="text" id="multiAgentDemandInput"
+                               placeholder="描述出行需求（目的地/天数/人数/预算/偏好等）..."
+                               value="五一假期4天云南大理+丽江游，2人，预算8000元，偏好自然风光和少数民族文化，不吃辣，交通以飞机+租车为主">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-multi-agent" id="multiAgentPlanBtn" onclick="planTripMultiAgent()">
+                            🤝 启动多 Agent 协作规划
+                        </button>
+                    </div>
+                    <div id="multiAgentResult" class="multi-agent-answer">
+                        点击按钮启动多 Agent 协作，内部将发起 6 次 DeepSeek 调用（1协调+4并行+1合并），预计耗时 20~60 秒，请耐心等待...
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ========== Agent Tools 工具调用 Tab ========== -->
+    <div id="tab-agent-tools" class="tab-content">
+        <div class="agent-tools-header">
+            <h1>Agent Tools · 工具调用能力</h1>
+            <p>Spring AI @Tool 注解 · DeepSeek 自动判断调用天气查询 + 景点推荐工具，生成实时个性化行程</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="agent-tools-flow">
+                <span>用户提出需求</span><span class="arrow">→</span>
+                <span>DeepSeek 判断工具</span><span class="arrow">→</span>
+                <span>调用 getWeather / recommendAttractions</span><span class="arrow">→</span>
+                <span>整合数据生成行程</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">✨ 工具调用核心能力</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>天气查询工具（getWeather）</strong>：获取目的地实时天气，为出行提供针对性建议</li>
+                        <li><strong>景点推荐工具（recommendAttractions）</strong>：根据城市和偏好返回热门景点（含评分、时长、简介）</li>
+                        <li><strong>自动决策</strong>：Agent 自动判断是否需要调用工具，支持单工具 / 多工具组合调用</li>
+                        <li><strong>模型配置</strong>：Chat 走 DeepSeek，Embedding 仍走智谱 embedding-2（其他 Tab 使用）</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷测试场景</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="agent-tools-sample-btn" onclick="fillAgentToolsDemand('北京明天天气怎么样？适合出行吗？')">测试1：单工具·天气查询</button>
+                        <button class="agent-tools-sample-btn" onclick="fillAgentToolsDemand('推荐几个北京的人文景点，最好评分高的')">测试2：单工具·景点推荐</button>
+                        <button class="agent-tools-sample-btn" onclick="fillAgentToolsDemand('帮我规划北京周末两天游，先看看天气，再推荐几个人文景点，生成完整行程')">测试3：多工具组合·天气+景点+行程</button>
+                        <button class="agent-tools-sample-btn" onclick="fillAgentToolsDemand('广州天气怎么样？如果下雨的话推荐室内景点')">测试4：天气影响行程决策</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 工具调用测试</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>出行需求</label>
+                        <input type="text" id="agentToolsDemandInput" placeholder="输入需求，如：帮我规划北京周末游，看看天气，推荐人文景点..."
+                               value="帮我规划北京周末两天游，先看看天气，再推荐几个人文景点，生成完整行程">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-agent-tools" id="agentToolsPlanBtn" onclick="planTripWithTools()">开始 Agent Tools 规划</button>
+                    </div>
+                    <div id="agentToolsResult" class="agent-tools-answer">选择示例场景或输入需求，Agent 将自动调用工具并生成个性化行程...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // ========== Tab 切换 ==========
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tab);
+        });
+        document.querySelectorAll('.tab-content').forEach(el => {
+            el.classList.toggle('active', el.id === 'tab-' + tab);
+        });
+    }
+
+    // ========== 聊天功能 ==========
+    const chatMessages = document.getElementById('chatMessages');
+    const chatForm = document.getElementById('chatForm');
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+
+    function removeWelcomeMessage() {
+        const welcome = document.querySelector('.welcome-message');
+        if (welcome) welcome.remove();
+    }
+
+    function addMessage(content, isUser = false) {
+        removeWelcomeMessage();
+        const div = document.createElement('div');
+        div.className = `message ${isUser ? 'user' : 'assistant'}`;
+        const content_div = document.createElement('div');
+        content_div.className = 'message-content';
+        content_div.textContent = content;
+        div.appendChild(content_div);
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addLoadingMessage() {
+        removeWelcomeMessage();
+        const div = document.createElement('div');
+        div.className = 'message assistant';
+        div.id = 'loadingMessage';
+        const content_div = document.createElement('div');
+        content_div.className = 'message-content typing';
+        content_div.textContent = 'AI 正在思考';
+        div.appendChild(content_div);
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function removeLoadingMessage() {
+        const el = document.getElementById('loadingMessage');
+        if (el) el.remove();
+    }
+
+    async function sendMessage(message) {
+        addMessage(message, true);
+        addLoadingMessage();
+        sendButton.disabled = true;
+        messageInput.disabled = true;
+
+        try {
+            const response = await fetch('/ai/chatStream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            });
+
+            if (!response.ok) throw new Error('网络请求失败');
+            removeLoadingMessage();
+
+            const div = document.createElement('div');
+            div.className = 'message assistant';
+            const content_div = document.createElement('div');
+            content_div.className = 'message-content';
+            div.appendChild(content_div);
+            chatMessages.appendChild(div);
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                for (const line of chunk.split('\n').filter(l => l.trim())) {
+                    try {
+                        const data = JSON.parse(line.replace(/^data:\s*/, '').trim());
+                        if (data.response) {
+                            fullText += data.response;
+                            content_div.textContent = fullText;
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        }
+                    } catch (e) {}
+                }
+            }
+        } catch (error) {
+            removeLoadingMessage();
+            addMessage('抱歉，发生了错误：' + error.message, false);
+        } finally {
+            sendButton.disabled = false;
+            messageInput.disabled = false;
+            messageInput.focus();
+        }
+    }
+
+    chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const message = messageInput.value.trim();
+        if (!message) return;
+        messageInput.value = '';
+        await sendMessage(message);
+    });
+
+    messageInput.focus();
+
+    // ========== Embedding 功能 ==========
+    async function findSimilarity() {
+        const query = document.getElementById('queryInput').value.trim();
+        const algorithm = document.getElementById('algorithmSelect').value;
+        const resultBox = document.getElementById('similarityResult');
+        const btn = document.getElementById('similarityBtn');
+
+        if (!query) { alert('请输入查询文本'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'result-box loading';
+        resultBox.textContent = '正在调用智普AI向量化接口...';
+
+        try {
+            const res = await fetch(`/ai/similarity?query=${encodeURIComponent(query)}&algorithm=${algorithm}`);
+            const data = await res.json();
+
+            if (data.error) {
+                resultBox.className = 'result-box error';
+                resultBox.textContent = '错误：' + data.error;
+            } else {
+                resultBox.className = 'result-box';
+                resultBox.textContent =
+                    `查询文本：${data.query}\n` +
+                    `使用算法：${data.algorithm}\n` +
+                    `最相似结果：\n${data.answer}`;
+            }
+        } catch (e) {
+            resultBox.className = 'result-box error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请检查智普AI API Key是否已配置（application.properties）';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function getEmbedding() {
+        const message = document.getElementById('embeddingInput').value.trim();
+        const resultBox = document.getElementById('embeddingResult');
+        const btn = document.getElementById('embeddingBtn');
+
+        if (!message) { alert('请输入文本'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'result-box loading';
+        resultBox.textContent = '正在向量化...';
+
+        try {
+            const res = await fetch(`/ai/embedding?message=${encodeURIComponent(message)}`);
+            const data = await res.json();
+            resultBox.className = 'result-box';
+            resultBox.textContent =
+                `文本：${data.message}\n` +
+                `向量维度：${data.vectorDimension}\n` +
+                `向量（前10维）：[${Array.from(data.vector).slice(0, 10).map(v => v.toFixed(4)).join(', ')}, ...]`;
+        } catch (e) {
+            resultBox.className = 'result-box error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请检查智普AI API Key是否已配置（application.properties）';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    // ========== RAG 功能 ==========
+    function fillRagQuestion(question) {
+        document.getElementById('ragQuestionInput').value = question;
+        document.getElementById('ragQuestionInput').focus();
+    }
+
+    async function askRag() {
+        const question = document.getElementById('ragQuestionInput').value.trim();
+        const resultBox = document.getElementById('ragResult');
+        const btn = document.getElementById('ragAskBtn');
+
+        if (!question) { alert('请输入问题'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'rag-answer loading';
+        resultBox.innerHTML = '正在检索知识库并生成回答，请稍候（首次请求需向量化，约 10~15 秒）...';
+
+        try {
+            const res = await fetch(`/rag/ask?question=${encodeURIComponent(question)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            resultBox.className = 'rag-answer';
+            resultBox.innerHTML =
+                `<div class="label">你的问题</div>` +
+                `<div class="question-text">${escapeHtml(data.question)}</div>` +
+                `<div class="label">RAG 回答（基于知识库检索 + DeepSeek 生成）</div>` +
+                `<div>${escapeHtml(data.answer)}</div>`;
+        } catch (e) {
+            resultBox.className = 'rag-answer error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请确认服务已启动，且智谱 Embedding / DeepSeek API Key 已配置。';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    document.getElementById('ragQuestionInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); askRag(); }
+    });
+
+    // ========== RAG 优化版 (Milvus) ==========
+    function fillRagOptQuestion(question) {
+        document.getElementById('ragOptQuestionInput').value = question;
+        document.getElementById('ragOptQuestionInput').focus();
+    }
+
+    async function askRagOptimized() {
+        const question = document.getElementById('ragOptQuestionInput').value.trim();
+        const resultBox = document.getElementById('ragOptResult');
+        const btn = document.getElementById('ragOptAskBtn');
+
+        if (!question) { alert('请输入问题'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'rag-answer loading';
+        resultBox.innerHTML = '正在通过 Milvus 检索知识库并生成回答，请稍候...';
+
+        try {
+            const res = await fetch(`/rag/optimized/ask?question=${encodeURIComponent(question)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            resultBox.className = 'rag-answer';
+            resultBox.innerHTML =
+                `<div class="label">你的问题</div>` +
+                `<div class="question-text">${escapeHtml(data.question)}</div>` +
+                `<div class="label">优化版 RAG 回答（Milvus 检索 + DeepSeek 生成）</div>` +
+                `<div>${escapeHtml(data.answer)}</div>`;
+        } catch (e) {
+            resultBox.className = 'rag-answer error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请确认 Milvus 已运行（localhost:19530），且智谱 Embedding / DeepSeek API Key 已配置。';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('ragOptQuestionInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); askRagOptimized(); }
+    });
+
+    // ========== 电商客服 RAG ==========
+    let ecommerceMode = 'precise';
+
+    function selectEcommerceMode(mode) {
+        ecommerceMode = mode;
+        document.getElementById('modeLabel-precise').classList.toggle('selected', mode === 'precise');
+        document.getElementById('modeLabel-enhanced').classList.toggle('selected', mode === 'enhanced');
+    }
+
+    function fillEcommerceQuestion(question) {
+        document.getElementById('ecommerceQuestionInput').value = question;
+        document.getElementById('ecommerceQuestionInput').focus();
+    }
+
+    async function askEcommerce() {
+        const question = document.getElementById('ecommerceQuestionInput').value.trim();
+        const resultBox = document.getElementById('ecommerceResult');
+        const btn = document.getElementById('ecommerceAskBtn');
+
+        if (!question) { alert('请输入问题'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'ecommerce-answer loading';
+        const modeText = ecommerceMode === 'precise' ? '精准条款查询' : '复杂场景增强';
+        resultBox.innerHTML = `正在使用【${modeText}】模式检索知识库并生成回答，请稍候...`;
+
+        const endpoint = ecommerceMode === 'precise'
+            ? `/ecommerce/service/chat/precise?question=${encodeURIComponent(question)}`
+            : `/ecommerce/service/chat/enhanced?question=${encodeURIComponent(question)}`;
+
+        try {
+            const res = await fetch(endpoint);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            const modeBadgeClass = ecommerceMode === 'precise' ? 'precise' : 'enhanced';
+            resultBox.className = 'ecommerce-answer';
+            resultBox.innerHTML =
+                `<div class="label">你的问题</div>` +
+                `<div class="question-text">${escapeHtml(data.question)}</div>` +
+                `<span class="mode-badge ${modeBadgeClass}">${escapeHtml(data.mode)}</span>` +
+                `<div class="label">电商客服回答（智谱 Embedding 检索 + DeepSeek 生成）</div>` +
+                `<div>${escapeHtml(data.answer)}</div>`;
+        } catch (e) {
+            resultBox.className = 'ecommerce-answer error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请确认：\n1. Milvus 已运行（localhost:19530）\n2. 智谱 Embedding API Key 已配置\n3. DeepSeek API Key 已配置\n4. 已将 ecommerce.reindex-on-startup=true 首次运行入库';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('ecommerceQuestionInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); askEcommerce(); }
+    });
+
+    // ========== Agent 行程规划 ==========
+    function fillAgentDemand(demand) {
+        document.getElementById('agentDemandInput').value = demand;
+        document.getElementById('agentDemandInput').focus();
+    }
+
+    async function planTrip() {
+        const demand = document.getElementById('agentDemandInput').value.trim();
+        const resultBox = document.getElementById('agentResult');
+        const btn = document.getElementById('agentPlanBtn');
+
+        if (!demand) { alert('请输入出行需求'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'agent-answer loading';
+        resultBox.innerHTML = 'Agent 正在解析需求并规划行程，请稍候（DeepSeek 推理中）...';
+
+        try {
+            const res = await fetch(`/agent/trip/plan?demand=${encodeURIComponent(demand)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            resultBox.className = 'agent-answer';
+            resultBox.innerHTML =
+                `<div class="label">你的出行需求</div>` +
+                `<div class="demand-text">${escapeHtml(data.userDemand)}</div>` +
+                `<span class="agent-badge">${escapeHtml(data.agentType)}</span>` +
+                `<div class="label">Agent 行程规划结果（DeepSeek 生成）</div>` +
+                `<div>${escapeHtml(data.tripPlan)}</div>`;
+        } catch (e) {
+            resultBox.className = 'agent-answer error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请确认服务已启动，且 DeepSeek API Key 已配置（application.properties）。';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('agentDemandInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); planTrip(); }
+    });
+
+    // ========== Agent 记忆行程 ==========
+    const MEMORY_TEST_CASES = {
+        1: {
+            userId: '1001',
+            demand: '周末两天成都短途游，2人，偏好自然景点，不吃辣，交通以地铁和打车为主'
+        },
+        2: {
+            userId: '1001',
+            demand: '下周工作日三天，再规划一次成都周边游'
+        },
+        3: {
+            userId: '1002',
+            demand: '周末一天重庆游，1人，喜欢人文景点，吃辣，地铁出行'
+        }
+    };
+
+    const MYSQL_MEMORY_TEST_CASES = {
+        1: {
+            userId: '1001',
+            memoryType: 'message',
+            demand: '周末两天厦门游，2人，偏好海滨景点，不吃海鲜，交通以地铁和网约车为主'
+        },
+        2: {
+            userId: '1001',
+            memoryType: 'message',
+            demand: '下周工作日三天，规划一次泉州游'
+        },
+        3: {
+            userId: '1001',
+            memoryType: 'prompt',
+            demand: '再规划一次漳州游'
+        }
+    };
+
+    function fillMemoryTest(testNo) {
+        const testCase = MEMORY_TEST_CASES[testNo];
+        if (!testCase) return;
+        document.getElementById('memoryUserIdInput').value = testCase.userId;
+        document.getElementById('memoryDemandInput').value = testCase.demand;
+        document.getElementById('memoryDemandInput').focus();
+    }
+
+    function fillMysqlMemoryTest(testNo) {
+        const testCase = MYSQL_MEMORY_TEST_CASES[testNo];
+        if (!testCase) return;
+        document.getElementById('mysqlMemoryUserIdInput').value = testCase.userId;
+        document.getElementById('mysqlMemoryTypeSelect').value = testCase.memoryType;
+        document.getElementById('mysqlMemoryDemandInput').value = testCase.demand;
+        document.getElementById('mysqlMemoryDemandInput').focus();
+    }
+
+    async function planTripWithMemory() {
+        const userId = document.getElementById('memoryUserIdInput').value.trim();
+        const demand = document.getElementById('memoryDemandInput').value.trim();
+        const resultBox = document.getElementById('memoryResult');
+        const btn = document.getElementById('memoryPlanBtn');
+
+        if (!userId) { alert('请输入用户 ID'); return; }
+        if (!demand) { alert('请输入出行需求'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'memory-answer loading';
+        resultBox.innerHTML = `正在为 userId=${escapeHtml(userId)} 加载记忆并规划行程（DeepSeek 推理中）...`;
+
+        try {
+            const url = `/agent/trip/plan-with-memory?userId=${encodeURIComponent(userId)}&demand=${encodeURIComponent(demand)}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            resultBox.className = 'memory-answer';
+            resultBox.innerHTML =
+                `<div class="label">用户 ID</div>` +
+                `<div class="demand-text">${escapeHtml(data.userId)}</div>` +
+                `<div class="label">你的出行需求</div>` +
+                `<div class="demand-text">${escapeHtml(data.userDemand)}</div>` +
+                `<span class="memory-badge">${escapeHtml(data.agentType)}</span>` +
+                `<span class="memory-badge">userId=${escapeHtml(data.userId)}</span>` +
+                `<div class="label">带记忆行程规划结果（DeepSeek 生成）</div>` +
+                `<div>${escapeHtml(data.tripPlan)}</div>`;
+        } catch (e) {
+            resultBox.className = 'memory-answer error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请确认服务已启动，且 DeepSeek API Key 已配置（application.properties）。';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function clearUserMemory() {
+        const userId = document.getElementById('memoryUserIdInput').value.trim();
+        const resultBox = document.getElementById('memoryResult');
+        const btn = document.getElementById('memoryClearBtn');
+
+        if (!userId) { alert('请输入用户 ID'); return; }
+
+        btn.disabled = true;
+        try {
+            const res = await fetch(`/agent/trip/clear-memory?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            resultBox.className = 'memory-answer';
+            resultBox.innerHTML =
+                `<div class="label">操作结果</div>` +
+                `<div class="demand-text">userId=${escapeHtml(data.userId)}：${escapeHtml(data.message)}</div>` +
+                `<div>可重新执行「测试1：首次存偏好」验证记忆写入。</div>`;
+        } catch (e) {
+            resultBox.className = 'memory-answer error';
+            resultBox.textContent = '清除记忆失败：' + e.message;
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function planTripWithMysqlMemory() {
+        const userId = document.getElementById('mysqlMemoryUserIdInput').value.trim();
+        const memoryType = document.getElementById('mysqlMemoryTypeSelect').value;
+        const demand = document.getElementById('mysqlMemoryDemandInput').value.trim();
+        const resultBox = document.getElementById('mysqlMemoryResult');
+        const btn = document.getElementById('mysqlMemoryPlanBtn');
+
+        if (!userId) { alert('请输入用户 ID'); return; }
+        if (!demand) { alert('请输入出行需求'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'mysql-memory-answer loading';
+        resultBox.innerHTML = `正在使用 ${escapeHtml(memoryType)} 模式读取 MySQL 记忆并规划行程（DeepSeek 推理中）...`;
+
+        try {
+            const url = `/agent/mysql/trip/plan?userId=${encodeURIComponent(userId)}&memoryType=${encodeURIComponent(memoryType)}&demand=${encodeURIComponent(demand)}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const result = await res.json();
+            const data = result.data || {};
+
+            resultBox.className = 'mysql-memory-answer';
+            resultBox.innerHTML =
+                `<div class="label">用户 ID</div>` +
+                `<div class="demand-text">${escapeHtml(data.userId || userId)}</div>` +
+                `<div class="label">你的出行需求</div>` +
+                `<div class="demand-text">${escapeHtml(data.userDemand || demand)}</div>` +
+                `<span class="mysql-badge">${escapeHtml(data.storageType || 'MySQL 持久化')}</span>` +
+                `<span class="mysql-badge">memoryType=${escapeHtml(data.memoryType || memoryType)}</span>` +
+                `<div class="label">DB 持久化记忆行程规划结果（DeepSeek 生成）</div>` +
+                `<div>${escapeHtml(data.tripPlan || '')}</div>`;
+        } catch (e) {
+            resultBox.className = 'mysql-memory-answer error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请确认：\n1. MySQL 已启动\n2. 已创建 spring_ai_agent 数据库\n3. application.properties 中数据库用户名/密码正确\n4. DeepSeek API Key 已配置';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function clearMysqlMemory() {
+        const userId = document.getElementById('mysqlMemoryUserIdInput').value.trim();
+        const resultBox = document.getElementById('mysqlMemoryResult');
+        const btn = document.getElementById('mysqlMemoryClearBtn');
+
+        if (!userId) { alert('请输入用户 ID'); return; }
+
+        btn.disabled = true;
+        try {
+            const res = await fetch(`/agent/mysql/trip/clear-memory?userId=${encodeURIComponent(userId)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const result = await res.json();
+            const data = result.data || {};
+
+            resultBox.className = 'mysql-memory-answer';
+            resultBox.innerHTML =
+                `<div class="label">操作结果</div>` +
+                `<div class="demand-text">userId=${escapeHtml(data.userId || userId)}：${escapeHtml(result.msg || '用户 MySQL 记忆清除成功')}</div>` +
+                `<div>可重新执行「测试1：首次写入 MySQL」验证记忆重新写入。</div>`;
+        } catch (e) {
+            resultBox.className = 'mysql-memory-answer error';
+            resultBox.textContent = '清除 DB 记忆失败：' + e.message;
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function listMysqlConversations() {
+        const resultBox = document.getElementById('mysqlMemoryResult');
+        const btn = document.getElementById('mysqlMemoryListBtn');
+
+        btn.disabled = true;
+        try {
+            const res = await fetch('/agent/mysql/trip/list-conversations');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const result = await res.json();
+            const data = result.data || {};
+            const ids = data.conversationIds || [];
+
+            resultBox.className = 'mysql-memory-answer';
+            resultBox.innerHTML =
+                `<div class="label">MySQL 会话统计</div>` +
+                `<span class="mysql-badge">conversationCount=${escapeHtml(String(data.conversationCount || 0))}</span>` +
+                `<div>${escapeHtml(ids.length ? ids.join('\n') : '暂无会话 ID，请先执行一次 DB 记忆规划。')}</div>`;
+        } catch (e) {
+            resultBox.className = 'mysql-memory-answer error';
+            resultBox.textContent = '查询会话 ID 失败：' + e.message;
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('memoryDemandInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); planTripWithMemory(); }
+    });
+
+    document.getElementById('mysqlMemoryDemandInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); planTripWithMysqlMemory(); }
+    });
+
+    // ========== Agent Tools 工具调用 ==========
+    function fillAgentToolsDemand(demand) {
+        document.getElementById('agentToolsDemandInput').value = demand;
+        document.getElementById('agentToolsDemandInput').focus();
+    }
+
+    async function planTripWithTools() {
+        const demand = document.getElementById('agentToolsDemandInput').value.trim();
+        const resultBox = document.getElementById('agentToolsResult');
+        const btn = document.getElementById('agentToolsPlanBtn');
+
+        if (!demand) { alert('请输入出行需求'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'agent-tools-answer loading';
+        resultBox.innerHTML = 'Agent 正在判断是否调用工具并生成行程（DeepSeek 推理中，工具调用需多轮对话，请稍候）...';
+
+        try {
+            const res = await fetch(`/agent/tool/plan?demand=${encodeURIComponent(demand)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            resultBox.className = 'agent-tools-answer';
+            resultBox.innerHTML =
+                `<div class="label">你的出行需求</div>` +
+                `<div class="demand-text">${escapeHtml(data.userDemand)}</div>` +
+                `<span class="tools-badge">${escapeHtml(data.agentType)}</span>` +
+                `<div class="label">Agent Tools 规划结果（DeepSeek + 工具调用）</div>` +
+                `<div>${escapeHtml(data.tripPlan)}</div>`;
+        } catch (e) {
+            resultBox.className = 'agent-tools-answer error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请确认服务已启动，且 DeepSeek API Key 已配置（application.properties）。';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('agentToolsDemandInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); planTripWithTools(); }
+    });
+
+    // ========== MCP Client 工具调用 ==========
+    function fillMcpQuestion(question) {
+        document.getElementById('mcpQuestionInput').value = question;
+        document.getElementById('mcpQuestionInput').focus();
+    }
+
+    async function loadMcpTools() {
+        const btn = document.getElementById('loadMcpToolsBtn');
+        const container = document.getElementById('mcpToolsList');
+        btn.disabled = true;
+        container.innerHTML = '<span style="color:#999;font-size:13px;">正在加载...</span>';
+        try {
+            const res = await fetch('/mcp/client/tools');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const tools = await res.json();
+            if (!tools || tools.length === 0) {
+                container.innerHTML = '<span style="color:#999;font-size:13px;">暂无工具（MCP Client 可能尚未初始化）</span>';
+            } else {
+                container.innerHTML = tools.map(t => {
+                    const [name, ...desc] = t.split(' - ');
+                    return `<span class="tools-tag" title="${escapeHtml(desc.join(' - '))}">${escapeHtml(name)}</span>`;
+                }).join('');
+            }
+        } catch (e) {
+            container.innerHTML = `<span style="color:#d00;font-size:13px;">加载失败：${escapeHtml(e.message)}（请确认服务已完全启动）</span>`;
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function askMcp() {
+        const question = document.getElementById('mcpQuestionInput').value.trim();
+        const resultBox = document.getElementById('mcpResult');
+        const btn = document.getElementById('mcpAskBtn');
+
+        if (!question) { alert('请输入问题'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'mcp-answer loading';
+        resultBox.innerHTML = 'MCP Client 正在通过 SSE 调用 MCP Server 工具（DeepSeek 推理中，工具调用需多轮，请稍候）...';
+
+        try {
+            const res = await fetch(`/mcp/client/chat?message=${encodeURIComponent(question)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const answer = await res.text();
+
+            resultBox.className = 'mcp-answer';
+            resultBox.innerHTML =
+                `<div class="label">你的问题</div>` +
+                `<div class="question-text">${escapeHtml(question)}</div>` +
+                `<span class="mcp-badge">MCP Client</span>` +
+                `<span class="mcp-badge">DeepSeek Chat</span>` +
+                `<span class="mcp-badge">智谱 Embedding</span>` +
+                `<div class="label">MCP 工具调用回答</div>` +
+                `<div>${escapeHtml(answer)}</div>`;
+        } catch (e) {
+            resultBox.className = 'mcp-answer error';
+            resultBox.textContent = '请求失败：' + e.message +
+                '\n\n请确认：\n1. 服务已完全启动（MCP Client 初始化需等 Tomcat 就绪后约 1~2 秒）\n2. DeepSeek API Key 已配置\n3. 查看控制台日志确认 MCP Client 初始化成功';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('mcpQuestionInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); askMcp(); }
+    });
+
+    // ========== 多 Agent 协作 ==========
+    function fillMultiAgentDemand(demand) {
+        document.getElementById('multiAgentDemandInput').value = demand;
+        document.getElementById('multiAgentDemandInput').focus();
+    }
+
+    async function planTripMultiAgent() {
+        const demand = document.getElementById('multiAgentDemandInput').value.trim();
+        const resultBox = document.getElementById('multiAgentResult');
+        const btn = document.getElementById('multiAgentPlanBtn');
+
+        if (!demand) { alert('请输入出行需求'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'multi-agent-answer loading';
+        resultBox.innerHTML = '⏳ 多 Agent 协作启动中...\n\n' +
+            '① Coordinator Agent 正在分析需求...\n' +
+            '② 四个专项 Agent（景点/餐饮/住宿/交通）将并行执行...\n' +
+            '③ Synthesizer Agent 将整合所有结果...\n\n' +
+            '预计耗时 20~60 秒，请耐心等待（共 6 次 DeepSeek 调用）...';
+
+        try {
+            const res = await fetch(`/agent/multi/plan?demand=${encodeURIComponent(demand)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            // 渲染结果
+            resultBox.className = 'multi-agent-answer';
+            resultBox.innerHTML = `
+<div class="label">你的出行需求</div>
+<div style="color:#c0002a;font-weight:500;margin-bottom:12px;padding-bottom:12px;border-bottom:1px dashed #ffc0c0;">${escapeHtml(data.userDemand)}</div>
+
+<div class="label">① Coordinator 需求分析</div>
+<div class="coordinator-box">${escapeHtml(data.taskBrief || '')}</div>
+
+<div class="label">② 四个专项 Agent 并行规划结果</div>
+<div class="agent-cards">
+    <div class="agent-card">
+        <div class="agent-card-title attraction">🗺️ 景点规划 Agent</div>
+        <div class="agent-card-body">${escapeHtml(data.attractionPlan || '')}</div>
+    </div>
+    <div class="agent-card">
+        <div class="agent-card-title dining">🍜 餐饮规划 Agent</div>
+        <div class="agent-card-body">${escapeHtml(data.diningPlan || '')}</div>
+    </div>
+    <div class="agent-card">
+        <div class="agent-card-title accommodation">🏨 住宿规划 Agent</div>
+        <div class="agent-card-body">${escapeHtml(data.accommodationPlan || '')}</div>
+    </div>
+    <div class="agent-card">
+        <div class="agent-card-title transport">🚌 交通规划 Agent</div>
+        <div class="agent-card-body">${escapeHtml(data.transportPlan || '')}</div>
+    </div>
+</div>
+
+<div class="label">③ Synthesizer 综合行程方案</div>
+<span class="multi-agent-badge">${escapeHtml(data.agentType || '')}</span>
+<span class="multi-agent-badge">总耗时 ${data.totalCostMs || 0}ms</span>
+<div class="final-plan-box">${escapeHtml(data.finalPlan || '')}</div>`;
+        } catch (e) {
+            resultBox.className = 'multi-agent-answer error';
+            resultBox.textContent = '请求失败：' + e.message +
+                '\n\n请确认：\n1. 服务已启动\n2. DeepSeek API Key 已配置\n3. 网络连接正常（6次LLM调用，超时请重试）';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('multiAgentDemandInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); planTripMultiAgent(); }
+    });
+</script>
+</body>
+</html>
