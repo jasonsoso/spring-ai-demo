@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.14</version>
+        <version>4.1.0</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.jason.demo</groupId>
@@ -27,8 +27,8 @@
         <url/>
     </scm>
     <properties>
-        <java.version>17</java.version>
-        <spring-ai.version>1.1.7</spring-ai.version>
+        <java.version>21</java.version>
+        <spring-ai.version>2.0.0</spring-ai.version>
     </properties>
 
     <dependencyManagement>
@@ -56,9 +56,11 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-deepseek</artifactId>
         </dependency>
+        <!-- 智谱 AI：2.0.0 GA 已从主仓库移除，锁定最后官方版本 M4 -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-zhipuai</artifactId>
+            <version>2.0.0-M4</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
@@ -89,10 +91,10 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-tika-document-reader</artifactId>
         </dependency>
-        <!-- QuestionAnswerAdvisor 依赖 -->
+        <!-- QuestionAnswerAdvisor 依赖（2.0 重命名为 vector-store-advisor） -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-advisors-vector-store</artifactId>
+            <artifactId>spring-ai-vector-store-advisor</artifactId>
         </dependency>
         <!-- RetrievalAugmentationAdvisor 依赖 -->
         <dependency>
@@ -113,7 +115,7 @@
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-            <version>2.8.9</version>
+            <version>3.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -140,6 +142,21 @@
                         </exclude>
                     </excludes>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.openrewrite.maven</groupId>
+                <artifactId>rewrite-maven-plugin</artifactId>
+                <version>6.32.0</version>
+                <configuration>
+                    <exportDatatables>true</exportDatatables>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.openrewrite.recipe</groupId>
+                        <artifactId>rewrite-spring</artifactId>
+                        <version>6.30.4</version>
+                    </dependency>
+                </dependencies>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
