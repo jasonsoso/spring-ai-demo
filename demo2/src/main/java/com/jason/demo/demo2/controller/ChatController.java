@@ -36,7 +36,7 @@ public class ChatController {
         return new ChatResponse(resp);
     }
 
-    @Operation(summary = "流式聊天", description = "通过 SSE 流式返回回复；Swagger UI 无法完整模拟流式响应，请使用 curl 或前端 EventSource 测试")
+    @Operation(summary = "流式聊天", description = "通过 SSE 流式返回回复；文档界面无法完整模拟流式响应，请使用 curl 或前端 EventSource 测试")
     @PostMapping("/chatStream")
     public SseEmitter chatStream(@RequestBody ChatRequest chatRequest) {
         SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);

@@ -51,7 +51,7 @@
 | 持久化记忆 | MySQL | 8.x |
 | 协议 | MCP（Model Context Protocol） | SSE |
 | 文档解析 | Apache Tika + PDFBox | — |
-| API 文档 | SpringDoc OpenAPI | 3.0.0 |
+| API 文档 | SpringDoc OpenAPI + Scalar | 3.0.3 |
 | 工具库 | Lombok | — |
 | 前端 | 原生 HTML/CSS/JS（单页多 Tab） | — |
 
@@ -162,8 +162,10 @@ CREATE DATABASE spring_ai_agent2 CHARACTER SET utf8mb4;
 
 ```properties
 spring.ai.deepseek.api-key=<你的 DeepSeek API Key>
-spring.ai.zhipuai.api-key=<你的 智谱 AI API Key>
+spring.ai.openai.api-key=<你的 智谱 AI API Key>
 ```
+
+> Spring AI 2.0 已移除 `zhipuai` 模块，智谱 Embedding 通过 OpenAI 兼容接口接入（`spring.ai.openai.base-url` 指向智谱 API）。
 
 ### 4. 启动应用
 
@@ -189,7 +191,7 @@ mvn spring-boot:run
 | 地址 | 说明 |
 |------|------|
 | `http://localhost:8081` | 前端演示界面（多 Tab） |
-| `http://localhost:8081/swagger-ui.html` | Swagger API 文档 |
+| `http://localhost:8081/scalar` | Scalar API 文档 |
 | `http://localhost:8081/v3/api-docs` | OpenAPI JSON |
 
 ---
@@ -199,11 +201,14 @@ mvn spring-boot:run
 ### 核心配置项（application.properties）
 
 ```properties
-# ===== AI 模型 =====
+# ===== AI 模型（Spring AI 2.0 扁平化配置，不再使用 .options. 前缀）=====
+spring.ai.model.chat=deepseek
+spring.ai.model.embedding.text=openai
 spring.ai.deepseek.api-key=xxx            # DeepSeek API Key
-spring.ai.deepseek.chat.options.model=deepseek-v4-pro
-spring.ai.zhipuai.api-key=xxx             # 智谱 AI API Key
-spring.ai.zhipuai.embedding.options.model=embedding-2
+spring.ai.deepseek.chat.model=deepseek-v4-pro
+spring.ai.openai.api-key=xxx              # 智谱 AI API Key（Embedding）
+spring.ai.openai.base-url=https://open.bigmodel.cn/api/paas/v4
+spring.ai.openai.embedding.model=embedding-2
 
 # ===== MySQL =====
 spring.datasource.url=jdbc:mysql://127.0.0.1:3306/spring_ai_agent2
@@ -239,7 +244,7 @@ spring.ai.mcp.client.sse.connections.local-server.url=http://localhost:8081
 
 ## API 接口文档
 
-详细接口请访问 `http://localhost:8081/swagger-ui.html`，以下为接口速查表：
+详细接口请访问 `http://localhost:8081/scalar`，以下为接口速查表：
 
 ### 聊天与 Embedding
 
