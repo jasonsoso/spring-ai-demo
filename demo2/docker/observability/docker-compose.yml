@@ -1,0 +1,13 @@
+# Grafana LGTM：本地 OTLP 接收 + Grafana UI
+# 启动：docker compose -f demo2/docker/observability/docker-compose.yml up -d
+# Grafana：http://localhost:3000 （默认 admin/admin）
+# OTLP HTTP：4318  |  OTLP gRPC：4317
+services:
+  otel-lgtm:
+    container_name: demo2-otel-lgtm
+    image: grafana/otel-lgtm:latest
+    ports:
+      - "3000:3000"
+      - "4317:4317"
+      - "4318:4318"
+    restart: unless-stopped
