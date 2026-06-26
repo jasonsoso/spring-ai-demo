@@ -434,7 +434,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    subgraph 冷启动索引 reindex-on-startup=true
+    subgraph coldStart["冷启动索引 reindex-on-startup=true"]
         F2[outdoor-travel-safety-guide.txt] -->|TokenTextSplitter\n512 token/片| CHUNKS2[切分片段]
         CHUNKS2 -->|ZhipuAI embedding-2\n1024维| MILVUS[(Milvus\ncollection:\ntravel_safety_embedding2)]
     end
