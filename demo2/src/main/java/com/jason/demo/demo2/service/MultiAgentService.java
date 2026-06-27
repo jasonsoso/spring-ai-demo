@@ -11,12 +11,14 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 多 Agent 调度业务服务
  * 实现 Supervisor-Worker 模式：
  *   Step 1 — SupervisorAgent.decompose()：分解用户需求，生成任务摘要
- *   Step 2 — ItineraryAgent / WeatherAgent / BudgetAgent 三路并行执行（CompletableFuture）
+ *   Step 2 — ItineraryAgent / WeatherAgent / BudgetAgent 三路并行执行（虚拟线程 + CompletableFuture）
  *   Step 3 — SupervisorAgent.synthesize()：整合三路结果，输出完整行程方案
  *
  * Chat：DeepSeek | Embedding：智谱 embedding-2（本服务无需调用）
@@ -30,6 +32,9 @@ public class MultiAgentService {
     private final ItineraryAgent   itineraryAgent;
     private final WeatherAgent     weatherAgent;
     private final BudgetAgent      budgetAgent;
+
+    /** I/O 阻塞型 LLM 调用使用虚拟线程，避免占用 ForkJoinPool.commonPool() */
+    private final ExecutorService agentExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     /**
      * 多 Agent 协作旅游规划入口
@@ -50,13 +55,13 @@ public class MultiAgentService {
         final String agentInput = "【用户原始需求】\n" + demand
                 + "\n\n【需求摘要（Supervisor 提炼）】\n" + taskBrief;
 
-        log.info("[MultiAgent] 启动三个子 Agent 并行执行...");
-        CompletableFuture<String> weatherFuture   = CompletableFuture.supplyAsync(
-                () -> weatherAgent.analyze(agentInput));
+        log.info("[MultiAgent] 启动三个子 Agent 并行执行（虚拟线程）...");
+        CompletableFuture<String> weatherFuture = CompletableFuture.supplyAsync(
+                () -> weatherAgent.analyze(agentInput), agentExecutor);
         CompletableFuture<String> itineraryFuture = CompletableFuture.supplyAsync(
-                () -> itineraryAgent.plan(agentInput));
-        CompletableFuture<String> budgetFuture    = CompletableFuture.supplyAsync(
-                () -> budgetAgent.allocate(agentInput));
+                () -> itineraryAgent.plan(agentInput), agentExecutor);
+        CompletableFuture<String> budgetFuture = CompletableFuture.supplyAsync(
+                () -> budgetAgent.allocate(agentInput), agentExecutor);
 
         CompletableFuture.allOf(weatherFuture, itineraryFuture, budgetFuture).join();
         log.info("[MultiAgent] 三个子 Agent 全部完成，耗时: {}ms", System.currentTimeMillis() - start);

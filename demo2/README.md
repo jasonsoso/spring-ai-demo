@@ -2,7 +2,7 @@
 
 > demo2 是 demo 的并行副本，默认端口 **8081**，用于后续 Spring AI 2 升级实验。可与 demo（8080）同时运行。
 
-基于 **Spring Boot 4.1 + Spring AI 2.0** 的综合 AI 能力演示项目，覆盖聊天对话、RAG 知识检索、Agent 工具调用、AskUserQuestion 人机澄清、Agent Skills、多 Agent 协作、MCP 协议集成、**Micrometer + OpenTelemetry 可观测性**等核心场景，配套完整前端演示界面。
+基于 **Spring Boot 4.1 + Spring AI 2.0** 的综合 AI 能力演示项目，覆盖聊天对话、结构化输出、RAG 知识检索、Agent 工具调用、AskUserQuestion 人机澄清、Agent Skills、多 Agent 协作、MCP 协议集成、**Micrometer + OpenTelemetry 可观测性**等核心场景，配套完整前端演示界面。
 
 ---
 
@@ -26,10 +26,31 @@
 
 本项目是一个 Spring AI 功能演示应用，通过不同 Controller/Service 模块独立演示各类 AI 能力，适合学习 Spring AI 各组件的用法。
 
+**`controller` 包共 12 个 Controller**（另含 `mcp.client.controller.McpChatController`），与下表一一对应；功能模块章节（§1–§14）按相同顺序归档。
+
+### Controller 一览
+
+| Controller | 包路径 | 基础路径 | 说明 |
+|------------|--------|----------|------|
+| `ChatController` | `controller` | `/ai` | 同步/流式聊天 |
+| `EmbeddingController` | `controller` | `/ai` | 向量化与相似度 |
+| `StructuredOutputController` | `controller` | `/ai/structured` | 结构化输出（`entity()`） |
+| `RagController` | `controller` | `/rag` | RAG 基础版 |
+| `RagOptimizedController` | `controller` | `/rag/optimized` | RAG 优化版（Milvus） |
+| `CustomerServiceController` | `controller` | `/ecommerce/service` | 电商客服 RAG |
+| `AgentController` | `controller` | `/agent/trip` | 行程规划（无记忆/内存记忆） |
+| `MysqlAgentController` | `controller` | `/agent/mysql/trip` | MySQL 持久化记忆行程 |
+| `AgentToolController` | `controller` | `/agent/tool` | `@Tool` 天气/景点工具调用 |
+| `MultiAgentController` | `controller` | `/agent/multi` | Supervisor-Worker 多 Agent |
+| `SkillsAgentController` | `controller` | `/agent/skills` | SkillsTool 语义匹配 |
+| `AskUserAgentController` | `controller` | `/agent/ask-user` | AskUserQuestion SSE Demo |
+| `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
+
 | 模块 | 能力 | 依赖外部服务 |
 |------|------|-------------|
 | AI 聊天 | 同步/流式聊天 | DeepSeek API |
 | Embedding | 文本向量化 + 相似度计算 | 智谱 AI API |
+| 结构化输出 | `entity()` 自动映射 Java 对象 | DeepSeek API |
 | RAG 基础版 | 内存向量检索增强问答 | 智谱 AI API |
 | RAG 优化版 | Milvus 持久化向量检索 | 智谱 AI + Milvus |
 | 电商客服 | 知识库问答（精准/增强两种策略） | 智谱 AI + Milvus |
@@ -37,7 +58,7 @@
 | Agent 工具调用 | 天气查询 + 景点推荐工具 | DeepSeek API |
 | AskUserQuestion | Agent 主动澄清 + SSE 推送问题 | DeepSeek API |
 | Agent Skills | SkillsTool 语义匹配加载 SKILL.md | DeepSeek API |
-| 多 Agent 协作 | Coordinator + Worker + Synthesizer | DeepSeek API |
+| 多 Agent 协作 | Supervisor-Worker（行程/天气/预算并行） | DeepSeek API |
 | MCP | MCP Server/Client 工具注册与调用 | DeepSeek API |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
@@ -72,59 +93,87 @@
 最基础的 LLM 对话能力，支持同步和流式（SSE）两种响应方式。
 
 - `POST /ai/chat` — 同步返回完整回答
-- `GET /ai/chatStream` — Server-Sent Events 流式输出
+- `POST /ai/chatStream` — Server-Sent Events 流式输出（Body：`{"message":"..."}`）
 
 ### 2. Embedding（`/ai`）
 
 将文本转换为向量，并演示三种相似度算法（余弦、欧氏距离、曼哈顿距离）。
 
-- `POST /ai/embedding` — 返回文本的 1024 维向量
-- `GET /ai/similarity` — 与内置知识库做相似度匹配
+- `GET /ai/embedding?message=xxx` — 返回文本的 1024 维向量
+- `GET /ai/similarity?query=xxx&algorithm=COSINE` — 与内置知识库做相似度匹配（`algorithm` 可选：`COSINE` / `EUCLIDEAN` / `MANHATTAN`）
 
-### 3. RAG 基础版（`/rag`）
+### 3. 结构化输出（`/ai/structured`）
+
+演示 Spring AI 2.0 的 `ChatClient.entity()`：模型返回 JSON 后**自动映射**为 Java 对象，无需手写解析逻辑。实现类：`StructuredOutputController`。
+
+| 端点 | 说明 |
+|------|------|
+| `GET /ai/structured/analyze?productName=xxx` | 产品分析，返回 `ProductAnalysis`（优缺点、评分、购买建议） |
+| `GET /ai/structured/tech-stacks?scenario=xxx` | 技术栈推荐，返回 `List<TechStack>`（名称、场景、成熟度） |
+
+**响应示例**（`ProductAnalysis` record）：
+
+```json
+{
+  "productName": "MacBook Air M4",
+  "pros": ["轻薄", "续航长"],
+  "cons": ["接口较少"],
+  "score": 8,
+  "recommendation": "适合移动办公用户"
+}
+```
+
+```bash
+curl "http://localhost:8081/ai/structured/analyze?productName=MacBook%20Air%20M4"
+curl "http://localhost:8081/ai/structured/tech-stacks?scenario=高并发电商秒杀系统"
+```
+
+> **前端说明**：`index.html` 暂未提供独立 Tab，请通过 Swagger（`/scalar`）或 curl 调用。
+
+### 4. RAG 基础版（`/rag`）
 
 将 `outdoor-travel-safety-guide.txt` 切片后存入内存向量库，回答户外旅行安全问题。
 
 - `GET /rag/ask?question=xxx` — 检索增强问答（Top-K=2）
 
-### 4. RAG 优化版（`/rag/optimized`）
+### 5. RAG 优化版（`/rag/optimized`）
 
 升级版 RAG，使用 Milvus 持久化存储，支持相似度阈值过滤和相邻片段扩展。
 
 - `GET /rag/optimized/ask?question=xxx`
 - 配置项：Top-K=5，相似度阈值=0.05，冷启动重建索引开关
 
-### 5. 电商客服（`/ecommerce/service`）
+### 6. 电商客服（`/ecommerce/service`）
 
 基于 `ecommerce-knowledge-base.txt` 的电商场景问答，覆盖退换货、物流、促销等知识。
 
 - `GET /ecommerce/service/chat/precise` — 精准检索（QuestionAnswerAdvisor）
 - `GET /ecommerce/service/chat/enhanced` — 增强检索（RetrievalAugmentationAdvisor）
 
-### 6. Agent 行程规划（`/agent/trip`）
+### 7. Agent 行程规划（`/agent/trip`）
 
-行程规划 Agent，演示三种记忆方案的渐进演进。
+行程规划 Agent，演示无记忆与内存记忆两种方案（`AgentController`）。
 
-- `GET /agent/trip/plan` — 无记忆，每次独立规划
-- `GET /agent/trip/plan-with-memory?conversationId=xxx` — 内存多轮记忆（窗口 20 条）
-- `DELETE /agent/trip/clear-memory?conversationId=xxx` — 清除指定会话记忆
+- `GET /agent/trip/plan?demand=xxx` — 无记忆，每次独立规划
+- `GET /agent/trip/plan-with-memory?userId=xxx&demand=xxx` — 内存多轮记忆（`userId` 隔离，窗口 20 条）
+- `DELETE /agent/trip/clear-memory?userId=xxx` — 清除指定用户记忆
 
-### 7. MySQL 持久化记忆 Agent（`/agent/mysql/trip`）
+### 8. MySQL 持久化记忆 Agent（`/agent/mysql/trip`）
 
-将对话记忆持久化到 MySQL，服务重启后记忆不丢失。
+将对话记忆持久化到 MySQL，服务重启后记忆不丢失（`MysqlAgentController`）。
 
-- `GET /agent/mysql/trip/plan?conversationId=xxx&message=xxx` — 有记忆的行程规划
-- `DELETE /agent/mysql/trip/clear-memory?conversationId=xxx` — 清除记忆
-- `GET /agent/mysql/trip/list-conversations` — 列出所有会话
+- `GET /agent/mysql/trip/plan?userId=xxx&demand=xxx&memoryType=message` — 有记忆的行程规划（`memoryType` 可选 `message` / `prompt`）
+- `GET /agent/mysql/trip/clear-memory?userId=xxx` — 清除 MySQL 记忆
+- `GET /agent/mysql/trip/list-conversations` — 列出 JDBC 记忆表中的 `conversationId`
 
-### 8. Agent 工具调用（`/agent/tool`）
+### 9. Agent 工具调用（`/agent/tool`）
 
-为 Agent 挂载两个 `@Tool` 工具，让 LLM 主动调用外部函数获取信息。
+为 Agent 挂载两个 `@Tool` 工具，让 LLM 主动调用外部函数获取信息（`AgentToolController`）。
 
-- `GET /agent/tool/plan?destination=xxx` — 自动调用天气 + 景点工具后规划行程
+- `GET /agent/tool/plan?demand=xxx` — 自动调用天气 + 景点工具后规划行程
 - 内置工具：`WeatherTool`（模拟天气）、`AttractionTool`（北京/上海/成都/西安/杭州/广州景点库）
 
-### 9. MCP（`/mcp/client`）
+### 10. MCP（`/mcp/client`）
 
 演示 MCP（Model Context Protocol）的 Server 注册和 Client 调用。
 
@@ -132,7 +181,7 @@
 - `GET /mcp/client/tools` — 列出已注册的 MCP 工具
 - MCP Server 暴露地址：`http://localhost:8081`（SSE 模式）
 
-### 10. AskUserQuestion 技术选型（`/agent/ask-user`）
+### 11. AskUserQuestion 技术选型（`/agent/ask-user`）
 
 演示 [spring-ai-agent-utils](https://github.com/spring-ai-community/spring-ai-agent-utils) 的 `AskUserQuestionTool`：当用户需求模糊时，Agent **主动提出澄清问题**（单选 / 多选 / 自定义文本），收集答案后继续执行并给出技术选型建议。
 
@@ -173,7 +222,7 @@
 
 **设计文档**：`docs/superpowers/specs/2026-06-27-ask-user-question-tool-design.md`
 
-### 11. Agent Skills（`/agent/skills`）
+### 12. Agent Skills（`/agent/skills`）
 
 演示 [spring-ai-agent-utils](https://github.com/spring-ai-community/spring-ai-agent-utils) 的 **SkillsTool**（源自官方 `skills-demo`）：Agent 根据用户请求**语义匹配**相关 `SKILL.md`，再借助文件/搜索/Shell 工具按 skill 指令执行任务。
 
@@ -244,15 +293,32 @@ curl http://localhost:8081/agent/skills/demo-pdf
 
 **调试入口**：Swagger `http://localhost:8081/scalar` → 标签 **Agent Skills**
 
+> **前端说明**：`index.html` 暂未提供 Skills Tab，请通过 Swagger 或 curl 调用上述三个端点。
+
 > `demo` / `demo-pdf` 会触发多轮工具调用（读文件、执行脚本），请确保 `agent.skills.dirs` 路径正确，且本机 Python/uv 可用。
 
-### 12. 多 Agent 协作（`/agent/multi`）
+### 13. 多 Agent 协作（`/agent/multi`）
 
-Coordinator 提炼需求 → 4 个专项 Worker Agent（景点/餐饮/住宿/交通）并行执行 → Synthesizer 合并为完整行程（共 6 次 LLM 调用）。
+Supervisor-Worker 模式（`MultiAgentController` → `MultiAgentService`），共 **5 次** DeepSeek 调用：
 
-- `GET /agent/multi/plan?demand=xxx` — 多 Agent 协作行程规划
+1. `SupervisorAgent.decompose()` — 分解需求，提炼关键要素
+2. **并行**（`CompletableFuture`）：
+   - `ItineraryAgent` — 逐日行程规划
+   - `WeatherAgent` — 天气与穿搭（携带 `TimeMethodTool` 查询时区/季节）
+   - `BudgetAgent` — 预算分配
+3. `SupervisorAgent.synthesize()` — 综合三路输出为完整行程
 
-### 13. 可观测性（Micrometer + OpenTelemetry）
+| 端点 | 说明 |
+|------|------|
+| `GET /agent/multi/plan?demand=xxx` | 多 Agent 协作行程规划 |
+
+**响应字段**：`userDemand`、`taskBrief`、`weatherAnalysis`、`itineraryPlan`、`budgetPlan`、`finalPlan`、`totalCostMs`、`agentType`
+
+```bash
+curl "http://localhost:8081/agent/multi/plan?demand=五一假期4天云南大理丽江游，2人，预算8000"
+```
+
+### 14. 可观测性（Micrometer + OpenTelemetry）
 
 Spring Boot 4 内置 **Micrometer** 指标与 **OpenTelemetry** 分布式链路；Spring AI 2.0 自动采集 `gen_ai.*` 指标（模型调用耗时、Token 用量等）。默认通过 Actuator 本地查看，可选 OTLP 导出至 Grafana。
 
@@ -329,9 +395,6 @@ mvn spring-boot:run
 | `http://localhost:8081/v3/api-docs` | OpenAPI JSON |
 | `http://localhost:8081/actuator/health` | 健康检查 |
 | `http://localhost:8081/actuator/metrics` | Micrometer 指标 |
-| `http://localhost:8081/actuator/prometheus` | Prometheus 格式指标 |
-| `http://localhost:8081/actuator/health` | 健康检查 |
-| `http://localhost:8081/actuator/metrics` | Micrometer 指标列表 |
 | `http://localhost:8081/actuator/prometheus` | Prometheus 格式指标 |
 
 ---
@@ -521,14 +584,16 @@ flowchart LR
 
 详细接口请访问 `http://localhost:8081/scalar`，以下为接口速查表：
 
-### 聊天与 Embedding
+### 聊天、Embedding 与结构化输出
 
 | Method | Path | 说明 |
 |--------|------|------|
 | POST | `/ai/chat` | 同步聊天，Body：`{"message":"..."}` |
-| GET | `/ai/chatStream` | SSE 流式聊天，参数：`message` |
-| POST | `/ai/embedding` | 文本向量化，Body：`{"message":"..."}` |
-| GET | `/ai/similarity` | 相似度查询，参数：`text` |
+| POST | `/ai/chatStream` | SSE 流式聊天，Body：`{"message":"..."}` |
+| GET | `/ai/embedding` | 文本向量化，参数：`message` |
+| GET | `/ai/similarity` | 相似度查询，参数：`query`、可选 `algorithm`（COSINE/EUCLIDEAN/MANHATTAN） |
+| GET | `/ai/structured/analyze` | 产品分析，参数：`productName`，返回 `ProductAnalysis` |
+| GET | `/ai/structured/tech-stacks` | 技术栈推荐，参数：`scenario`，返回 `List<TechStack>` |
 
 ### RAG
 
@@ -544,10 +609,10 @@ flowchart LR
 | Method | Path | 说明 |
 |--------|------|------|
 | GET | `/agent/trip/plan` | 无记忆行程规划，参数：`demand` |
-| GET | `/agent/trip/plan-with-memory` | 内存记忆规划，参数：`conversationId`, `demand` |
-| DELETE | `/agent/trip/clear-memory` | 清除内存记忆，参数：`conversationId` |
-| GET | `/agent/mysql/trip/plan` | DB 记忆规划，参数：`conversationId`, `message` |
-| DELETE | `/agent/mysql/trip/clear-memory` | 清除 DB 记忆，参数：`conversationId` |
+| GET | `/agent/trip/plan-with-memory` | 内存记忆规划，参数：`userId`, `demand` |
+| DELETE | `/agent/trip/clear-memory` | 清除内存记忆，参数：`userId` |
+| GET | `/agent/mysql/trip/plan` | DB 记忆规划，参数：`userId`, `demand`，可选 `memoryType`（message/prompt） |
+| GET | `/agent/mysql/trip/clear-memory` | 清除 DB 记忆，参数：`userId` |
 | GET | `/agent/mysql/trip/list-conversations` | 列出所有会话 |
 | GET | `/agent/tool/plan` | 工具调用规划，参数：`demand` |
 | POST | `/agent/ask-user/chat` | AskUserQuestion 发起对话，Body：`{"message":"..."}` |
@@ -590,6 +655,7 @@ graph TB
         subgraph Controllers
             C1[ChatController]
             C2[EmbeddingController]
+            C2b[StructuredOutputController]
             C3[RagController]
             C4[RagOptimizedController]
             C5[CustomerServiceController]
@@ -638,7 +704,7 @@ graph TB
     end
 
     UI -->|HTTP| Controllers
-    C1 & C6 & C7 & C8 & C9 & C10 & C11 & C12 -->|ChatClient| DS
+    C1 & C2b & C6 & C7 & C8 & C9 & C10 & C11 & C12 -->|ChatClient| DS
     C2 & C3 & C4 & C5 -->|EmbeddingModel| ZP
     C6 --> A1 --> MEM
     C7 --> A1 --> DB
@@ -680,7 +746,7 @@ sequenceDiagram
     ChatClient-->>ChatController: content()
     ChatController-->>用户: ChatResponse{code,response}
 
-    用户->>ChatController: GET /ai/chatStream?message=...
+    用户->>ChatController: POST /ai/chatStream {"message":"..."}
     ChatController->>ChatClient: prompt().user(message).stream()
     ChatClient->>DeepSeek: HTTP 请求（流式）
     loop Server-Sent Events
@@ -710,11 +776,35 @@ flowchart LR
         RANK --> RES[返回最相似文本]
     end
 
-    VEC -.->|POST /ai/embedding| OUT[返回向量数组]
-    RES -.->|GET /ai/similarity| OUT2[返回相似度列表]
+    VEC -.->|GET /ai/embedding| OUT[返回向量数组]
+    RES -.->|GET /ai/similarity?query=&algorithm=| OUT2[返回最相似文本]
 ```
 
-### 3. RAG 基础版
+### 3. 结构化输出（`entity()`）
+
+```mermaid
+sequenceDiagram
+    participant 用户
+    participant StructuredOutputController
+    participant ChatClient
+    participant DeepSeek
+
+    用户->>StructuredOutputController: GET /ai/structured/analyze?productName=MacBook Air M4
+    StructuredOutputController->>ChatClient: prompt().user(...).call().entity(ProductAnalysis.class)
+    ChatClient->>DeepSeek: 请求（含 JSON Schema 约束）
+    DeepSeek-->>ChatClient: JSON 文本
+    ChatClient-->>StructuredOutputController: 自动反序列化为 ProductAnalysis
+    StructuredOutputController-->>用户: {productName, pros, cons, score, recommendation}
+
+    用户->>StructuredOutputController: GET /ai/structured/tech-stacks?scenario=高并发秒杀
+    StructuredOutputController->>ChatClient: entity(ParameterizedTypeReference List TechStack)
+    ChatClient->>DeepSeek: 请求（列表 Schema）
+    DeepSeek-->>ChatClient: JSON 数组
+    ChatClient-->>StructuredOutputController: List<TechStack>
+    StructuredOutputController-->>用户: [{name, scenario, maturity}, ...]
+```
+
+### 4. RAG 基础版
 
 ```mermaid
 flowchart TD
@@ -736,7 +826,7 @@ flowchart TD
 ```
 
 
-### 4. RAG 优化版（Milvus）
+### 5. RAG 优化版（Milvus）
 
 ```mermaid
 flowchart TD
@@ -757,7 +847,7 @@ flowchart TD
     end
 ```
 
-### 5. 电商客服 RAG
+### 6. 电商客服 RAG
 
 ```mermaid
 flowchart LR
@@ -785,7 +875,7 @@ flowchart LR
     end
 ```
 
-### 6. Agent 行程规划（三种记忆方案对比）
+### 7. Agent 行程规划（三种记忆方案对比）
 
 ```mermaid
 flowchart TB
@@ -797,7 +887,7 @@ flowchart TB
     end
 
     subgraph 内存记忆版 MemoryTripAgentService
-        U2[用户请求\nconversationId] --> CC2[ChatClient]
+        U2[用户请求\nuserId] --> CC2[ChatClient]
         CC2 --> MAD[MessageChatMemoryAdvisor\n窗口20条]
         MAD <-->|读写| MEM2[InMemory\nChatMemory]
         MAD --> DS4
@@ -806,7 +896,7 @@ flowchart TB
     end
 
     subgraph MySQL持久化版 MysqlMemoryTripAgentService
-        U3[用户请求\nconversationId] --> CC3[ChatClient]
+        U3[用户请求\nuserId] --> CC3[ChatClient]
         CC3 --> MAD2[MessageChatMemoryAdvisor]
         MAD2 <-->|JDBC读写| DB2[(MySQL\nspring_ai_agent2\nchat_memory表)]
         MAD2 --> DS4
@@ -815,7 +905,7 @@ flowchart TB
     end
 ```
 
-### 7. Agent 工具调用（ReAct 模式）
+### 8. Agent 工具调用（ReAct 模式）
 
 ```mermaid
 sequenceDiagram
@@ -826,7 +916,7 @@ sequenceDiagram
     participant WeatherTool
     participant AttractionTool
 
-    用户->>AgentToolController: GET /agent/tool/plan?destination=北京
+    用户->>AgentToolController: GET /agent/tool/plan?demand=北京3日游
     AgentToolController->>ChatClient: prompt + 注册@Tool函数
     ChatClient->>DeepSeek: 发送请求（含工具描述）
 
@@ -845,7 +935,7 @@ sequenceDiagram
     AgentToolController-->>用户: 含天气和景点的完整行程
 ```
 
-### 8. MCP Server/Client 架构
+### 9. MCP Server/Client 架构
 
 ```mermaid
 sequenceDiagram
@@ -880,7 +970,7 @@ sequenceDiagram
     McpChatController-->>用户: 回答
 ```
 
-### 9. AskUserQuestion 人机澄清流程
+### 10. AskUserQuestion 人机澄清流程
 
 ```mermaid
 sequenceDiagram
@@ -908,7 +998,7 @@ sequenceDiagram
     Agent-->>前端: SSE: COMPLETED（选型建议）
 ```
 
-### 10. Agent Skills 语义匹配与执行
+### 11. Agent Skills 语义匹配与执行
 
 ```mermaid
 sequenceDiagram
@@ -940,7 +1030,48 @@ sequenceDiagram
     SkillsAgentController-->>用户: {message, response, agentType}
 ```
 
-### 11. 应用启动流程
+### 12. 多 Agent 协作（Supervisor-Worker）
+
+```mermaid
+sequenceDiagram
+    participant 用户
+    participant MultiAgentController
+    participant MultiAgentService
+    participant Supervisor as SupervisorAgent
+    participant Itinerary as ItineraryAgent
+    participant Weather as WeatherAgent
+    participant Budget as BudgetAgent
+    participant DeepSeek
+
+    用户->>MultiAgentController: GET /agent/multi/plan?demand=...
+    MultiAgentController->>MultiAgentService: plan(demand)
+
+    MultiAgentService->>Supervisor: decompose(demand)
+    Supervisor->>DeepSeek: 第1次 LLM：分解需求
+    DeepSeek-->>Supervisor: taskBrief
+
+    par 并行 Worker（CompletableFuture）
+        MultiAgentService->>Itinerary: plan(taskBrief)
+        Itinerary->>DeepSeek: 第2次 LLM：行程
+        DeepSeek-->>Itinerary: itineraryPlan
+    and
+        MultiAgentService->>Weather: analyze(taskBrief)
+        Weather->>DeepSeek: 第3次 LLM：天气穿搭
+        DeepSeek-->>Weather: weatherAnalysis
+    and
+        MultiAgentService->>Budget: plan(taskBrief)
+        Budget->>DeepSeek: 第4次 LLM：预算
+        DeepSeek-->>Budget: budgetPlan
+    end
+
+    MultiAgentService->>Supervisor: synthesize(三路输出)
+    Supervisor->>DeepSeek: 第5次 LLM：综合行程
+    DeepSeek-->>Supervisor: finalPlan
+    MultiAgentService-->>MultiAgentController: 聚合响应 + totalCostMs
+    MultiAgentController-->>用户: JSON（taskBrief / weather / itinerary / budget / finalPlan）
+```
+
+### 13. 应用启动流程
 
 ```mermaid
 flowchart TD
@@ -985,9 +1116,15 @@ demo2/
 │   │   ├── SkillsAgentConfig.java    # SkillsTool + 文件/Shell 工具 Bean
 │   │   ├── AskUserAgentConfig.java   # AskUserQuestionTool Bean
 │   │   └── TraceIdFilter.java        # 响应头 X-Trace-Id（链路检索）
+│   ├── agent/                        # 多 Agent 专项 Worker
+│   │   ├── SupervisorAgent.java      # 分解 + 综合（2 次 LLM）
+│   │   ├── ItineraryAgent.java       # 行程规划
+│   │   ├── WeatherAgent.java         # 天气穿搭（含 TimeMethodTool）
+│   │   └── BudgetAgent.java          # 预算分配
 │   ├── controller/                   # HTTP 控制器
 │   │   ├── ChatController.java
 │   │   ├── EmbeddingController.java
+│   │   ├── StructuredOutputController.java  # 结构化输出 entity()
 │   │   ├── RagController.java
 │   │   ├── RagOptimizedController.java
 │   │   ├── CustomerServiceController.java
@@ -1005,12 +1142,15 @@ demo2/
 │   │       └── config/McpServerConfig.java       # MCP Server 工具注册
 │   ├── model/
 │   │   ├── ChatRequest.java / ChatResponse.java
+│   │   ├── ProductAnalysis.java      # 结构化输出：产品分析 record
+│   │   ├── TechStack.java            # 结构化输出：技术栈 record
 │   │   └── AskUser*.java                 # AskUserQuestion 请求/响应/SSE 事件 DTO
 │   ├── service/
 │   │   ├── TripPlanningAgentService.java
 │   │   ├── MemoryTripAgentService.java
 │   │   ├── MysqlMemoryTripAgentService.java
 │   │   ├── ToolTripAgentService.java
+│   │   ├── MultiAgentService.java        # Supervisor-Worker 编排（5 次 LLM）
 │   │   ├── EmbeddingService.java
 │   │   ├── SimilarityCalculator.java
 │   │   ├── RagService.java
@@ -1019,6 +1159,9 @@ demo2/
 │   │   ├── AskUserAgentService.java      # AskUserQuestion Agent 编排
 │   │   ├── AskUserSessionStore.java      # 内存 Session + SSE 缓冲
 │   │   └── WebQuestionHandler.java       # AskUserQuestionTool QuestionHandler
+│   ├── tool/
+│   │   ├── TimeMethodTool.java       # @Tool 时区/季节（WeatherAgent 使用）
+│   │   └── CityRequest.java          # 城市请求 DTO
 │   └── tools/
 │       ├── WeatherTool.java          # @Tool 天气查询（模拟数据）
 │       └── AttractionTool.java       # @Tool 景点推荐（内置6城市数据）
