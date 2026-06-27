@@ -1083,6 +1083,7 @@
         <button class="tab-btn" data-tab="agent-tools" onclick="switchTab('agent-tools')">🔧 Agent Tools 工具调用</button>
         <button class="tab-btn" data-tab="mcp" onclick="switchTab('mcp')">🔌 MCP Client 聊天</button>
         <button class="tab-btn" data-tab="multi-agent" onclick="switchTab('multi-agent')">🤝 多 Agent 协作</button>
+        <button class="tab-btn" data-tab="ask-user" onclick="switchTab('ask-user')">❓ AskUserQuestion 技术选型</button>
     </div>
 
     <!-- ========== 聊天 Tab ========== -->
@@ -1721,6 +1722,46 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- ========== AskUserQuestion 技术选型 Tab ========== -->
+    <div id="tab-ask-user" class="tab-content">
+        <div class="agent-tools-header">
+            <h1>AskUserQuestion 技术选型</h1>
+            <p>Agent 主动澄清需求 · SSE 推送问题 · DeepSeek 生成选型建议</p>
+        </div>
+        <div class="rag-body" style="padding: 20px;">
+            <div class="agent-tools-flow">
+                <span>用户提问</span><span class="arrow">→</span>
+                <span>Agent 澄清</span><span class="arrow">→</span>
+                <span>用户作答</span><span class="arrow">→</span>
+                <span>选型建议</span>
+            </div>
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-title">💡 示例问题</div>
+                <div class="card-body">
+                    <button class="agent-tools-sample-btn" onclick="fillAskUserMessage('帮我选一个数据库')">示例1：数据库选型</button>
+                    <button class="agent-tools-sample-btn" onclick="fillAskUserMessage('帮我选一个 Java Web 框架')">示例2：框架选型</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">📝 发起对话</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>你的需求</label>
+                        <input type="text" id="askUserMessageInput" placeholder="描述你的技术选型需求..." value="帮我选一个数据库">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-agent-tools" id="askUserStartBtn" onclick="startAskUserChat()">开始选型</button>
+                    </div>
+                </div>
+            </div>
+            <div id="askUserChatArea" class="chat-messages" style="height: 400px; margin: 16px 20px; border-radius: 8px;">
+                <div class="welcome-message"><p>点击「开始选型」，Agent 将通过 SSE 推送澄清问题。</p></div>
+            </div>
+            <div id="askUserQuestionPanel" style="display:none; padding: 0 20px 20px;"></div>
         </div>
     </div>
 
@@ -2533,6 +2574,140 @@
 
     document.getElementById('multiAgentDemandInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); planTripMultiAgent(); }
+    });
+
+    // ========== AskUserQuestion 技术选型 ==========
+    let askUserEventSource = null;
+    let askUserSessionId = null;
+    let askUserPendingQuestions = [];
+
+    function fillAskUserMessage(text) {
+        document.getElementById('askUserMessageInput').value = text;
+    }
+
+    function appendAskUserMessage(role, html) {
+        const area = document.getElementById('askUserChatArea');
+        const div = document.createElement('div');
+        div.className = 'message ' + role;
+        div.innerHTML = '<div class="message-content">' + html + '</div>';
+        area.appendChild(div);
+        area.scrollTop = area.scrollHeight;
+    }
+
+    function closeAskUserEventSource() {
+        if (askUserEventSource) {
+            askUserEventSource.close();
+            askUserEventSource = null;
+        }
+    }
+
+    async function startAskUserChat() {
+        const message = document.getElementById('askUserMessageInput').value.trim();
+        if (!message) return;
+
+        closeAskUserEventSource();
+        document.getElementById('askUserQuestionPanel').style.display = 'none';
+        document.getElementById('askUserQuestionPanel').innerHTML = '';
+        document.getElementById('askUserChatArea').innerHTML = '';
+        appendAskUserMessage('user', escapeHtml(message));
+
+        const btn = document.getElementById('askUserStartBtn');
+        btn.disabled = true;
+
+        try {
+            const resp = await fetch('/agent/ask-user/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            });
+            const data = await resp.json();
+            askUserSessionId = data.sessionId;
+
+            askUserEventSource = new EventSource('/agent/ask-user/sse/' + askUserSessionId);
+            askUserEventSource.onmessage = (event) => {
+                const payload = JSON.parse(event.data);
+                handleAskUserSseEvent(payload);
+            };
+            askUserEventSource.onerror = () => {
+                appendAskUserMessage('assistant', '<span style="color:#d00">SSE 连接中断</span>');
+                closeAskUserEventSource();
+                btn.disabled = false;
+            };
+        } catch (e) {
+            appendAskUserMessage('assistant', '<span style="color:#d00">请求失败: ' + escapeHtml(e.message) + '</span>');
+            btn.disabled = false;
+        }
+    }
+
+    function handleAskUserSseEvent(payload) {
+        if (payload.type === 'RUNNING') {
+            appendAskUserMessage('assistant', '<em>Agent 正在分析需求...</em>');
+        } else if (payload.type === 'QUESTIONS') {
+            askUserPendingQuestions = payload.questions || [];
+            renderAskUserQuestions(askUserPendingQuestions);
+        } else if (payload.type === 'COMPLETED') {
+            appendAskUserMessage('assistant', '<div style="white-space:pre-wrap">' + escapeHtml(payload.response || '') + '</div>');
+            closeAskUserEventSource();
+            document.getElementById('askUserStartBtn').disabled = false;
+        } else if (payload.type === 'FAILED') {
+            appendAskUserMessage('assistant', '<span style="color:#d00">' + escapeHtml(payload.error || '未知错误') + '</span>');
+            closeAskUserEventSource();
+            document.getElementById('askUserStartBtn').disabled = false;
+        }
+    }
+
+    function renderAskUserQuestions(questions) {
+        const panel = document.getElementById('askUserQuestionPanel');
+        panel.style.display = 'block';
+        let html = '<div class="card"><div class="card-title">❓ Agent 需要你澄清以下问题</div><div class="card-body">';
+        questions.forEach((q, qi) => {
+            const inputType = q.multiSelect ? 'checkbox' : 'radio';
+            const inputName = 'askq_' + qi;
+            html += '<div style="margin-bottom:16px;padding:12px;background:#f9f9f9;border-radius:8px;">';
+            html += '<strong>' + escapeHtml(q.header) + '</strong><p>' + escapeHtml(q.question) + '</p>';
+            (q.options || []).forEach((opt) => {
+                html += '<label style="display:block;margin:6px 0;">';
+                html += '<input type="' + inputType + '" name="' + inputName + '" value="' + escapeHtml(opt.label) + '"> ';
+                html += escapeHtml(opt.label) + ' - ' + escapeHtml(opt.description || '');
+                html += '</label>';
+            });
+            html += '<input type="text" id="askq_custom_' + qi + '" placeholder="或输入自定义答案" style="width:100%;margin-top:8px;padding:8px;">';
+            html += '</div>';
+        });
+        html += '<button class="btn btn-agent-tools" onclick="submitAskUserAnswers()">提交答案</button>';
+        html += '</div></div>';
+        panel.innerHTML = html;
+    }
+
+    async function submitAskUserAnswers() {
+        const answers = {};
+        askUserPendingQuestions.forEach((q, qi) => {
+            const inputName = 'askq_' + qi;
+            const custom = document.getElementById('askq_custom_' + qi).value.trim();
+            if (custom) {
+                answers[q.question] = custom;
+                return;
+            }
+            const selected = Array.from(document.querySelectorAll('[name="' + inputName + '"]:checked'))
+                .map(el => el.value);
+            if (selected.length > 0) {
+                answers[q.question] = selected.join(', ');
+            }
+        });
+
+        document.getElementById('askUserQuestionPanel').style.display = 'none';
+        appendAskUserMessage('user', '已提交澄清答案');
+
+        await fetch('/agent/ask-user/answer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: askUserSessionId, answers })
+        });
+    }
+
+    window.addEventListener('beforeunload', closeAskUserEventSource);
+    document.getElementById('askUserMessageInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); startAskUserChat(); }
     });
 </script>
 </body>
