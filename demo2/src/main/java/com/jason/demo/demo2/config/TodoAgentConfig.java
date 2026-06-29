@@ -1,8 +1,8 @@
 package com.jason.demo.demo2.config;
 
 import com.jason.demo.demo2.sse.AgentSessionHolder;
-import com.jason.demo.demo2.sse.AgentSseEvent;
 import com.jason.demo.demo2.sse.AgentSseSessionStore;
+import com.jason.demo.demo2.sse.TodoSseBridge;
 import org.springaicommunity.agent.tools.TodoWriteTool;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,7 +16,7 @@ public class TodoAgentConfig {
                 .todoEventHandler(todos -> {
                     String sessionId = AgentSessionHolder.getSessionId();
                     if (sessionId != null) {
-                        sessionStore.pushEvent(sessionId, AgentSseEvent.todos(todos));
+                        TodoSseBridge.onTodosUpdated(sessionStore, sessionId, todos);
                     }
                 })
                 .build();

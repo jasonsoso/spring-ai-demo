@@ -749,6 +749,81 @@
             border-bottom: 1px dashed #a0dfc8;
         }
 
+        .agent-tools-answer .plan-text {
+            color: #333;
+            font-weight: 400;
+            white-space: pre-wrap;
+            line-height: 1.8;
+            max-height: none;
+            overflow: visible;
+        }
+
+        .todo-step-block {
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px dashed #d0e8df;
+        }
+        .todo-step-block:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .todo-step-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #0f5c3a;
+            margin-bottom: 8px;
+        }
+        .todo-final-block {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 2px solid #a0dfc8;
+        }
+
+        .todo-step-block {
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px dashed #d0e8df;
+        }
+        .todo-step-block:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .todo-step-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #0f5c3a;
+            margin-bottom: 8px;
+        }
+        .todo-final-block {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 2px solid #a0dfc8;
+        }
+
+        .todo-step-block {
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px dashed #d0e8dc;
+        }
+        .todo-step-block:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .todo-step-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #0f5c3a;
+            margin-bottom: 8px;
+        }
+        .todo-final-block {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 2px solid #a0dfc8;
+        }
+
         .agent-tools-answer .tools-badge {
             display: inline-block;
             padding: 2px 10px;
@@ -1778,8 +1853,9 @@
             <div class="agent-tools-flow">
                 <span>用户提问</span><span class="arrow">→</span>
                 <span>Agent 拆 Todo</span><span class="arrow">→</span>
+                <span>逐步产出</span><span class="arrow">→</span>
                 <span>实时看板</span><span class="arrow">→</span>
-                <span>学习计划</span>
+                <span>最终整理</span>
             </div>
             <div class="card" style="margin-top: 16px;">
                 <div class="card-title">💡 示例问题</div>
@@ -1807,7 +1883,7 @@
                     <div id="todoList" style="font-family:monospace;line-height:1.8;"></div>
                 </div>
             </div>
-            <div id="todoResult" class="agent-tools-answer" style="margin: 0 20px 20px;">点击「开始学习规划」，Agent 将通过 SSE 实时更新 Todo 看板...</div>
+            <div id="todoResult" class="agent-tools-answer" style="margin: 0 20px 20px;">点击「开始学习规划」，每完成一项子任务将实时推送产出，最后汇总完整计划...</div>
         </div>
     </div>
 
@@ -2785,6 +2861,50 @@
         }).join('');
     }
 
+    function initTodoResultArea() {
+        const resultBox = document.getElementById('todoResult');
+        resultBox.dataset.stepsStarted = '1';
+        resultBox.innerHTML =
+            '<div class="label">📝 分步产出（每完成一项子任务推送一次）</div>' +
+            '<div id="todoStepResults"></div>' +
+            '<div id="todoFinalResult" class="todo-final-block" style="display:none;"></div>';
+    }
+
+    function appendTodoTaskResult(payload) {
+        const resultBox = document.getElementById('todoResult');
+        if (!resultBox.dataset.stepsStarted) {
+            initTodoResultArea();
+        }
+        resultBox.className = 'agent-tools-answer';
+        const steps = document.getElementById('todoStepResults');
+        const idx = payload.taskIndex || steps.children.length + 1;
+        const total = payload.totalTasks ? ' / ' + payload.totalTasks : '';
+        const name = payload.taskName || '子任务';
+        const block = document.createElement('div');
+        block.className = 'todo-step-block';
+        block.innerHTML =
+            '<div class="todo-step-title">✓ 任务 ' + idx + total + '：' + escapeHtml(name) + '</div>' +
+            '<div class="plan-text">' + escapeHtml(payload.response || '') + '</div>';
+        steps.appendChild(block);
+        block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function renderTodoFinalResult(content) {
+        const resultBox = document.getElementById('todoResult');
+        const finalHtml =
+            '<div class="label">📚 最终学习计划（整合版）</div>' +
+            '<div class="plan-text">' + escapeHtml(content || '') + '</div>';
+        if (resultBox.dataset.stepsStarted) {
+            const finalBox = document.getElementById('todoFinalResult');
+            finalBox.style.display = 'block';
+            finalBox.innerHTML = finalHtml;
+            finalBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            resultBox.innerHTML = finalHtml;
+        }
+        resultBox.className = 'agent-tools-answer';
+    }
+
     async function startTodoChat() {
         const message = document.getElementById('todoMessageInput').value.trim();
         if (!message) return;
@@ -2794,6 +2914,7 @@
         document.getElementById('todoList').innerHTML = '';
         document.getElementById('todoProgress').textContent = '';
         const resultBox = document.getElementById('todoResult');
+        delete resultBox.dataset.stepsStarted;
         resultBox.className = 'agent-tools-answer loading';
         resultBox.textContent = 'Agent 正在规划...';
 
@@ -2832,9 +2953,10 @@
             resultBox.textContent = 'Agent 正在拆解学习任务...';
         } else if (payload.type === 'TODOS') {
             renderTodoBoard(payload.todos, payload.progress);
+        } else if (payload.type === 'TASK_RESULT') {
+            appendTodoTaskResult(payload);
         } else if (payload.type === 'COMPLETED') {
-            resultBox.className = 'agent-tools-answer';
-            resultBox.innerHTML = '<div class="label">📚 学习计划</div><div class="demand-text" style="white-space:pre-wrap;">' + escapeHtml(payload.response || '') + '</div>';
+            renderTodoFinalResult(payload.response || '');
             closeTodoEventSource();
             document.getElementById('todoStartBtn').disabled = false;
         } else if (payload.type === 'FAILED') {

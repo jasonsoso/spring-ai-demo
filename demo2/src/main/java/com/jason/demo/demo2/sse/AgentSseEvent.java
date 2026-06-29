@@ -23,13 +23,16 @@ public class AgentSseEvent {
     private TodoProgressDto progress;
     private String response;
     private String error;
+    private String taskName;
+    private Integer taskIndex;
+    private Integer totalTasks;
 
     public static AgentSseEvent running() {
-        return new AgentSseEvent("RUNNING", null, null, null, null, null);
+        return new AgentSseEvent("RUNNING", null, null, null, null, null, null, null, null);
     }
 
     public static AgentSseEvent questions(List<AskUserQuestionDto> questions) {
-        return new AgentSseEvent("QUESTIONS", questions, null, null, null, null);
+        return new AgentSseEvent("QUESTIONS", questions, null, null, null, null, null, null, null);
     }
 
     public static AgentSseEvent todos(TodoWriteTool.Todos todos) {
@@ -44,14 +47,18 @@ public class AgentSseEvent {
                 .count();
         int total = items.size();
         int percent = total == 0 ? 0 : (int) (completed * 100.0 / total);
-        return new AgentSseEvent("TODOS", null, items, new TodoProgressDto(completed, total, percent), null, null);
+        return new AgentSseEvent("TODOS", null, items, new TodoProgressDto(completed, total, percent), null, null, null, null, null);
+    }
+
+    public static AgentSseEvent taskResult(String taskName, int taskIndex, int totalTasks, String content) {
+        return new AgentSseEvent("TASK_RESULT", null, null, null, content, null, taskName, taskIndex, totalTasks);
     }
 
     public static AgentSseEvent completed(String response) {
-        return new AgentSseEvent("COMPLETED", null, null, null, response, null);
+        return new AgentSseEvent("COMPLETED", null, null, null, response, null, null, null, null);
     }
 
     public static AgentSseEvent failed(String error) {
-        return new AgentSseEvent("FAILED", null, null, null, null, error);
+        return new AgentSseEvent("FAILED", null, null, null, null, error, null, null, null);
     }
 }
