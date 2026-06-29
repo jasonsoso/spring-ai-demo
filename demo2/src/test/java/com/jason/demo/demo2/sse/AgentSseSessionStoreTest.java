@@ -1,7 +1,5 @@
-package com.jason.demo.demo2.service;
+package com.jason.demo.demo2.sse;
 
-import com.jason.demo.demo2.model.AskUserSession;
-import com.jason.demo.demo2.model.AskUserSseEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -15,18 +13,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class AskUserSessionStoreTest {
+class AgentSseSessionStoreTest {
 
-    private AskUserSessionStore store;
+    private AgentSseSessionStore store;
 
     @BeforeEach
     void setUp() {
-        store = new AskUserSessionStore(new JsonMapper());
+        store = new AgentSseSessionStore(new JsonMapper());
     }
 
     @Test
     void createAndFindSession() {
-        AskUserSession session = store.create("帮我选一个数据库");
+        AgentSseSession session = store.create("帮我选一个数据库");
         assertNotNull(session.getSessionId());
         assertEquals("帮我选一个数据库", session.getMessage());
         assertTrue(store.find(session.getSessionId()).isPresent());
@@ -34,8 +32,8 @@ class AskUserSessionStoreTest {
 
     @Test
     void buffersEventsUntilEmitterAttached() {
-        AskUserSession session = store.create("test");
-        store.pushEvent(session.getSessionId(), AskUserSseEvent.running());
+        AgentSseSession session = store.create("test");
+        store.pushEvent(session.getSessionId(), AgentSseEvent.running());
 
         SseEmitter emitter = new SseEmitter(60_000L);
         store.attachEmitter(session.getSessionId(), emitter);
@@ -44,7 +42,7 @@ class AskUserSessionStoreTest {
 
     @Test
     void completeAnswerResolvesFuture() throws Exception {
-        AskUserSession session = store.create("test");
+        AgentSseSession session = store.create("test");
         CompletableFuture<Map<String, String>> future = new CompletableFuture<>();
         session.setAnswerFuture(future);
 

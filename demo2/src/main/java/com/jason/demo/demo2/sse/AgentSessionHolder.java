@@ -1,10 +1,10 @@
-package com.jason.demo.demo2.service;
+package com.jason.demo.demo2.sse;
 
-public final class AskUserSessionHolder {
+public final class AgentSessionHolder {
 
     private static final ThreadLocal<String> SESSION_ID = new ThreadLocal<>();
 
-    private AskUserSessionHolder() {
+    private AgentSessionHolder() {
     }
 
     public static void setSessionId(String sessionId) {

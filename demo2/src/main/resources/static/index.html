@@ -1084,6 +1084,7 @@
         <button class="tab-btn" data-tab="mcp" onclick="switchTab('mcp')">🔌 MCP Client 聊天</button>
         <button class="tab-btn" data-tab="multi-agent" onclick="switchTab('multi-agent')">🤝 多 Agent 协作</button>
         <button class="tab-btn" data-tab="ask-user" onclick="switchTab('ask-user')">❓ AskUserQuestion 技术选型</button>
+        <button class="tab-btn" data-tab="todo-write" onclick="switchTab('todo-write')">📋 TodoWrite 学习计划</button>
     </div>
 
     <!-- ========== 聊天 Tab ========== -->
@@ -1762,6 +1763,49 @@
                 <div class="welcome-message"><p>点击「开始选型」，Agent 将通过 SSE 推送澄清问题。</p></div>
             </div>
             <div id="askUserQuestionPanel" style="display:none; padding: 0 20px 20px;"></div>
+        </div>
+    </div>
+
+    <!-- ========== TodoWrite 学习计划 Tab ========== -->
+    <div id="tab-todo-write" class="tab-content">
+        <div class="agent-tools-header">
+            <h1>TodoWrite 学习计划</h1>
+            <p>Agent 拆解多步骤任务 · SSE 实时 Todo 看板 · DeepSeek 生成学习计划</p>
+        </div>
+        <div class="rag-body" style="padding: 20px;">
+            <div class="agent-tools-flow">
+                <span>用户提问</span><span class="arrow">→</span>
+                <span>Agent 拆 Todo</span><span class="arrow">→</span>
+                <span>实时看板</span><span class="arrow">→</span>
+                <span>学习计划</span>
+            </div>
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-title">💡 示例问题</div>
+                <div class="card-body">
+                    <button class="agent-tools-sample-btn" onclick="fillTodoMessage('帮我制定一个 7 天 Spring AI 2.0 学习计划')">示例1：Spring AI 2.0 七天计划</button>
+                    <button class="agent-tools-sample-btn" onclick="fillTodoMessage('帮我制定 Java 21 新特性 5 天速成计划')">示例2：Java 21 五天速成</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">📝 发起对话</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>学习目标</label>
+                        <input type="text" id="todoMessageInput" placeholder="描述你的学习计划需求..." value="帮我制定一个 7 天 Spring AI 2.0 学习计划">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-agent-tools" id="todoStartBtn" onclick="startTodoChat()">开始学习规划</button>
+                    </div>
+                </div>
+            </div>
+            <div id="todoBoard" class="card" style="margin: 16px 20px; display:none;">
+                <div class="card-title">📋 任务看板 <span id="todoProgress" style="font-size:13px;font-weight:normal;color:#666;"></span></div>
+                <div class="card-body">
+                    <div id="todoList" style="font-family:monospace;line-height:1.8;"></div>
+                </div>
+            </div>
+            <div id="todoResult" class="agent-tools-answer" style="margin: 0 20px 20px;">点击「开始学习规划」，Agent 将通过 SSE 实时更新 Todo 看板...</div>
         </div>
     </div>
 
@@ -2708,6 +2752,100 @@
     window.addEventListener('beforeunload', closeAskUserEventSource);
     document.getElementById('askUserMessageInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); startAskUserChat(); }
+    });
+
+    // ========== TodoWrite 学习计划 ==========
+    let todoEventSource = null;
+
+    function fillTodoMessage(text) {
+        document.getElementById('todoMessageInput').value = text;
+    }
+
+    function closeTodoEventSource() {
+        if (todoEventSource) {
+            todoEventSource.close();
+            todoEventSource = null;
+        }
+    }
+
+    function renderTodoBoard(todos, progress) {
+        const board = document.getElementById('todoBoard');
+        const list = document.getElementById('todoList');
+        const progressEl = document.getElementById('todoProgress');
+        board.style.display = 'block';
+        if (progress) {
+            progressEl.textContent = progress.completed + '/' + progress.total + ' (' + progress.percent + '%)';
+        }
+        list.innerHTML = (todos || []).map(t => {
+            const icon = t.status === 'completed' ? '[✓]' : t.status === 'in_progress' ? '[→]' : '[ ]';
+            const style = t.status === 'in_progress' ? 'color:#0f3443;font-weight:600;' : t.status === 'completed' ? 'color:#888;text-decoration:line-through;' : '';
+            return '<div style="' + style + '">' + icon + ' ' + escapeHtml(t.content) + '</div>';
+        }).join('');
+    }
+
+    async function startTodoChat() {
+        const message = document.getElementById('todoMessageInput').value.trim();
+        if (!message) return;
+
+        closeTodoEventSource();
+        document.getElementById('todoBoard').style.display = 'none';
+        document.getElementById('todoList').innerHTML = '';
+        document.getElementById('todoProgress').textContent = '';
+        const resultBox = document.getElementById('todoResult');
+        resultBox.className = 'agent-tools-answer loading';
+        resultBox.textContent = 'Agent 正在规划...';
+
+        const btn = document.getElementById('todoStartBtn');
+        btn.disabled = true;
+
+        try {
+            const resp = await fetch('/agent/todo/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            });
+            const data = await resp.json();
+
+            todoEventSource = new EventSource('/agent/todo/sse/' + data.sessionId);
+            todoEventSource.onmessage = (event) => {
+                handleTodoSseEvent(JSON.parse(event.data));
+            };
+            todoEventSource.onerror = () => {
+                resultBox.className = 'agent-tools-answer error';
+                resultBox.textContent = 'SSE 连接中断';
+                closeTodoEventSource();
+                btn.disabled = false;
+            };
+        } catch (e) {
+            resultBox.className = 'agent-tools-answer error';
+            resultBox.textContent = '请求失败: ' + e.message;
+            btn.disabled = false;
+        }
+    }
+
+    function handleTodoSseEvent(payload) {
+        const resultBox = document.getElementById('todoResult');
+        if (payload.type === 'RUNNING') {
+            resultBox.className = 'agent-tools-answer loading';
+            resultBox.textContent = 'Agent 正在拆解学习任务...';
+        } else if (payload.type === 'TODOS') {
+            renderTodoBoard(payload.todos, payload.progress);
+        } else if (payload.type === 'COMPLETED') {
+            resultBox.className = 'agent-tools-answer';
+            resultBox.innerHTML = '<div class="label">📚 学习计划</div><div class="demand-text" style="white-space:pre-wrap;">' + escapeHtml(payload.response || '') + '</div>';
+            closeTodoEventSource();
+            document.getElementById('todoStartBtn').disabled = false;
+        } else if (payload.type === 'FAILED') {
+            resultBox.className = 'agent-tools-answer error';
+            resultBox.textContent = payload.error || '未知错误';
+            closeTodoEventSource();
+            document.getElementById('todoStartBtn').disabled = false;
+        }
+    }
+
+    window.addEventListener('beforeunload', closeTodoEventSource);
+    document.getElementById('todoMessageInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); startTodoChat(); }
     });
 </script>
 </body>

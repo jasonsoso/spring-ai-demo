@@ -1,9 +1,11 @@
 package com.jason.demo.demo2.service;
 
 import com.jason.demo.demo2.model.AskUserQuestionDto;
-import com.jason.demo.demo2.model.AskUserSession;
-import com.jason.demo.demo2.model.AskUserSessionStatus;
-import com.jason.demo.demo2.model.AskUserSseEvent;
+import com.jason.demo.demo2.sse.AgentSessionHolder;
+import com.jason.demo.demo2.sse.AgentSessionStatus;
+import com.jason.demo.demo2.sse.AgentSseEvent;
+import com.jason.demo.demo2.sse.AgentSseSession;
+import com.jason.demo.demo2.sse.AgentSseSessionStore;
 import lombok.RequiredArgsConstructor;
 import org.springaicommunity.agent.tools.AskUserQuestionTool;
 import org.springframework.stereotype.Component;
@@ -17,16 +19,16 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class WebQuestionHandler implements AskUserQuestionTool.QuestionHandler {
 
-    private final AskUserSessionStore sessionStore;
+    private final AgentSseSessionStore sessionStore;
 
     @Override
     public Map<String, String> handle(List<AskUserQuestionTool.Question> questions) {
-        String sessionId = AskUserSessionHolder.getSessionId();
+        String sessionId = AgentSessionHolder.getSessionId();
         if (sessionId == null) {
-            throw new IllegalStateException("No AskUser session bound to current thread");
+            throw new IllegalStateException("No agent session bound to current thread");
         }
 
-        AskUserSession session = sessionStore.find(sessionId)
+        AgentSseSession session = sessionStore.find(sessionId)
                 .orElseThrow(() -> new IllegalStateException("Session not found: " + sessionId));
 
         List<AskUserQuestionDto> dtos = questions.stream()
@@ -41,8 +43,8 @@ public class WebQuestionHandler implements AskUserQuestionTool.QuestionHandler {
 
         CompletableFuture<Map<String, String>> answerFuture = new CompletableFuture<>();
         session.setAnswerFuture(answerFuture);
-        session.setStatus(AskUserSessionStatus.AWAITING_INPUT);
-        sessionStore.pushEvent(sessionId, AskUserSseEvent.questions(dtos));
+        session.setStatus(AgentSessionStatus.AWAITING_INPUT);
+        sessionStore.pushEvent(sessionId, AgentSseEvent.questions(dtos));
 
         return answerFuture.join();
     }

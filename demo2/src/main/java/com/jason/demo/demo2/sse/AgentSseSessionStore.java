@@ -1,7 +1,5 @@
-package com.jason.demo.demo2.service;
+package com.jason.demo.demo2.sse;
 
-import com.jason.demo.demo2.model.AskUserSession;
-import com.jason.demo.demo2.model.AskUserSseEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -18,37 +16,37 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
-public class AskUserSessionStore {
+public class AgentSseSessionStore {
 
     private static final Duration IDLE_TIMEOUT = Duration.ofMinutes(10);
 
-    private final ConcurrentHashMap<String, AskUserSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AgentSseSession> sessions = new ConcurrentHashMap<>();
     private final JsonMapper jsonMapper;
 
-    public AskUserSessionStore(JsonMapper jsonMapper) {
+    public AgentSseSessionStore(JsonMapper jsonMapper) {
         this.jsonMapper = jsonMapper;
     }
 
-    public AskUserSession create(String message) {
+    public AgentSseSession create(String message) {
         expireIdleSessions();
         String sessionId = UUID.randomUUID().toString();
-        AskUserSession session = new AskUserSession(sessionId, message);
+        AgentSseSession session = new AgentSseSession(sessionId, message);
         sessions.put(sessionId, session);
         return session;
     }
 
-    public Optional<AskUserSession> find(String sessionId) {
+    public Optional<AgentSseSession> find(String sessionId) {
         return Optional.ofNullable(sessions.get(sessionId));
     }
 
     public void remove(String sessionId) {
-        AskUserSession session = sessions.remove(sessionId);
+        AgentSseSession session = sessions.remove(sessionId);
         if (session != null && session.getSseEmitter() != null) {
             session.getSseEmitter().complete();
         }
     }
 
-    public void pushEvent(String sessionId, AskUserSseEvent event) {
+    public void pushEvent(String sessionId, AgentSseEvent event) {
         find(sessionId).ifPresent(session -> {
             session.touch();
             SseEmitter emitter = session.getSseEmitter();
@@ -61,7 +59,7 @@ public class AskUserSessionStore {
     }
 
     public void attachEmitter(String sessionId, SseEmitter emitter) {
-        AskUserSession session = sessions.get(sessionId);
+        AgentSseSession session = sessions.get(sessionId);
         if (session == null) {
             emitter.completeWithError(new IllegalArgumentException("Session not found: " + sessionId));
             return;
@@ -70,10 +68,10 @@ public class AskUserSessionStore {
         session.touch();
         emitter.onCompletion(() -> log.debug("SSE completed: {}", sessionId));
         emitter.onTimeout(() -> {
-            pushEvent(sessionId, AskUserSseEvent.failed("SSE 连接超时"));
+            pushEvent(sessionId, AgentSseEvent.failed("SSE 连接超时"));
             remove(sessionId);
         });
-        AskUserSseEvent buffered;
+        AgentSseEvent buffered;
         while ((buffered = session.getEventBuffer().poll()) != null) {
             sendToEmitter(session, emitter, buffered);
         }
@@ -89,12 +87,12 @@ public class AskUserSessionStore {
         });
     }
 
-    public void expireIdleSessions() {
+    private void expireIdleSessions() {
         Instant cutoff = Instant.now().minus(IDLE_TIMEOUT);
         sessions.entrySet().removeIf(entry -> {
-            AskUserSession session = entry.getValue();
+            AgentSseSession session = entry.getValue();
             if (session.getLastActivityAt().isBefore(cutoff)) {
-                log.info("AskUser session expired: {}", entry.getKey());
+                log.info("Agent SSE session expired: {}", entry.getKey());
                 if (session.getSseEmitter() != null) {
                     session.getSseEmitter().complete();
                 }
@@ -104,7 +102,7 @@ public class AskUserSessionStore {
         });
     }
 
-    private void sendToEmitter(AskUserSession session, SseEmitter emitter, AskUserSseEvent event) {
+    private void sendToEmitter(AgentSseSession session, SseEmitter emitter, AgentSseEvent event) {
         try {
             String json = jsonMapper.writeValueAsString(event);
             emitter.send(SseEmitter.event().data(json).build());

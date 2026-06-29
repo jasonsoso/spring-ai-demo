@@ -2,7 +2,7 @@
 
 **日期**: 2026-06-29  
 **项目**: spring-ai-demo / demo2  
-**状态**: 待审阅
+**状态**: 已实现
 
 ---
 
@@ -26,7 +26,7 @@
 | 交互方式 | `static/index.html` 新增 Tab |
 | 会话模式 | 单轮 Demo（发起 → 观察 Todo 进度 → 收到最终计划，无需用户二次提交） |
 | 通信方案 | **SSE + HTTP POST**（对齐现有 `AskUserAgent` 模式，但无 `POST /answer` 端点） |
-| 实现方案 | **方案 A**：独立 `TodoSessionStore` + `TodoAgentService`，不复用 AskUser 代码、不抽象泛型基类 |
+| 实现方案 | **方案 A+**：抽取通用 `sse` 包（`AgentSseSessionStore` / `AbstractSseAgentService`），AskUser 与 TodoWrite 共用 SSE 基础设施 |
 
 ### 1.3 依赖
 
@@ -88,33 +88,40 @@
 
 ### 2.3 核心组件
 
-| 组件 | 包路径（建议） | 职责 |
-|------|---------------|------|
-| `TodoSession` | `model` | Session 数据：sessionId、用户消息、状态、SseEmitter、事件缓冲队列 |
-| `TodoSessionStatus` | `model` | 枚举：`RUNNING` / `COMPLETED` / `FAILED` |
-| `TodoSseEvent` | `model` | SSE 事件 DTO |
-| `TodoItemDto` | `model` | Todo 列表元素 DTO（content、status、activeForm） |
-| `TodoProgressDto` | `model` | 进度摘要（completed、total、percent） |
-| `TodoSessionStore` | `service` | 内存 ConcurrentHashMap 管理 Session 生命周期、事件缓冲与 flush |
-| `TodoSessionHolder` | `service` | ThreadLocal 传递当前 sessionId（对齐 `AskUserSessionHolder`） |
-| `TodoAgentConfig` | `config` | 注册 `TodoWriteTool` Bean，注入 `todoEventHandler` |
-| `TodoAgentService` | `service` | 编排 ChatClient + 异步 Agent 执行、SSE 连接注册 |
-| `TodoAgentController` | `controller` | 暴露 REST + SSE 端点，Swagger 注解 |
+**通用 SSE 基础设施（`sse` 包，AskUser / TodoWrite 共用）**
+
+| 组件 | 职责 |
+|------|------|
+| `AgentSseSession` | Session 数据：sessionId、message、status、SseEmitter、事件缓冲、answerFuture（AskUser 专用） |
+| `AgentSessionStatus` | 枚举：`RUNNING` / `AWAITING_INPUT` / `COMPLETED` / `FAILED` |
+| `AgentSseEvent` | 统一 SSE 事件 DTO（支持 `QUESTIONS` 与 `TODOS` 载荷） |
+| `AgentSseSessionStore` | 内存 Session 管理、事件推送、缓冲 flush、`completeAnswer` |
+| `AgentSessionHolder` | ThreadLocal 传递当前 sessionId |
+| `AbstractSseAgentService` | `startChat` / `connectSse` / `runWithSession` 模板方法 |
+
+**TodoWrite 专用**
+
+| 组件 | 包路径 | 职责 |
+|------|--------|------|
+| `TodoItemDto` / `TodoProgressDto` | `model` | Todo 看板 DTO |
+| `TodoAgentConfig` | `config` | 注册 `TodoWriteTool` Bean，`todoEventHandler` 桥接 SSE |
+| `TodoAgentService` | `service` | 继承 `AbstractSseAgentService`，学习计划 Agent 编排 |
+| `TodoAgentController` | `controller` | `POST /chat` + `GET /sse/{sessionId}` |
 
 ### 2.4 TodoEventHandler 桥接
 
 ```java
 TodoWriteTool.builder()
     .todoEventHandler(todos -> {
-        String sessionId = TodoSessionHolder.getSessionId();
+        String sessionId = AgentSessionHolder.getSessionId();
         if (sessionId != null) {
-            todoSessionStore.pushEvent(sessionId, TodoSseEvent.todos(todos));
+            sessionStore.pushEvent(sessionId, AgentSseEvent.todos(todos));
         }
     })
     .build();
 ```
 
-`TodoAgentService.runAgent()` 在虚拟线程中执行前设置 `TodoSessionHolder.setSessionId(sessionId)`，`finally` 块中 `clear()`。
+`TodoAgentService` 通过继承 `AbstractSseAgentService.runWithSession()` 自动设置/清理 `AgentSessionHolder`。
 
 ### 2.5 SSE 事件缓冲策略
 
@@ -229,20 +236,22 @@ TodoWriteTool.builder()
 
 | 操作 | 文件 |
 |------|------|
+| 新增 | `sse/AgentSessionStatus.java` |
+| 新增 | `sse/AgentSseSession.java` |
+| 新增 | `sse/AgentSseEvent.java` |
+| 新增 | `sse/AgentSseSessionStore.java` |
+| 新增 | `sse/AgentSessionHolder.java` |
+| 新增 | `sse/AbstractSseAgentService.java` |
+| 重构 | `service/AskUserAgentService.java`（继承 `AbstractSseAgentService`） |
+| 重构 | `service/WebQuestionHandler.java`（使用 `AgentSseSessionStore`） |
+| 删除 | `AskUserSession` / `AskUserSessionStatus` / `AskUserSseEvent` / `AskUserSessionStore` / `AskUserSessionHolder` |
 | 新增 | `config/TodoAgentConfig.java` |
 | 新增 | `controller/TodoAgentController.java` |
 | 新增 | `service/TodoAgentService.java` |
-| 新增 | `service/TodoSessionStore.java` |
-| 新增 | `service/TodoSessionHolder.java` |
-| 新增 | `model/TodoSession.java` |
-| 新增 | `model/TodoSessionStatus.java` |
-| 新增 | `model/TodoChatRequest.java` |
-| 新增 | `model/TodoChatResponse.java` |
-| 新增 | `model/TodoSseEvent.java` |
-| 新增 | `model/TodoItemDto.java` |
-| 新增 | `model/TodoProgressDto.java` |
+| 新增 | `model/TodoItemDto.java` / `TodoProgressDto.java` / `TodoChatRequest.java` / `TodoChatResponse.java` |
+| 新增 | `test/sse/AgentSseSessionStoreTest.java` |
 | 修改 | `static/index.html`（新增 Tab + JS 逻辑） |
-| 修改 | `README.md`（新增 TodoWrite 章节，实现阶段补充） |
+| 修改 | `README.md`（新增 TodoWrite 章节） |
 
 ---
 
@@ -274,8 +283,8 @@ cd demo2 && mvn compile -q
 
 | 方案 | 结论 |
 |------|------|
-| **A. 独立 SSE Session 模式** | **选用**，对齐 AskUser 已验证模式，边界清晰 |
-| B. 抽象通用 SseSessionStore | 过度设计，首版 Demo 不值得 |
+| **A. 独立 SSE Session 模式** | 首版选用，后重构为 **A+ 通用 sse 包** |
+| B. 抽象通用 SseSessionStore | **已实现**（`AgentSseSessionStore` + `AbstractSseAgentService`） |
 | C. ApplicationEventPublisher 桥接 | 多一层间接，Web 场景不如直接回调 SessionStore |
 | D. 同步 GET（SkillsAgent 模式） | 无法展示 Todo 实时进度，未选用 |
 | E. TodoWrite + BraveWebSearchTool | 需 BRAVE_API_KEY，用户明确不选 |

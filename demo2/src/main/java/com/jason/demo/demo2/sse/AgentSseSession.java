@@ -1,4 +1,4 @@
-package com.jason.demo.demo2.model;
+package com.jason.demo.demo2.sse;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -11,15 +11,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 @Getter
-public class AskUserSession {
+public class AgentSseSession {
 
     private final String sessionId;
     private final String message;
     private final Instant createdAt;
-    private final Queue<AskUserSseEvent> eventBuffer = new ConcurrentLinkedQueue<>();
+    private final Queue<AgentSseEvent> eventBuffer = new ConcurrentLinkedQueue<>();
 
     @Setter
-    private volatile AskUserSessionStatus status = AskUserSessionStatus.RUNNING;
+    private volatile AgentSessionStatus status = AgentSessionStatus.RUNNING;
 
     @Setter
     private volatile SseEmitter sseEmitter;
@@ -30,7 +30,7 @@ public class AskUserSession {
     @Setter
     private volatile Instant lastActivityAt;
 
-    public AskUserSession(String sessionId, String message) {
+    public AgentSseSession(String sessionId, String message) {
         this.sessionId = sessionId;
         this.message = message;
         this.createdAt = Instant.now();

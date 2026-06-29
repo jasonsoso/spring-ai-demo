@@ -1,7 +1,9 @@
 package com.jason.demo.demo2.service;
 
-import com.jason.demo.demo2.model.AskUserSession;
-import com.jason.demo.demo2.model.AskUserSessionStatus;
+import com.jason.demo.demo2.sse.AgentSessionHolder;
+import com.jason.demo.demo2.sse.AgentSessionStatus;
+import com.jason.demo.demo2.sse.AgentSseSession;
+import com.jason.demo.demo2.sse.AgentSseSessionStore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,26 +20,26 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class WebQuestionHandlerTest {
 
-    private AskUserSessionStore store;
+    private AgentSseSessionStore store;
     private WebQuestionHandler handler;
     private ExecutorService executor;
 
     @BeforeEach
     void setUp() {
-        store = new AskUserSessionStore(new JsonMapper());
+        store = new AgentSseSessionStore(new JsonMapper());
         handler = new WebQuestionHandler(store);
         executor = Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @AfterEach
     void tearDown() {
-        AskUserSessionHolder.clear();
+        AgentSessionHolder.clear();
         executor.shutdownNow();
     }
 
     @Test
     void handleBlocksUntilAnswerSubmitted() throws Exception {
-        AskUserSession session = store.create("test");
+        AgentSseSession session = store.create("test");
 
         var question = new AskUserQuestionTool.Question(
                 "你更倾向哪种数据库？",
@@ -50,16 +52,16 @@ class WebQuestionHandlerTest {
         );
 
         var handleFuture = executor.submit(() -> {
-            AskUserSessionHolder.setSessionId(session.getSessionId());
+            AgentSessionHolder.setSessionId(session.getSessionId());
             try {
                 return handler.handle(List.of(question));
             } finally {
-                AskUserSessionHolder.clear();
+                AgentSessionHolder.clear();
             }
         });
 
         Thread.sleep(200);
-        assertEquals(AskUserSessionStatus.AWAITING_INPUT, session.getStatus());
+        assertEquals(AgentSessionStatus.AWAITING_INPUT, session.getStatus());
         store.completeAnswer(session.getSessionId(), Map.of("你更倾向哪种数据库？", "PostgreSQL"));
 
         Map<String, String> answers = handleFuture.get(2, TimeUnit.SECONDS);
