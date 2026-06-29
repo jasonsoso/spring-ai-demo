@@ -28,21 +28,23 @@
         /* Tab 导航 */
         .tab-nav {
             display: flex;
+            flex-wrap: wrap;
             background: #f8f8f8;
             border-bottom: 1px solid #e0e0e0;
         }
 
         .tab-btn {
-            flex: 1;
-            padding: 16px;
+            flex: 0 1 auto;
+            padding: 12px 14px;
             border: none;
             background: transparent;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 500;
             color: #666;
             cursor: pointer;
             transition: all 0.2s;
             border-bottom: 3px solid transparent;
+            white-space: nowrap;
         }
 
         .tab-btn:hover { background: #f0f0f0; }
