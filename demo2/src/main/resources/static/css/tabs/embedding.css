@@ -1,0 +1,16 @@
+    /* ========== Embedding 区域 ========== */
+    .embedding-header {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        padding: 20px;
+        color: white;
+    }
+    .embedding-header h1 { font-size: 22px; font-weight: 600; }
+    .embedding-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+    .embedding-body {
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+

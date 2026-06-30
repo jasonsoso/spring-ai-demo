@@ -1,0 +1,115 @@
+    /* ========== 电商客服 RAG 区域 ========== */
+    .ecommerce-header {
+        background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+        padding: 20px;
+        color: white;
+    }
+    .ecommerce-header h1 { font-size: 22px; font-weight: 600; }
+    .ecommerce-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+    .ecommerce-flow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #666;
+        padding: 12px;
+        background: #fffbf0;
+        border-radius: 8px;
+    }
+
+    .ecommerce-flow span {
+        padding: 4px 10px;
+        background: white;
+        border: 1px solid #ffe0a0;
+        border-radius: 16px;
+        white-space: nowrap;
+    }
+
+    .ecommerce-flow .arrow { color: #f7971e; font-weight: bold; border: none; background: none; padding: 0; }
+
+    .ecommerce-sample-btn {
+        padding: 6px 14px;
+        border: 1px solid #ffe0a0;
+        border-radius: 16px;
+        background: #fffbf0;
+        color: #b06a00;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .ecommerce-sample-btn:hover {
+        background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+        color: white;
+        border-color: transparent;
+    }
+
+    .btn-ecommerce {
+        background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+        color: white;
+    }
+
+    .ecommerce-answer {
+        background: #fffbf0;
+        border: 1px solid #ffe0a0;
+        border-radius: 8px;
+        padding: 16px;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #333;
+        min-height: 80px;
+        white-space: pre-wrap;
+    }
+
+    .ecommerce-answer.loading { color: #999; font-style: italic; }
+    .ecommerce-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+    .ecommerce-answer .label { font-size: 12px; color: #999; margin-bottom: 6px; }
+    .ecommerce-answer .question-text {
+        color: #b06a00;
+        font-weight: 500;
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px dashed #ffe0a0;
+    }
+    .ecommerce-answer .mode-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    .ecommerce-answer .mode-badge.precise { background: #e8f4fd; color: #1a6fa0; }
+    .ecommerce-answer .mode-badge.enhanced { background: #edf7ed; color: #2d6a2d; }
+
+    .mode-selector {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 4px;
+    }
+
+    .mode-radio {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        border: 2px solid #ffe0a0;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 14px;
+        color: #666;
+        transition: all 0.2s;
+        user-select: none;
+    }
+
+    .mode-radio input[type="radio"] { display: none; }
+    .mode-radio.selected {
+        border-color: #f7971e;
+        background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+        color: white;
+        font-weight: 600;
+    }

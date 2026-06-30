@@ -1,0 +1,167 @@
+    /* ========== Agent Tools 工具调用区域 ========== */
+    .agent-tools-header {
+        background: linear-gradient(135deg, #0f3443 0%, #34e89e 100%);
+        padding: 20px;
+        color: white;
+    }
+    .agent-tools-header h1 { font-size: 22px; font-weight: 600; }
+    .agent-tools-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+    .agent-tools-flow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #666;
+        padding: 12px;
+        background: #f0fdf8;
+        border-radius: 8px;
+    }
+
+    .agent-tools-flow span {
+        padding: 4px 10px;
+        background: white;
+        border: 1px solid #a0dfc8;
+        border-radius: 16px;
+        white-space: nowrap;
+    }
+
+    .agent-tools-flow .arrow { color: #0f3443; font-weight: bold; border: none; background: none; padding: 0; }
+
+    .agent-tools-sample-btn {
+        padding: 6px 14px;
+        border: 1px solid #a0dfc8;
+        border-radius: 16px;
+        background: #f0fdf8;
+        color: #0f5c3a;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .agent-tools-sample-btn:hover {
+        background: linear-gradient(135deg, #0f3443 0%, #34e89e 100%);
+        color: white;
+        border-color: transparent;
+    }
+
+    .btn-agent-tools {
+        background: linear-gradient(135deg, #0f3443 0%, #34e89e 100%);
+        color: white;
+    }
+
+    .agent-tools-answer {
+        background: #f0fdf8;
+        border: 1px solid #a0dfc8;
+        border-radius: 8px;
+        padding: 16px;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #333;
+        min-height: 80px;
+        white-space: pre-wrap;
+    }
+
+    .agent-tools-answer.loading { color: #999; font-style: italic; }
+    .agent-tools-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+    .agent-tools-answer .label {
+        font-size: 12px;
+        color: #999;
+        margin-bottom: 6px;
+    }
+
+    .agent-tools-answer .demand-text {
+        color: #0f5c3a;
+        font-weight: 500;
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px dashed #a0dfc8;
+    }
+
+    .agent-tools-answer .plan-text {
+        color: #333;
+        font-weight: 400;
+        white-space: pre-wrap;
+        line-height: 1.8;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .todo-step-block {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px dashed #d0e8df;
+    }
+    .todo-step-block:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+    .todo-step-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #0f5c3a;
+        margin-bottom: 8px;
+    }
+    .todo-final-block {
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 2px solid #a0dfc8;
+    }
+
+    .todo-step-block {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px dashed #d0e8df;
+    }
+    .todo-step-block:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+    .todo-step-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #0f5c3a;
+        margin-bottom: 8px;
+    }
+    .todo-final-block {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 2px solid #a0dfc8;
+    }
+
+    .todo-step-block {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px dashed #d0e8dc;
+    }
+    .todo-step-block:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+    .todo-step-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #0f5c3a;
+        margin-bottom: 8px;
+    }
+    .todo-final-block {
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 2px solid #a0dfc8;
+    }
+
+    .agent-tools-answer .tools-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        background: linear-gradient(135deg, #0f3443 0%, #34e89e 100%);
+        color: white;
+        border-radius: 12px;
+        font-size: 12px;
+        margin-bottom: 12px;
+    }

@@ -1,0 +1,71 @@
+    /* ========== MySQL 持久化记忆区域 ========== */
+    .mysql-memory-header {
+        background: linear-gradient(135deg, #1f4037 0%, #99f2c8 100%);
+        padding: 20px;
+        color: white;
+    }
+    .mysql-memory-header h1 { font-size: 22px; font-weight: 600; }
+    .mysql-memory-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+    .mysql-memory-flow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #666;
+        padding: 12px;
+        background: #f2fbf7;
+        border-radius: 8px;
+    }
+
+    .mysql-memory-flow span {
+        padding: 4px 10px;
+        background: white;
+        border: 1px solid #bce8d4;
+        border-radius: 16px;
+        white-space: nowrap;
+    }
+
+    .mysql-memory-flow .arrow { color: #1f4037; font-weight: bold; border: none; background: none; padding: 0; }
+    .btn-mysql-memory {
+        background: linear-gradient(135deg, #1f4037 0%, #99f2c8 100%);
+        color: white;
+    }
+    .btn-mysql-memory-outline {
+        background: white;
+        color: #1f4037;
+        border: 2px solid #99f2c8;
+    }
+    .mysql-memory-answer {
+        background: #f2fbf7;
+        border: 1px solid #bce8d4;
+        border-radius: 8px;
+        padding: 16px;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #333;
+        min-height: 80px;
+        white-space: pre-wrap;
+    }
+    .mysql-memory-answer.loading { color: #999; font-style: italic; }
+    .mysql-memory-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+    .mysql-memory-answer .label { font-size: 12px; color: #999; margin-bottom: 6px; }
+    .mysql-memory-answer .demand-text {
+        color: #1f4037;
+        font-weight: 500;
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px dashed #bce8d4;
+    }
+    .mysql-memory-answer .mysql-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        background: linear-gradient(135deg, #1f4037 0%, #99f2c8 100%);
+        color: white;
+        border-radius: 12px;
+        font-size: 12px;
+        margin-bottom: 12px;
+        margin-right: 8px;
+    }

@@ -1,0 +1,128 @@
+    /* ========== 多 Agent 协作区域 ========== */
+    .multi-agent-header {
+        background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%);
+        padding: 20px;
+        color: white;
+    }
+    .multi-agent-header h1 { font-size: 22px; font-weight: 600; }
+    .multi-agent-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+    .multi-agent-flow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        font-size: 12px;
+        color: #666;
+        padding: 12px;
+        background: #fff5f5;
+        border-radius: 8px;
+    }
+    .multi-agent-flow span {
+        padding: 4px 10px;
+        background: white;
+        border: 1px solid #ffc0c0;
+        border-radius: 16px;
+        white-space: nowrap;
+    }
+    .multi-agent-flow .arrow { color: #FF416C; font-weight: bold; border: none; background: none; padding: 0; }
+
+    .multi-agent-sample-btn {
+        padding: 6px 14px;
+        border: 1px solid #ffc0c0;
+        border-radius: 16px;
+        background: #fff5f5;
+        color: #c0002a;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .multi-agent-sample-btn:hover {
+        background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%);
+        color: white;
+        border-color: transparent;
+    }
+
+    .btn-multi-agent {
+        background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%);
+        color: white;
+    }
+
+    .multi-agent-answer {
+        background: #fff5f5;
+        border: 1px solid #ffc0c0;
+        border-radius: 8px;
+        padding: 16px;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #333;
+        min-height: 80px;
+        white-space: pre-wrap;
+    }
+    .multi-agent-answer.loading { color: #999; font-style: italic; }
+    .multi-agent-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+    .agent-cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .agent-card {
+        border: 1px solid #e8e8e8;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .agent-card-title {
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        color: white;
+    }
+    .agent-card-title.attraction { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+    .agent-card-title.dining     { background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%); color: #333; }
+    .agent-card-title.accommodation { background: linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%); }
+    .agent-card-title.transport  { background: linear-gradient(135deg, #834d9b 0%, #d04ed6 100%); }
+    .agent-card-body {
+        padding: 10px 12px;
+        font-size: 13px;
+        color: #444;
+        max-height: 200px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        line-height: 1.5;
+    }
+
+    .final-plan-box {
+        background: #fff5f5;
+        border: 2px solid #FF416C;
+        border-radius: 10px;
+        padding: 16px;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #333;
+        white-space: pre-wrap;
+    }
+
+    .multi-agent-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        background: linear-gradient(135deg, #FF416C 0%, #FF4B2B 100%);
+        color: white;
+        border-radius: 12px;
+        font-size: 12px;
+        margin-bottom: 12px;
+        margin-right: 6px;
+    }
+
+    .coordinator-box {
+        background: #f0f0ff;
+        border: 1px solid #c8c0f0;
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 13px;
+        color: #333;
+        margin-bottom: 12px;
+        white-space: pre-wrap;
+    }

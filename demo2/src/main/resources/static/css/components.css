@@ -1,0 +1,173 @@
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+    }
+
+    .app-container {
+        width: 900px;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        overflow: hidden;
+    }
+
+    /* Tab 导航 */
+    .tab-nav {
+        display: flex;
+        flex-wrap: wrap;
+        background: #f8f8f8;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .tab-btn {
+        flex: 0 1 auto;
+        padding: 12px 14px;
+        border: none;
+        background: transparent;
+        font-size: 14px;
+        font-weight: 500;
+        color: #666;
+        cursor: pointer;
+        transition: all 0.2s;
+        border-bottom: 3px solid transparent;
+        white-space: nowrap;
+    }
+
+    .tab-btn:hover { background: #f0f0f0; }
+    .tab-btn.active {
+        color: #667eea;
+        border-bottom-color: #667eea;
+        background: white;
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: flex; flex-direction: column; }
+    .card {
+        border: 1px solid #e8e8e8;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .card-title {
+        padding: 12px 16px;
+        background: #f8f8f8;
+        font-weight: 600;
+        font-size: 14px;
+        color: #444;
+        border-bottom: 1px solid #e8e8e8;
+    }
+
+    .card-body { padding: 16px; }
+
+    .form-row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+    .form-row:last-child { margin-bottom: 0; }
+
+    .form-row label { font-size: 14px; color: #555; min-width: 70px; }
+
+    .form-row input, .form-row select {
+        flex: 1;
+        padding: 10px 14px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.3s;
+    }
+
+    .form-row input:focus, .form-row select:focus { border-color: #11998e; }
+
+    .result-box {
+        background: #f8fffe;
+        border: 1px solid #d0f0ea;
+        border-radius: 8px;
+        padding: 14px;
+        font-size: 14px;
+        color: #333;
+        min-height: 60px;
+        word-break: break-all;
+        white-space: pre-wrap;
+    }
+
+    .result-box.loading { color: #999; font-style: italic; }
+    .result-box.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+    .knowledge-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .knowledge-list li {
+        padding: 10px 14px;
+        background: #f0fdf8;
+        border-left: 3px solid #11998e;
+        border-radius: 0 8px 8px 0;
+        font-size: 14px;
+        color: #333;
+    }
+
+    /* ========== 通用按钮 ========== */
+    .btn {
+        padding: 10px 28px;
+        border: none;
+        border-radius: 24px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .btn-success {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        color: white;
+    }
+
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { background: #ccc !important; cursor: not-allowed; transform: none !important; }
+
+    .typing::after {
+        content: '...';
+        animation: typing 1.5s steps(4, end) infinite;
+    }
+
+    @keyframes typing {
+        0%, 100% { content: ''; }
+        25% { content: '.'; }
+        50% { content: '..'; }
+        75% { content: '...'; }
+    }
+
+    .welcome-message {
+        text-align: center;
+        color: #666;
+        padding: 60px 20px;
+    }
+
+    .welcome-message h2 { font-size: 18px; margin-bottom: 8px; color: #333; }
+    .welcome-message p { font-size: 14px; }
+    .rag-body {
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+    .sample-questions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
