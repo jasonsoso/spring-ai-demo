@@ -12,6 +12,7 @@
 - [技术栈](#技术栈)
 - [功能模块](#功能模块)
 - [快速开始](#快速开始)
+- [前端说明](#前端说明)
 - [配置说明](#配置说明)
 - [可观测性](#可观测性)
 - [API 接口文档](#api-接口文档)
@@ -90,7 +91,7 @@
 | 可观测性 | Micrometer + OpenTelemetry（Boot 4 内置） | — |
 | 指标导出 | Prometheus（Actuator） | — |
 | 工具库 | Lombok | — |
-| 前端 | 原生 HTML/CSS/JS（单页多 Tab） | — |
+| 前端 | 原生 HTML/CSS/JS（单页 15 Tab，按模块拆分静态资源，零构建） | — |
 
 ---
 
@@ -549,6 +550,71 @@ mvn spring-boot:run
 | 其他 Tab | Embedding、RAG、Agent 记忆、MCP 等 |
 
 > Subagent / A2A 仅需 **DeepSeek API Key**；单次请求约 30～90 秒，请耐心等待。
+
+---
+
+## 前端说明
+
+演示界面位于 `src/main/resources/static/`，由 Spring Boot 静态资源托管，`IndexController` 将 `GET /` 转发至 `index.html`。采用**零构建**方案：不引入 npm/Vite，改完代码后 `mvn spring-boot:run` 即可验证。
+
+### 目录布局
+
+```
+static/
+├── index.html              # 骨架：Tab 导航 + 15 个功能面板 HTML（~900 行）
+├── css/
+│   ├── components.css      # 全局布局、Tab 导航、card/btn/form 等公共组件
+│   └── tabs/               # 各 Tab 专属样式（部分 Tab 共用同一文件）
+│       ├── chat.css
+│       ├── embedding.css
+│       ├── rag.css         # RAG 基础版 + RAG 优化版
+│       ├── ecommerce.css
+│       ├── agent.css
+│       ├── agent-memory.css
+│       ├── agent-mysql-memory.css
+│       ├── agent-tools.css # Agent Tools / AskUser / TodoWrite / Subagent / A2A
+│       ├── mcp.css
+│       └── multi-agent.css
+└── js/
+    ├── core/
+    │   ├── tabs.js         # switchTab()
+    │   └── utils.js        # escapeHtml()
+    └── tabs/               # 各 Tab 业务逻辑（全局 function，兼容 onclick）
+        ├── chat.js
+        ├── embedding.js
+        ├── rag.js          # 含 rag + rag-opt
+        ├── ecommerce.js
+        ├── agent.js
+        ├── agent-memory.js # 含内存记忆 + MySQL 记忆
+        ├── agent-tools.js
+        ├── mcp.js
+        ├── multi-agent.js
+        ├── ask-user.js
+        ├── todo-write.js
+        ├── subagent.js
+        └── a2a.js
+```
+
+### 约定
+
+| 项 | 说明 |
+|----|------|
+| HTML | 面板结构保留在 `index.html`，不拆 HTML 片段 |
+| JS 作用域 | 顶层 `function` + `onclick`，不用 ES Module |
+| 脚本顺序 | `utils.js` → `tabs.js` → 各 `tabs/*.js` |
+| 新增 Tab | 同步增加 `css/tabs/*.css`、`js/tabs/*.js`，并在 `index.html` 中注册 `<link>` / `<script>` |
+
+### 冒烟测试
+
+应用启动后，可在项目根目录执行（PowerShell）：
+
+```powershell
+.\demo2\scripts\smoke-test-frontend.ps1
+```
+
+脚本会检查首页、全部 CSS/JS 静态资源是否返回 200，并校验 `onclick` 引用的函数是否在 JS 中定义。
+
+设计文档：`docs/superpowers/specs/2026-06-30-index-html-refactor-design.md`
 
 ---
 
@@ -1391,7 +1457,8 @@ demo2/
 │   │   ├── TodoAgentController.java     # TodoWrite SSE
 │   │   ├── SubagentAgentController.java # Subagent 编排
 │   │   ├── A2aOrchestratorController.java # A2A 协调器
-│   │   └── MultiAgentController.java
+│   │   ├── MultiAgentController.java
+│   │   └── IndexController.java        # GET / → forward:/index.html
 │   ├── mcp/
 │   │   ├── client/
 │   │   │   ├── config/McpClientInitializer.java  # MCP Client 延迟初始化
@@ -1435,7 +1502,15 @@ demo2/
 │   ├── .claude/skills/             # 内置 Agent Skills 示例（ai-tutor、pdf）
 │   ├── outdoor-travel-safety-guide.txt
 │   ├── ecommerce-knowledge-base.txt
-│   └── static/index.html
+│   └── static/                       # 前端演示（见「前端说明」）
+│       ├── index.html
+│       ├── css/components.css
+│       ├── css/tabs/                 # 10 个 Tab 样式文件
+│       └── js/
+│           ├── core/tabs.js, utils.js
+│           └── tabs/                 # 13 个 Tab 逻辑文件
+├── scripts/
+│   └── smoke-test-frontend.ps1     # 静态资源冒烟测试
 ├── docker/
 │   ├── milvus/docker-compose.yml
 │   └── observability/docker-compose.yml  # Grafana LGTM（OTLP + Grafana UI）
@@ -1444,11 +1519,13 @@ demo2/
 │   │   ├── 2026-06-23-spring-ai-2-upgrade-design.md
 │   │   ├── 2026-06-27-ask-user-question-tool-design.md
 │   │   ├── 2026-06-29-todo-write-tool-design.md
-│   │   └── 2026-06-29-subagent-a2a-design.md
+│   │   ├── 2026-06-29-subagent-a2a-design.md
+│   │   └── 2026-06-30-index-html-refactor-design.md
 │   └── plans/
 │       ├── 2026-06-27-ask-user-question-tool.md
 │       ├── 2026-06-29-todo-write-tool.md
-│       └── 2026-06-29-subagent-a2a.md
+│       ├── 2026-06-29-subagent-a2a.md
+│       └── 2026-06-30-index-html-refactor.md
 └── pom.xml
 ```
 
