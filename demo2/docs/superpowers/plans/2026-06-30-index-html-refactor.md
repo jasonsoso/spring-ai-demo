@@ -29,7 +29,7 @@
 - Create: `demo2/src/main/resources/static/js/core/`（目录）
 - Create: `demo2/src/main/resources/static/js/tabs/`（目录）
 
-- [ ] **Step 1: 创建目录**
+- [x] **Step 1: 创建目录**
 
 ```bash
 mkdir -p demo2/src/main/resources/static/css/tabs
@@ -37,7 +37,7 @@ mkdir -p demo2/src/main/resources/static/js/core
 mkdir -p demo2/src/main/resources/static/js/tabs
 ```
 
-- [ ] **Step 2: 确认目录存在**
+- [x] **Step 2: 确认目录存在**
 
 Run: `ls demo2/src/main/resources/static/css/tabs demo2/src/main/resources/static/js/core demo2/src/main/resources/static/js/tabs`
 Expected: 三个空目录
@@ -53,18 +53,18 @@ Expected: 三个空目录
 **Interfaces:**
 - Produces: 全局样式文件，被所有 Tab 依赖
 
-- [ ] **Step 1: 从 index.html 剪切以下 CSS 块合并写入 `components.css`**
+- [x] **Step 1: 从 index.html 剪切以下 CSS 块合并写入 `components.css`**
   - L8–58：全局 reset、body、app-container、tab 导航
   - L137–246：card、form-row、result-box、knowledge-list、btn、typing、welcome
   - L257–262：`.rag-body`
   - L287–292：`.sample-questions`
 
-- [ ] **Step 2: 去除每行 leading 4 空格**（原 `<style>` 内缩进）
+- [x] **Step 2: 去除每行 leading 4 空格**（原 `<style>` 内缩进）
 
-- [ ] **Step 3: 确认文件非空**
+- [x] **Step 3: 确认文件非空**
 
 Run: `wc -l demo2/src/main/resources/static/css/components.css`
-Expected: 约 150–200 行
+Expected: 约 150–200 行（实际 173 行）
 
 ---
 
@@ -82,11 +82,11 @@ Expected: 约 150–200 行
 - Create: `demo2/src/main/resources/static/css/tabs/mcp.css`（L909–1015）
 - Create: `demo2/src/main/resources/static/css/tabs/multi-agent.css`（L1017–1144）
 
-- [ ] **Step 1: 按 spec §3 行号映射逐文件剪切 CSS**
+- [x] **Step 1: 按 spec §3 行号映射逐文件剪切 CSS**
 
-- [ ] **Step 2: 去除每行 leading 4 空格**
+- [x] **Step 2: 去除每行 leading 4 空格**
 
-- [ ] **Step 3: 确认 10 个 tab CSS 文件均已创建**
+- [x] **Step 3: 确认 10 个 tab CSS 文件均已创建**
 
 Run: `ls demo2/src/main/resources/static/css/tabs/ | wc -l`
 Expected: 10
@@ -103,7 +103,7 @@ Expected: 10
 - Produces: `switchTab(tab)` — 全局函数
 - Produces: `escapeHtml(text)` — 全局函数，返回 HTML 转义字符串
 
-- [ ] **Step 1: 写入 `tabs.js`**
+- [x] **Step 1: 写入 `tabs.js`**
 
 ```javascript
 // ========== Tab 切换 ==========
@@ -117,7 +117,7 @@ function switchTab(tab) {
 }
 ```
 
-- [ ] **Step 2: 写入 `utils.js`**
+- [x] **Step 2: 写入 `utils.js`**
 
 ```javascript
 function escapeHtml(text) {
@@ -146,11 +146,11 @@ function escapeHtml(text) {
 - Create: `demo2/src/main/resources/static/js/tabs/subagent.js`（L3052–3088）
 - Create: `demo2/src/main/resources/static/js/tabs/a2a.js`（L3090–3126）
 
-- [ ] **Step 1: 按 spec §4 行号映射逐文件剪切 JS**
+- [x] **Step 1: 按 spec §4 行号映射逐文件剪切 JS**
 
-- [ ] **Step 2: 从 `rag.js` 中确认不含 `escapeHtml` 定义**（已移至 utils.js）
+- [x] **Step 2: 从 `rag.js` 中确认不含 `escapeHtml` 定义**（已移至 utils.js）
 
-- [ ] **Step 3: 确认 13 个 tab JS 文件均已创建**
+- [x] **Step 3: 确认 13 个 tab JS 文件均已创建**
 
 Run: `ls demo2/src/main/resources/static/js/tabs/ | wc -l`
 Expected: 13
@@ -162,9 +162,9 @@ Expected: 13
 **Files:**
 - Modify: `demo2/src/main/resources/static/index.html`
 
-- [ ] **Step 1: 删除 `<style>...</style>` 整块（L7–L1145）**
+- [x] **Step 1: 删除 `<style>...</style>` 整块（L7–L1145）**
 
-- [ ] **Step 2: 在 `<head>` 内 `<title>` 之后插入 CSS 引用**
+- [x] **Step 2: 在 `<head>` 内 `<title>` 之后插入 CSS 引用**
 
 ```html
     <link rel="stylesheet" href="/css/components.css">
@@ -180,9 +180,9 @@ Expected: 13
     <link rel="stylesheet" href="/css/tabs/multi-agent.css">
 ```
 
-- [ ] **Step 3: 删除 `<script>...</script>` 整块（原 L2027–L3127）**
+- [x] **Step 3: 删除 `<script>...</script>` 整块（原 L2027–L3127）**
 
-- [ ] **Step 4: 在 `</div>`（app-container 结束）与 `</body>` 之间插入 JS 引用**
+- [x] **Step 4: 在 `</div>`（app-container 结束）与 `</body>` 之间插入 JS 引用**
 
 ```html
 <script src="/js/core/utils.js"></script>
@@ -202,15 +202,15 @@ Expected: 13
 <script src="/js/tabs/a2a.js"></script>
 ```
 
-- [ ] **Step 5: 确认 index.html 不再含内联 `<style>` 或 `<script>` 块**
+- [x] **Step 5: 确认 index.html 不再含内联 `<style>` 或 `<script>` 块**
 
 Run: `rg '<style>|<script>' demo2/src/main/resources/static/index.html`
 Expected: 仅匹配 `<script src=` 和 `<link rel="stylesheet"` 行，无内联块
 
-- [ ] **Step 6: 确认行数大幅下降**
+- [x] **Step 6: 确认行数大幅下降**
 
 Run: `wc -l demo2/src/main/resources/static/index.html`
-Expected: 约 880–920 行
+Expected: 约 880–920 行（实际 915 行）
 
 ---
 
