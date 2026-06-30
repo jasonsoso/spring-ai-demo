@@ -1162,6 +1162,8 @@
         <button class="tab-btn" data-tab="multi-agent" onclick="switchTab('multi-agent')">🤝 多 Agent 协作</button>
         <button class="tab-btn" data-tab="ask-user" onclick="switchTab('ask-user')">❓ AskUserQuestion 技术选型</button>
         <button class="tab-btn" data-tab="todo-write" onclick="switchTab('todo-write')">📋 TodoWrite 学习计划</button>
+        <button class="tab-btn" data-tab="subagent" onclick="switchTab('subagent')">🔗 Subagent 编排</button>
+        <button class="tab-btn" data-tab="a2a" onclick="switchTab('a2a')">🌐 A2A 跨系统对话</button>
     </div>
 
     <!-- ========== 聊天 Tab ========== -->
@@ -1884,6 +1886,81 @@
                 </div>
             </div>
             <div id="todoResult" class="agent-tools-answer" style="margin: 0 20px 20px;">点击「开始学习规划」，每完成一项子任务将实时推送产出，最后汇总完整计划...</div>
+        </div>
+    </div>
+
+    <!-- ========== Subagent 编排 Tab ========== -->
+    <div id="tab-subagent" class="tab-content">
+        <div class="agent-tools-header">
+            <h1>Subagent Orchestration</h1>
+            <p>主协调器通过 Task 工具委派 architect / builder · 独立上下文 · DeepSeek</p>
+        </div>
+        <div class="rag-body" style="padding: 20px;">
+            <div class="agent-tools-flow">
+                <span>用户提问</span><span class="arrow">→</span>
+                <span>architect 分析</span><span class="arrow">→</span>
+                <span>builder 生成</span><span class="arrow">→</span>
+                <span>汇总回复</span>
+            </div>
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-title">💡 示例问题</div>
+                <div class="card-body">
+                    <button class="agent-tools-sample-btn" onclick="fillSubagentMessage('分析 Spring AI RAG 架构并写一份入门指南')">示例1：Spring AI RAG 入门指南</button>
+                    <button class="agent-tools-sample-btn" onclick="fillSubagentMessage('对比 TodoWrite 与 Subagent 两种模式的适用场景并写总结')">示例2：TodoWrite vs Subagent</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">📝 发起编排</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>任务描述</label>
+                        <input type="text" id="subagentMessageInput" placeholder="输入复杂分析或写作任务..." value="分析 Spring AI RAG 架构并写一份入门指南">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-agent-tools" id="subagentStartBtn" onclick="startSubagentChat()">开始编排</button>
+                    </div>
+                </div>
+            </div>
+            <div id="subagentResult" class="agent-tools-answer" style="margin: 0 20px 20px;">点击「开始编排」，主代理将委派 architect 与 builder 子代理（约 30～90 秒）...</div>
+        </div>
+    </div>
+
+    <!-- ========== A2A 跨系统对话 Tab ========== -->
+    <div id="tab-a2a" class="tab-content">
+        <div class="agent-tools-header">
+            <h1>A2A 跨系统对话</h1>
+            <p>协调器通过 A2A 协议调用内嵌天气专家 Agent · AgentCard 自动发现</p>
+        </div>
+        <div class="rag-body" style="padding: 20px;">
+            <div class="agent-tools-flow">
+                <span>用户提问</span><span class="arrow">→</span>
+                <span>协调器</span><span class="arrow">→</span>
+                <span>A2A 远程调用</span><span class="arrow">→</span>
+                <span>天气专家</span><span class="arrow">→</span>
+                <span>汇总回复</span>
+            </div>
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-title">💡 示例问题</div>
+                <div class="card-body">
+                    <button class="agent-tools-sample-btn" onclick="fillA2aMessage('查北京和上海的天气，并给出周末出行建议')">示例1：京沪天气出行建议</button>
+                    <button class="agent-tools-sample-btn" onclick="fillA2aMessage('深圳天气怎么样，适合户外跑步吗')">示例2：深圳户外跑步</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">📝 发起 A2A 对话</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>问题</label>
+                        <input type="text" id="a2aMessageInput" placeholder="输入天气相关问题..." value="查北京和上海的天气，并给出周末出行建议">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <button class="btn btn-agent-tools" id="a2aStartBtn" onclick="startA2aChat()">开始 A2A 对话</button>
+                    </div>
+                </div>
+            </div>
+            <div id="a2aResult" class="agent-tools-answer" style="margin: 0 20px 20px;">点击「开始 A2A 对话」，协调器将通过 A2A 协议委派远程天气 Agent...</div>
         </div>
     </div>
 
@@ -2970,6 +3047,82 @@
     window.addEventListener('beforeunload', closeTodoEventSource);
     document.getElementById('todoMessageInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); startTodoChat(); }
+    });
+
+    // ========== Subagent 编排 ==========
+    function fillSubagentMessage(text) {
+        document.getElementById('subagentMessageInput').value = text;
+        document.getElementById('subagentMessageInput').focus();
+    }
+
+    async function startSubagentChat() {
+        const message = document.getElementById('subagentMessageInput').value.trim();
+        const resultBox = document.getElementById('subagentResult');
+        const btn = document.getElementById('subagentStartBtn');
+
+        if (!message) { alert('请输入任务描述'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'agent-tools-answer loading';
+        resultBox.textContent = '⏳ Subagent 编排中...\n\n① 主协调器评估任务\n② 委派 architect 产出 Blueprint\n③ 委派 builder 生成最终内容\n\n预计 30～90 秒，请耐心等待...';
+
+        try {
+            const res = await fetch(`/agent/subagent/chat?message=${encodeURIComponent(message)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            resultBox.className = 'agent-tools-answer';
+            resultBox.innerHTML = `<div class="label">任务</div>
+<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px dashed #ddd;">${escapeHtml(data.message)}</div>
+<div class="label">${escapeHtml(data.agentType || '')}</div>
+<div style="white-space:pre-wrap;margin-top:8px;">${escapeHtml(data.response || '')}</div>`;
+        } catch (e) {
+            resultBox.className = 'agent-tools-answer error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请确认服务已启动且 DEEPSEEK_API_KEY 已配置。';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('subagentMessageInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); startSubagentChat(); }
+    });
+
+    // ========== A2A 跨系统对话 ==========
+    function fillA2aMessage(text) {
+        document.getElementById('a2aMessageInput').value = text;
+        document.getElementById('a2aMessageInput').focus();
+    }
+
+    async function startA2aChat() {
+        const message = document.getElementById('a2aMessageInput').value.trim();
+        const resultBox = document.getElementById('a2aResult');
+        const btn = document.getElementById('a2aStartBtn');
+
+        if (!message) { alert('请输入问题'); return; }
+
+        btn.disabled = true;
+        resultBox.className = 'agent-tools-answer loading';
+        resultBox.textContent = '⏳ A2A 对话中...\n\n① 协调器发现远程 Agent（/.well-known/agent-card.json）\n② 通过 A2A 协议委派天气专家\n③ 整合结果回复\n\n请耐心等待...';
+
+        try {
+            const res = await fetch(`/agent/a2a/chat?message=${encodeURIComponent(message)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            resultBox.className = 'agent-tools-answer';
+            resultBox.innerHTML = `<div class="label">问题</div>
+<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px dashed #ddd;">${escapeHtml(data.message)}</div>
+<div class="label">${escapeHtml(data.agentType || '')}</div>
+<div style="white-space:pre-wrap;margin-top:8px;">${escapeHtml(data.response || '')}</div>`;
+        } catch (e) {
+            resultBox.className = 'agent-tools-answer error';
+            resultBox.textContent = '请求失败：' + e.message + '\n\n请确认服务已启动且 DEEPSEEK_API_KEY 已配置。';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('a2aMessageInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); startA2aChat(); }
     });
 </script>
 </body>
