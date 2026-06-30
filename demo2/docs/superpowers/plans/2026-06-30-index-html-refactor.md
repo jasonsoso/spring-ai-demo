@@ -25,6 +25,7 @@
 ### Task 1: 创建目录骨架
 
 **Files:**
+
 - Create: `demo2/src/main/resources/static/css/tabs/`（目录）
 - Create: `demo2/src/main/resources/static/js/core/`（目录）
 - Create: `demo2/src/main/resources/static/js/tabs/`（目录）
@@ -47,10 +48,12 @@ Expected: 三个空目录
 ### Task 2: 提取 `css/components.css`
 
 **Files:**
+
 - Create: `demo2/src/main/resources/static/css/components.css`
 - Source: `demo2/src/main/resources/static/index.html` 行 8–58, 137–246, 257–262, 287–292
 
 **Interfaces:**
+
 - Produces: 全局样式文件，被所有 Tab 依赖
 
 - [x] **Step 1: 从 index.html 剪切以下 CSS 块合并写入 `components.css`**
@@ -58,9 +61,7 @@ Expected: 三个空目录
   - L137–246：card、form-row、result-box、knowledge-list、btn、typing、welcome
   - L257–262：`.rag-body`
   - L287–292：`.sample-questions`
-
 - [x] **Step 2: 去除每行 leading 4 空格**（原 `<style>` 内缩进）
-
 - [x] **Step 3: 确认文件非空**
 
 Run: `wc -l demo2/src/main/resources/static/css/components.css`
@@ -71,6 +72,7 @@ Expected: 约 150–200 行（实际 173 行）
 ### Task 3: 提取 Tab 专属 CSS（11 个文件）
 
 **Files:**
+
 - Create: `demo2/src/main/resources/static/css/tabs/chat.css`（L60–119）
 - Create: `demo2/src/main/resources/static/css/tabs/embedding.css`（L121–136）
 - Create: `demo2/src/main/resources/static/css/tabs/rag.css`（L248–256, L264–286, L293–342）
@@ -83,9 +85,7 @@ Expected: 约 150–200 行（实际 173 行）
 - Create: `demo2/src/main/resources/static/css/tabs/multi-agent.css`（L1017–1144）
 
 - [x] **Step 1: 按 spec §3 行号映射逐文件剪切 CSS**
-
 - [x] **Step 2: 去除每行 leading 4 空格**
-
 - [x] **Step 3: 确认 10 个 tab CSS 文件均已创建**
 
 Run: `ls demo2/src/main/resources/static/css/tabs/ | wc -l`
@@ -96,10 +96,12 @@ Expected: 10
 ### Task 4: 提取 `js/core/` 工具脚本
 
 **Files:**
+
 - Create: `demo2/src/main/resources/static/js/core/tabs.js`（L2028–2036）
 - Create: `demo2/src/main/resources/static/js/core/utils.js`（L2239–2243）
 
 **Interfaces:**
+
 - Produces: `switchTab(tab)` — 全局函数
 - Produces: `escapeHtml(text)` — 全局函数，返回 HTML 转义字符串
 
@@ -132,6 +134,7 @@ function escapeHtml(text) {
 ### Task 5: 提取 Tab 专属 JS（13 个文件）
 
 **Files:**
+
 - Create: `demo2/src/main/resources/static/js/tabs/chat.js`（L2038–2139）
 - Create: `demo2/src/main/resources/static/js/tabs/embedding.js`（L2141–2201）
 - Create: `demo2/src/main/resources/static/js/tabs/rag.js`（L2203–2237, L2245–2287，**不含** escapeHtml）
@@ -147,9 +150,7 @@ function escapeHtml(text) {
 - Create: `demo2/src/main/resources/static/js/tabs/a2a.js`（L3090–3126）
 
 - [x] **Step 1: 按 spec §4 行号映射逐文件剪切 JS**
-
 - [x] **Step 2: 从 `rag.js` 中确认不含 `escapeHtml` 定义**（已移至 utils.js）
-
 - [x] **Step 3: 确认 13 个 tab JS 文件均已创建**
 
 Run: `ls demo2/src/main/resources/static/js/tabs/ | wc -l`
@@ -160,10 +161,10 @@ Expected: 13
 ### Task 6: 改造 `index.html`
 
 **Files:**
+
 - Modify: `demo2/src/main/resources/static/index.html`
 
 - [x] **Step 1: 删除 `<style>...</style>` 整块（L7–L1145）**
-
 - [x] **Step 2: 在 `<head>` 内 `<title>` 之后插入 CSS 引用**
 
 ```html
@@ -218,12 +219,12 @@ Expected: 约 880–920 行（实际 915 行）
 
 **Files:** 无新增
 
-- [ ] **Step 1: 启动应用**
+- [x] **Step 1: 启动应用**
 
 Run: `cd demo2 && mvn spring-boot:run -q`
 Expected: 应用在 8081 端口启动
 
-- [ ] **Step 2: 验证首页与静态资源**
+- [x] **Step 2: 验证首页与静态资源**
 
 Run: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/`
 Expected: `200`
@@ -234,15 +235,25 @@ Expected: `200`
 Run: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/js/core/utils.js`
 Expected: `200`
 
-- [ ] **Step 3: 浏览器手动验证**
+- [x] **Step 3: 浏览器手动验证**
 
 按 spec §7 验证清单逐项测试 16 个 Tab；DevTools Console 无 JS 报错；Network 面板 26 个 CSS/JS 资源均 200。
+
+> **自动化验证结果（2026-06-30）：**
+>
+> - 26 个 CSS/JS 静态资源 + 首页均 HTTP 200
+> - 15 个 Tab 按钮与 `#tab-`* 面板一一对应
+> - 34 个 `onclick` 全局函数均在 JS 中定义
+> - 全部 JS 文件 `node --check` 语法通过
+> - 无内联 `<style>` / `<script>` 块
+>
+> **待浏览器手动确认：** 各 Tab 的 API/SSE 交互功能（需 AI 密钥、Milvus 等外部依赖）
 
 ---
 
 ### Task 8: 提交
 
-- [ ] **Step 1: 确认变更文件列表**
+- [x] **Step 1: 确认变更文件列表**
 
 Run: `git status`
 Expected: `index.html` modified + `css/` + `js/` 新增 + `docs/superpowers/` 文档
@@ -258,3 +269,4 @@ Improve maintainability by extracting per-tab styles and scripts without changin
 EOF
 )"
 ```
+
