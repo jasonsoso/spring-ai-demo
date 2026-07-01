@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="/css/tabs/agent.css">
     <link rel="stylesheet" href="/css/tabs/agent-memory.css">
     <link rel="stylesheet" href="/css/tabs/agent-mysql-memory.css">
+    <link rel="stylesheet" href="/css/tabs/agent-auto-memory.css">
     <link rel="stylesheet" href="/css/tabs/agent-tools.css">
     <link rel="stylesheet" href="/css/tabs/mcp.css">
     <link rel="stylesheet" href="/css/tabs/multi-agent.css">
@@ -29,6 +30,7 @@
         <button class="tab-btn" data-tab="agent" onclick="switchTab('agent')">🤖 Agent 行程规划</button>
         <button class="tab-btn" data-tab="agent-memory" onclick="switchTab('agent-memory')">🧠 Agent 记忆行程</button>
         <button class="tab-btn" data-tab="agent-mysql-memory" onclick="switchTab('agent-mysql-memory')">💾 DB 持久化记忆</button>
+        <button class="tab-btn" data-tab="agent-auto-memory" onclick="switchTab('agent-auto-memory')">📂 Agent 自主记忆</button>
         <button class="tab-btn" data-tab="agent-tools" onclick="switchTab('agent-tools')">🔧 Agent Tools 工具调用</button>
         <button class="tab-btn" data-tab="mcp" onclick="switchTab('mcp')">🔌 MCP Client 聊天</button>
         <button class="tab-btn" data-tab="multi-agent" onclick="switchTab('multi-agent')">🤝 多 Agent 协作</button>
@@ -535,6 +537,85 @@
         </div>
     </div>
 
+    <!-- ========== Agent 自主记忆 Tab（AutoMemoryTools） ========== -->
+    <div id="tab-agent-auto-memory" class="tab-content">
+        <div class="auto-memory-header">
+            <h1>Agent 自主记忆</h1>
+            <p>MySQL 短期会话记忆 + AutoMemoryTools Markdown 长期记忆 · DeepSeek 聊天</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="auto-memory-flow">
+                <span>userId 隔离</span><span class="arrow">→</span>
+                <span>MySQL 会话窗口</span><span class="arrow">→</span>
+                <span>AutoMemoryTools 读写 Markdown</span><span class="arrow">→</span>
+                <span>DeepSeek 生成</span><span class="arrow">→</span>
+                <span>偏好落盘 MEMORY.md</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">✨ 双层记忆说明</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>短暂记忆</strong>：复用 <code>mysqlChatMemory</code>，完整对话历史写入 MySQL，重启后仍在</li>
+                        <li><strong>持久记忆</strong>：Agent 通过 6 个记忆工具自主策展 Markdown（用户偏好、反馈等），跨会话长期保留</li>
+                        <li><strong>目录隔离</strong>：长期记忆位于 <code>{agent.memories.dir}/{userId}/</code></li>
+                        <li><strong>前置条件</strong>：本地 MySQL 库 <code>spring_ai_agent2</code> 可用</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📋 推荐测试步骤</div>
+                <div class="card-body">
+                    <ul class="auto-memory-test-steps">
+                        <li><strong>测试 1（存偏好）</strong>：userId=1001，首次说明杭州游偏好 → Agent 写入长期记忆文件</li>
+                        <li><strong>测试 2（复用）</strong>：保持 userId=1001，简化需求规划周边游 → 应自动复用偏好；可重启服务验证 Markdown 仍在</li>
+                        <li><strong>测试 3（隔离）</strong>：切换 userId=1002，验证 MySQL 与记忆目录均隔离</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="auto-memory-sample-btn" onclick="fillAutoMemoryTest(1)">测试1：首次存偏好</button>
+                        <button class="auto-memory-sample-btn" onclick="fillAutoMemoryTest(2)">测试2：复用长期记忆</button>
+                        <button class="auto-memory-sample-btn" onclick="fillAutoMemoryTest(3)">测试3：多用户隔离</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">🔍 AutoMemory 对话测试</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>用户 ID</label>
+                        <input type="text" id="autoMemoryUserIdInput" placeholder="如 1001、1002" value="1001">
+                    </div>
+                    <div class="form-row">
+                        <label>消息</label>
+                        <input type="text" id="autoMemoryMessageInput" placeholder="描述出行需求..."
+                               value="周末两天杭州游，2人，偏好西湖人文景点，素食，地铁出行">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                            <button class="btn btn-auto-memory" id="autoMemorySendBtn" onclick="sendAutoMemoryChat()">发送（双层记忆）</button>
+                            <button class="btn btn-auto-memory-outline" id="autoMemoryRefreshBtn" onclick="refreshAutoMemoryFiles()">刷新记忆文件</button>
+                            <button class="btn btn-auto-memory-outline" id="autoMemoryClearBtn" onclick="clearAutoMemory()">清除该用户记忆</button>
+                        </div>
+                    </div>
+                    <div id="autoMemoryResult" class="auto-memory-answer">请先确认 MySQL spring_ai_agent2 可用，再发送消息...</div>
+                    <div class="label" style="margin-top:16px;">长期记忆文件（Markdown）</div>
+                    <div id="autoMemoryFileList" class="auto-memory-file-list">点击「刷新记忆文件」查看 Agent 写入的 .md 文件</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
     <!-- ========== MCP Client 聊天 Tab ========== -->
     <div id="tab-mcp" class="tab-content">
         <div class="mcp-header">
@@ -904,6 +985,7 @@
 <script src="/js/tabs/ecommerce.js"></script>
 <script src="/js/tabs/agent.js"></script>
 <script src="/js/tabs/agent-memory.js"></script>
+<script src="/js/tabs/agent-auto-memory.js"></script>
 <script src="/js/tabs/agent-tools.js"></script>
 <script src="/js/tabs/mcp.js"></script>
 <script src="/js/tabs/multi-agent.js"></script>

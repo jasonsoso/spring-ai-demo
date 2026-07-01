@@ -1,0 +1,134 @@
+    /* ========== Agent 自主记忆区域 ========== */
+    .auto-memory-header {
+        background: linear-gradient(135deg, #0f766e 0%, #0891b2 100%);
+        padding: 20px;
+        color: white;
+    }
+    .auto-memory-header h1 { font-size: 22px; font-weight: 600; }
+    .auto-memory-header p { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+
+    .auto-memory-flow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #666;
+        padding: 12px;
+        background: #ecfeff;
+        border-radius: 8px;
+    }
+
+    .auto-memory-flow span {
+        padding: 4px 10px;
+        background: white;
+        border: 1px solid #a5f3fc;
+        border-radius: 16px;
+        white-space: nowrap;
+    }
+
+    .auto-memory-flow .arrow { color: #0f766e; font-weight: bold; border: none; background: none; padding: 0; }
+
+    .auto-memory-sample-btn {
+        padding: 6px 14px;
+        border: 1px solid #a5f3fc;
+        border-radius: 16px;
+        background: #ecfeff;
+        color: #0f766e;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .auto-memory-sample-btn:hover {
+        background: linear-gradient(135deg, #0f766e 0%, #0891b2 100%);
+        color: white;
+        border-color: transparent;
+    }
+
+    .btn-auto-memory {
+        background: linear-gradient(135deg, #0f766e 0%, #0891b2 100%);
+        color: white;
+    }
+
+    .btn-auto-memory-outline {
+        background: white;
+        color: #0f766e;
+        border: 2px solid #0891b2;
+    }
+
+    .auto-memory-answer {
+        background: #ecfeff;
+        border: 1px solid #a5f3fc;
+        border-radius: 8px;
+        padding: 16px;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #333;
+        min-height: 80px;
+        white-space: pre-wrap;
+    }
+
+    .auto-memory-answer.loading { color: #999; font-style: italic; }
+    .auto-memory-answer.error { background: #fff5f5; border-color: #ffd0d0; color: #d00; }
+
+    .auto-memory-answer .label {
+        font-size: 12px;
+        color: #999;
+        margin-bottom: 6px;
+    }
+
+    .auto-memory-answer .demand-text {
+        color: #0f766e;
+        font-weight: 500;
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px dashed #a5f3fc;
+    }
+
+    .auto-memory-answer .auto-memory-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        background: linear-gradient(135deg, #0f766e 0%, #0891b2 100%);
+        color: white;
+        border-radius: 12px;
+        font-size: 12px;
+        margin-bottom: 12px;
+        margin-right: 8px;
+    }
+
+    .auto-memory-file-list {
+        background: #f0fdfa;
+        border: 1px solid #99f6e4;
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-size: 13px;
+        color: #334155;
+        min-height: 48px;
+    }
+
+    .auto-memory-file-list .file-item {
+        padding: 6px 0;
+        border-bottom: 1px dashed #ccfbf1;
+    }
+
+    .auto-memory-file-list .file-item:last-child {
+        border-bottom: none;
+    }
+
+    .auto-memory-test-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .auto-memory-test-steps li {
+        padding: 10px 14px;
+        background: #ecfeff;
+        border-left: 3px solid #0f766e;
+        border-radius: 0 8px 8px 0;
+        font-size: 14px;
+        color: #333;
+        list-style: none;
+    }
