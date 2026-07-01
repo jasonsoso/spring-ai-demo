@@ -54,6 +54,13 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-session-bom</artifactId>
+                <version>0.2.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -173,6 +180,11 @@
             <groupId>org.springaicommunity</groupId>
             <artifactId>spring-ai-a2a-server-autoconfigure</artifactId>
             <version>0.3.0</version>
+        </dependency>
+        <!-- Session API：事件溯源短期记忆 + JDBC 持久化 -->
+        <dependency>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-starter-session-jdbc</artifactId>
         </dependency>
 
         <dependency>

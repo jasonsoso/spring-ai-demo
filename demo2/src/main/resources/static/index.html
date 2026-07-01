@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="/css/tabs/agent-memory.css">
     <link rel="stylesheet" href="/css/tabs/agent-mysql-memory.css">
     <link rel="stylesheet" href="/css/tabs/agent-auto-memory.css">
+    <link rel="stylesheet" href="/css/tabs/agent-session-memory.css">
     <link rel="stylesheet" href="/css/tabs/agent-tools.css">
     <link rel="stylesheet" href="/css/tabs/mcp.css">
     <link rel="stylesheet" href="/css/tabs/multi-agent.css">
@@ -31,6 +32,7 @@
         <button class="tab-btn" data-tab="agent-memory" onclick="switchTab('agent-memory')">🧠 Agent 记忆行程</button>
         <button class="tab-btn" data-tab="agent-mysql-memory" onclick="switchTab('agent-mysql-memory')">💾 DB 持久化记忆</button>
         <button class="tab-btn" data-tab="agent-auto-memory" onclick="switchTab('agent-auto-memory')">📂 Agent 自主记忆</button>
+        <button class="tab-btn" data-tab="agent-session-memory" onclick="switchTab('agent-session-memory')">🗂️ Session 事件溯源记忆</button>
         <button class="tab-btn" data-tab="agent-tools" onclick="switchTab('agent-tools')">🔧 Agent Tools 工具调用</button>
         <button class="tab-btn" data-tab="mcp" onclick="switchTab('mcp')">🔌 MCP Client 聊天</button>
         <button class="tab-btn" data-tab="multi-agent" onclick="switchTab('multi-agent')">🤝 多 Agent 协作</button>
@@ -616,6 +618,79 @@
         </div>
     </div>
 
+    <!-- ========== Session 事件溯源记忆 Tab ========== -->
+    <div id="tab-agent-session-memory" class="tab-content">
+        <div class="session-memory-header">
+            <h1>Session 事件溯源记忆</h1>
+            <p>JDBC Event Store · RecursiveSummarization 压缩 · conversation_search Recall · SSE 对话</p>
+        </div>
+        <div class="rag-body">
+
+            <div class="session-memory-flow">
+                <span>userId = sessionId</span><span class="arrow">→</span>
+                <span>append-only 事件</span><span class="arrow">→</span>
+                <span>Turn 边界压缩</span><span class="arrow">→</span>
+                <span>Recall 检索</span><span class="arrow">→</span>
+                <span>deepseek-chat</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">✨ 与 ChatMemory 的区别</div>
+                <div class="card-body">
+                    <ul class="knowledge-list">
+                        <li><strong>事件溯源</strong>：每条消息为带 UUID 的 SessionEvent，append-only 写入 <code>AI_SESSION_EVENT</code></li>
+                        <li><strong>Turn 安全</strong>：压缩以轮次为界，ToolCall + ToolResult 不会被拦腰截断</li>
+                        <li><strong>滚动摘要</strong>：超过 15 轮触发 RecursiveSummarization，摘要标记 METADATA_SYNTHETIC</li>
+                        <li><strong>Recall</strong>：压缩后可用 <code>conversation_search</code> 按关键词找回早期对话</li>
+                        <li><strong>前置条件</strong>：MySQL <code>spring_ai_agent2</code>；与 AutoMemory / ChatMemory Tab <strong>独立</strong></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="session-memory-sample-btn" onclick="fillSessionMemorySample(1)">步骤1：存偏好+查天气</button>
+                        <button class="session-memory-sample-btn" onclick="fillSessionMemorySample(2)">步骤2：继续追问</button>
+                        <button class="session-memory-sample-btn" onclick="fillSessionMemorySample(3)">步骤3：Recall 早期信息</button>
+                        <button class="session-memory-sample-btn" onclick="fillSessionMemorySample(4)">步骤4：换用户 1002</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💬 对话（SSE 流式）</div>
+                <div class="card-body">
+                    <div class="session-memory-toolbar">
+                        <label>userId</label>
+                        <input type="text" id="sessionMemoryUserIdInput" value="1001" placeholder="1001">
+                        <button class="btn-session-memory-outline" type="button" onclick="refreshSessionMemoryEvents()">刷新事件</button>
+                        <button class="btn-session-memory-outline" type="button" onclick="clearSessionMemory()">清除会话</button>
+                    </div>
+                    <div class="session-memory-layout">
+                        <div class="session-memory-chat-panel">
+                            <div id="sessionMemoryMessages" class="session-memory-messages">
+                                <div id="sessionMemoryWelcome" class="message assistant">
+                                    <div class="message-content">填写 userId 后连续发送消息。右侧可观察 Event Store 统计（含 synthetic 摘要事件）。</div>
+                                </div>
+                            </div>
+                            <form id="sessionMemoryForm" class="session-memory-input-bar">
+                                <input type="text" id="sessionMemoryMessageInput" placeholder="输入消息，Enter 发送..." autocomplete="off">
+                                <button type="submit" class="btn-session-memory" id="sessionMemorySendBtn">发送</button>
+                            </form>
+                        </div>
+                        <div id="sessionMemoryEventPanel" class="session-memory-event-panel">
+                            <h3>Event Store 摘要</h3>
+                            <p style="color:#6b7280">点击「刷新事件」加载</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
     <!-- ========== MCP Client 聊天 Tab ========== -->
     <div id="tab-mcp" class="tab-content">
         <div class="mcp-header">
@@ -986,6 +1061,7 @@
 <script src="/js/tabs/agent.js"></script>
 <script src="/js/tabs/agent-memory.js"></script>
 <script src="/js/tabs/agent-auto-memory.js"></script>
+<script src="/js/tabs/agent-session-memory.js"></script>
 <script src="/js/tabs/agent-tools.js"></script>
 <script src="/js/tabs/mcp.js"></script>
 <script src="/js/tabs/multi-agent.js"></script>
