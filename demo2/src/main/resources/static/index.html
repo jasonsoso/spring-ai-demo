@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="/css/tabs/agent-auto-memory.css">
     <link rel="stylesheet" href="/css/tabs/agent-session-memory.css">
     <link rel="stylesheet" href="/css/tabs/agent-tools.css">
+    <link rel="stylesheet" href="/css/tabs/tool-reasoning.css">
     <link rel="stylesheet" href="/css/tabs/mcp.css">
     <link rel="stylesheet" href="/css/tabs/multi-agent.css">
 </head>
@@ -34,6 +35,7 @@
         <button class="tab-btn" data-tab="agent-auto-memory" onclick="switchTab('agent-auto-memory')">📂 Agent 自主记忆</button>
         <button class="tab-btn" data-tab="agent-session-memory" onclick="switchTab('agent-session-memory')">🗂️ Session 事件溯源记忆</button>
         <button class="tab-btn" data-tab="agent-tools" onclick="switchTab('agent-tools')">🔧 Agent Tools 工具调用</button>
+        <button class="tab-btn" data-tab="tool-reasoning" onclick="switchTab('tool-reasoning')">🧠 工具推理捕获</button>
         <button class="tab-btn" data-tab="mcp" onclick="switchTab('mcp')">🔌 MCP Client 聊天</button>
         <button class="tab-btn" data-tab="multi-agent" onclick="switchTab('multi-agent')">🤝 多 Agent 协作</button>
         <button class="tab-btn" data-tab="ask-user" onclick="switchTab('ask-user')">❓ AskUserQuestion 技术选型</button>
@@ -1050,6 +1052,55 @@
         </div>
     </div>
 
+    <!-- ========== Tool Reasoning 工具推理捕获 ========== -->
+    <div id="tab-tool-reasoning" class="tab-content">
+        <div class="tool-reasoning-header">
+            <h1>Tool Argument Augmentation · 工具推理捕获</h1>
+            <p>AugmentedToolCallbackProvider 捕获 innerThought + confidence · SSE 多轮对话 · 与 Agent Tools 对照</p>
+        </div>
+        <div class="rag-body">
+            <div class="tool-reasoning-flow">
+                <span>用户消息</span><span class="arrow">→</span>
+                <span>LLM 选择工具</span><span class="arrow">→</span>
+                <span>捕获推理</span><span class="arrow">→</span>
+                <span>执行工具</span><span class="arrow">→</span>
+                <span>流式回复</span>
+            </div>
+            <div class="card">
+                <div class="card-title">💡 快捷测试（与 Agent Tools 相同场景）</div>
+                <div class="card-body">
+                    <div class="sample-questions">
+                        <button class="tool-reasoning-sample-btn" onclick="fillToolReasoningSample(1)">测试1：单工具·天气</button>
+                        <button class="tool-reasoning-sample-btn" onclick="fillToolReasoningSample(2)">测试2：单工具·景点</button>
+                        <button class="tool-reasoning-sample-btn" onclick="fillToolReasoningSample(3)">测试3：多工具组合</button>
+                        <button class="tool-reasoning-sample-btn" onclick="fillToolReasoningSample(4)">测试4：天气影响决策</button>
+                    </div>
+                </div>
+            </div>
+            <div class="tool-reasoning-layout">
+                <div class="tool-reasoning-chat-panel">
+                    <div class="tool-reasoning-session-bar">
+                        <span>sessionId: <code id="toolReasoningSessionIdDisplay"></code></span>
+                        <button type="button" class="btn btn-secondary" onclick="clearToolReasoningSession()">清除会话</button>
+                    </div>
+                    <div id="toolReasoningMessages" class="tool-reasoning-messages">
+                        <div id="toolReasoningWelcome" class="message assistant">
+                            <div class="message-content">发送消息开始多轮对话。每次工具调用将实时展示 LLM 的 innerThought 与 confidence。</div>
+                        </div>
+                    </div>
+                    <form id="toolReasoningForm" class="tool-reasoning-input-bar">
+                        <input type="text" id="toolReasoningMessageInput" placeholder="输入消息，Enter 发送..." autocomplete="off">
+                        <button type="submit" class="btn btn-tool-reasoning" id="toolReasoningSendBtn">发送</button>
+                    </form>
+                </div>
+                <div class="tool-reasoning-sidebar">
+                    <h3>推理时间线</h3>
+                    <div id="toolReasoningSidebarList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script src="/js/core/utils.js"></script>
@@ -1063,6 +1114,7 @@
 <script src="/js/tabs/agent-auto-memory.js"></script>
 <script src="/js/tabs/agent-session-memory.js"></script>
 <script src="/js/tabs/agent-tools.js"></script>
+<script src="/js/tabs/tool-reasoning.js"></script>
 <script src="/js/tabs/mcp.js"></script>
 <script src="/js/tabs/multi-agent.js"></script>
 <script src="/js/tabs/ask-user.js"></script>
