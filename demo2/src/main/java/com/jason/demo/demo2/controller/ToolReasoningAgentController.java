@@ -19,8 +19,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 @Tag(name = "ToolReasoning", description = "Tool Argument Augmentation 工具推理捕获 Demo（SSE 对话式）")
 @RestController
@@ -32,16 +30,14 @@ public class ToolReasoningAgentController {
 
     private final ToolReasoningAgentService toolReasoningAgentService;
     private final JsonMapper jsonMapper;
-    private final ExecutorService virtualThreads = Executors.newVirtualThreadPerTaskExecutor();
 
     @Operation(summary = "SSE 流式对话", description = "多轮 ChatMemory；实时推送 TOOL_REASONING + TOKEN")
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chatStream(@RequestBody ToolReasoningChatRequest request) {
         validateRequest(request);
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
-        virtualThreads.execute(() ->
-                toolReasoningAgentService.streamChat(
-                        request.getSessionId(), request.getMessage(), emitter, jsonMapper));
+        toolReasoningAgentService.streamChat(
+                request.getSessionId(), request.getMessage(), emitter, jsonMapper);
         return emitter;
     }
 
