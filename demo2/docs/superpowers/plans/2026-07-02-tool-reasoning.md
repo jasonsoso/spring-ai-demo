@@ -1,6 +1,8 @@
 # Tool Reasoning Capture Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status:** ✅ 已完成（2026-07-02）— `mvn compile` / `mvn test` 通过；SSE 对话式 Tab 已集成。
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 在 demo2 新增「🧠 工具推理捕获」Tab：通过 `AugmentedToolCallbackProvider` 捕获 LLM 工具选择时的 `innerThought` + `confidence`，以 SSE 对话式 UI 实时展示，支持多轮 `ChatMemory`，与现有 `agent-tools` Tab 形成对比。
 
@@ -55,7 +57,7 @@
 **Interfaces:**
 - Produces: `AgentThinking` Record；`ToolReasoningChatRequest`（`sessionId`, `message`）；`ToolReasoningSseEvent` 静态工厂
 
-- [ ] **Step 1: 创建 `AgentThinking.java`**
+- [x] **Step 1: 创建 `AgentThinking.java`**
 
 ```java
 package com.jason.demo.demo2.model;
@@ -71,7 +73,7 @@ public record AgentThinking(
 }
 ```
 
-- [ ] **Step 2: 创建 `ToolReasoningChatRequest.java`**
+- [x] **Step 2: 创建 `ToolReasoningChatRequest.java`**
 
 ```java
 package com.jason.demo.demo2.model;
@@ -91,7 +93,7 @@ public class ToolReasoningChatRequest {
 }
 ```
 
-- [ ] **Step 3: 创建 `ToolReasoningSseEvent.java`**
+- [x] **Step 3: 创建 `ToolReasoningSseEvent.java`**
 
 ```java
 package com.jason.demo.demo2.model;
@@ -139,12 +141,12 @@ public class ToolReasoningSseEvent {
 }
 ```
 
-- [ ] **Step 4: 编译验证**
+- [x] **Step 4: 编译验证**
 
 Run: `cd demo2 && mvn -q compile`
 Expected: BUILD SUCCESS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/model/AgentThinking.java \
@@ -166,7 +168,7 @@ git commit -m "feat(demo2): add tool reasoning model and SSE event DTOs"
 - Consumes: `ToolReasoningSseEvent`, `AgentThinking`
 - Produces: `ToolReasoningStreamContext.set/clear/get`；`ToolReasoningSseBridge.onToolReasoning(String toolName, AgentThinking thinking)`
 
-- [ ] **Step 1: 写失败测试 `ToolReasoningSseBridgeTest`**
+- [x] **Step 1: 写失败测试 `ToolReasoningSseBridgeTest`**
 
 ```java
 package com.jason.demo.demo2.sse;
@@ -227,12 +229,12 @@ class ToolReasoningSseBridgeTest {
 
 > 注：`ToolReasoningStreamContext` 需支持测试注入 `Consumer<String>` 发送回调；生产代码用真实 `SseEmitter.send`。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd demo2 && mvn -q test -Dtest=ToolReasoningSseBridgeTest`
 Expected: FAIL（类不存在）
 
-- [ ] **Step 3: 实现 `ToolReasoningStreamContext.java`**
+- [x] **Step 3: 实现 `ToolReasoningStreamContext.java`**
 
 ```java
 package com.jason.demo.demo2.sse;
@@ -285,7 +287,7 @@ public final class ToolReasoningStreamContext {
 }
 ```
 
-- [ ] **Step 4: 实现 `ToolReasoningSseBridge.java`**
+- [x] **Step 4: 实现 `ToolReasoningSseBridge.java`**
 
 ```java
 package com.jason.demo.demo2.sse;
@@ -316,12 +318,12 @@ public final class ToolReasoningSseBridge {
 }
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `cd demo2 && mvn -q test -Dtest=ToolReasoningSseBridgeTest`
 Expected: BUILD SUCCESS, 2 tests passed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/sse/ToolReasoningStreamContext.java \
@@ -342,14 +344,14 @@ git commit -m "feat(demo2): add tool reasoning SSE bridge and stream context"
 - Consumes: `WeatherTool`, `AttractionTool`
 - Produces: `@Bean AugmentedToolCallbackProvider<AgentThinking> toolReasoningProvider`；`getToolReasoningChatModel()` 返回 `String`
 
-- [ ] **Step 1: 在 `application.properties` 追加**
+- [x] **Step 1: 在 `application.properties` 追加**
 
 ```properties
 # Tool Reasoning：多轮 ToolCall 使用 deepseek-chat，避免 reasoning_content 回放问题
 agent.tool-reasoning.chat.model=deepseek-chat
 ```
 
-- [ ] **Step 2: 创建 `ToolReasoningAgentConfig.java`**
+- [x] **Step 2: 创建 `ToolReasoningAgentConfig.java`**
 
 ```java
 package com.jason.demo.demo2.config;
@@ -395,12 +397,12 @@ public class ToolReasoningAgentConfig {
 > ```
 > 并 `import org.springframework.ai.tool.method.MethodToolCallbackProvider;`
 
-- [ ] **Step 3: 编译验证**
+- [x] **Step 3: 编译验证**
 
 Run: `cd demo2 && mvn -q compile`
 Expected: BUILD SUCCESS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/config/ToolReasoningAgentConfig.java \
@@ -420,7 +422,7 @@ git commit -m "feat(demo2): configure AugmentedToolCallbackProvider for tool rea
 - Consumes: `ChatClient.Builder`, `ChatMemory`, `MessageChatMemoryAdvisor`, `AugmentedToolCallbackProvider<AgentThinking>`, `ToolReasoningAgentConfig`
 - Produces: `void validateSessionId(String)`；`void clearSession(String)`；`void streamChat(String sessionId, String message, SseEmitter emitter, JsonMapper jsonMapper)`
 
-- [ ] **Step 1: 写失败测试 `ToolReasoningAgentServiceTest`**
+- [x] **Step 1: 写失败测试 `ToolReasoningAgentServiceTest`**
 
 ```java
 package com.jason.demo.demo2.service;
@@ -466,12 +468,12 @@ class ToolReasoningAgentServiceTest {
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd demo2 && mvn -q test -Dtest=ToolReasoningAgentServiceTest`
 Expected: FAIL
 
-- [ ] **Step 3: 实现 `ToolReasoningAgentService.java`**
+- [x] **Step 3: 实现 `ToolReasoningAgentService.java`**
 
 ```java
 package com.jason.demo.demo2.service;
@@ -604,7 +606,7 @@ public class ToolReasoningAgentService {
 > ```
 > 在 `ToolReasoningAgentConfig` 中注册并注入，避免误用 MySQL 记忆。
 
-- [ ] **Step 4: 确认 `MessageChatMemoryAdvisor` 注入**
+- [x] **Step 4: 确认 `MessageChatMemoryAdvisor` 注入**
 
 检查 `MemoryConfig`：仅有 `chatMemory()` Bean，无独立 `MessageChatMemoryAdvisor`。在 `ToolReasoningAgentConfig` 追加：
 
@@ -617,12 +619,12 @@ public MessageChatMemoryAdvisor toolReasoningMessageChatMemoryAdvisor(ChatMemory
 
 Service 构造函数改为注入 `@Qualifier("toolReasoningMessageChatMemoryAdvisor") MessageChatMemoryAdvisor`。
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `cd demo2 && mvn -q test -Dtest=ToolReasoningAgentServiceTest`
 Expected: BUILD SUCCESS, 3 tests passed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/service/ToolReasoningAgentService.java \
@@ -641,7 +643,7 @@ git commit -m "feat(demo2): add ToolReasoningAgentService with SSE stream chat"
 - Consumes: `ToolReasoningAgentService.streamChat/clearSession/validateSessionId`
 - Produces: `POST /agent/tool-reasoning/chat/stream`；`DELETE /agent/tool-reasoning/clear`
 
-- [ ] **Step 1: 创建 `ToolReasoningAgentController.java`**
+- [x] **Step 1: 创建 `ToolReasoningAgentController.java`**
 
 ```java
 package com.jason.demo.demo2.controller;
@@ -716,12 +718,12 @@ public class ToolReasoningAgentController {
 }
 ```
 
-- [ ] **Step 2: 编译验证**
+- [x] **Step 2: 编译验证**
 
 Run: `cd demo2 && mvn -q compile`
 Expected: BUILD SUCCESS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/controller/ToolReasoningAgentController.java
@@ -738,7 +740,7 @@ git commit -m "feat(demo2): add ToolReasoningAgentController REST and SSE endpoi
 **Interfaces:**
 - Produces: 样式类 `.tool-reasoning-header`、`.tool-reasoning-layout`、`.reasoning-card`、`.confidence-high/medium/low`
 
-- [ ] **Step 1: 创建 `tool-reasoning.css`**
+- [x] **Step 1: 创建 `tool-reasoning.css`**
 
 参考 `agent-session-memory.css` 紫色系改为靛蓝推理主题（`#312e81` → `#6366f1`），包含：
 
@@ -767,7 +769,7 @@ git commit -m "feat(demo2): add ToolReasoningAgentController REST and SSE endpoi
 .btn-tool-reasoning { background: linear-gradient(135deg, #312e81 0%, #6366f1 100%); color: white; }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add demo2/src/main/resources/static/css/tabs/tool-reasoning.css
@@ -785,7 +787,7 @@ git commit -m "feat(demo2): add tool-reasoning tab styles"
 - Consumes: `POST /agent/tool-reasoning/chat/stream`，`DELETE /agent/tool-reasoning/clear?sessionId=`
 - Produces: 全局函数 `sendToolReasoningMessage()`、`clearToolReasoningSession()`、`fillToolReasoningMessage(text)`
 
-- [ ] **Step 1: 创建 `tool-reasoning.js`**
+- [x] **Step 1: 创建 `tool-reasoning.js`**
 
 核心逻辑（完整文件）：
 
@@ -951,7 +953,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add demo2/src/main/resources/static/js/tabs/tool-reasoning.js
@@ -968,7 +970,7 @@ git commit -m "feat(demo2): add tool-reasoning SSE chat frontend"
 **Interfaces:**
 - Produces: Tab 按钮 `data-tab="tool-reasoning"`；`#tab-tool-reasoning` 面板；css/js 引用
 
-- [ ] **Step 1: 在 `<head>` 引入 CSS**
+- [x] **Step 1: 在 `<head>` 引入 CSS**
 
 在 `agent-tools.css` 之后添加：
 
@@ -976,13 +978,13 @@ git commit -m "feat(demo2): add tool-reasoning SSE chat frontend"
 <link rel="stylesheet" href="/css/tabs/tool-reasoning.css">
 ```
 
-- [ ] **Step 2: 在 Tab 按钮区 `agent-tools` 之后添加按钮**
+- [x] **Step 2: 在 Tab 按钮区 `agent-tools` 之后添加按钮**
 
 ```html
 <button class="tab-btn" data-tab="tool-reasoning" onclick="switchTab('tool-reasoning')">🧠 工具推理捕获</button>
 ```
 
-- [ ] **Step 3: 在 `#tab-agent-tools` 之后添加 Tab 内容区**
+- [x] **Step 3: 在 `#tab-agent-tools` 之后添加 Tab 内容区**
 
 ```html
 <div id="tab-tool-reasoning" class="tab-content">
@@ -1034,13 +1036,13 @@ git commit -m "feat(demo2): add tool-reasoning SSE chat frontend"
 </div>
 ```
 
-- [ ] **Step 4: 在底部 script 区 `agent-tools.js` 之后引入**
+- [x] **Step 4: 在底部 script 区 `agent-tools.js` 之后引入**
 
 ```html
 <script src="/js/tabs/tool-reasoning.js"></script>
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/resources/static/index.html
@@ -1054,17 +1056,17 @@ git commit -m "feat(demo2): wire tool-reasoning tab in index.html"
 **Files:**
 - (none — verification only)
 
-- [ ] **Step 1: 编译**
+- [x] **Step 1: 编译**
 
 Run: `cd demo2 && mvn -q compile`
 Expected: BUILD SUCCESS
 
-- [ ] **Step 2: 单元测试**
+- [x] **Step 2: 单元测试**
 
 Run: `cd demo2 && mvn -q test`
 Expected: 全部 tests passed（含新增 5 个）
 
-- [ ] **Step 3: 启动应用手动验证**
+- [x] **Step 3: 启动应用手动验证**
 
 Run: `cd demo2 && mvn spring-boot:run`
 打开 `http://localhost:8081` → Tab「🧠 工具推理捕获」
@@ -1076,11 +1078,11 @@ Run: `cd demo2 && mvn spring-boot:run`
 | 3 | 点击「清除会话」 | 气泡清空，新 sessionId |
 | 4 | 对比 agent-tools 同输入 | agent-tools 无推理展示 |
 
-- [ ] **Step 4: Swagger 检查**
+- [x] **Step 4: Swagger 检查**
 
 打开 `http://localhost:8081/scalar` → 确认 `ToolReasoning` 标签下 2 个端点
 
-- [ ] **Step 5: 最终 Commit（若有修复）**
+- [x] **Step 5: 最终 Commit（若有修复）**
 
 ```bash
 git add -A
