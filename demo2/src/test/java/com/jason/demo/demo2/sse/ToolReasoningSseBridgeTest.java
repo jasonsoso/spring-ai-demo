@@ -21,13 +21,13 @@ class ToolReasoningSseBridgeTest {
 
     @AfterEach
     void tearDown() {
-        ToolReasoningStreamContext.clear();
+        ToolReasoningStreamContext.clearAll();
     }
 
     @Test
     void onToolReasoning_incrementsCallIndexAndSendsEvent() throws Exception {
         SseEmitter emitter = new SseEmitter();
-        ToolReasoningStreamContext.set(emitter, jsonMapper, new AtomicInteger(0), sentPayloads::add);
+        ToolReasoningStreamContext.bind("test-session", emitter, jsonMapper, new AtomicInteger(0), sentPayloads::add);
 
         ToolReasoningSseBridge.onToolReasoning("getWeather",
                 new AgentThinking("需要北京实时天气", "high"));
@@ -45,7 +45,7 @@ class ToolReasoningSseBridgeTest {
 
     @Test
     void onToolReasoning_withoutContext_isNoOp() {
-        assertTrue(ToolReasoningStreamContext.get().isEmpty());
+        assertTrue(ToolReasoningStreamContext.currentHolder().isEmpty());
         ToolReasoningSseBridge.onToolReasoning("getWeather",
                 new AgentThinking("x", "low"));
         assertEquals(0, sentPayloads.size());

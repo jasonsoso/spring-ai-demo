@@ -9,7 +9,7 @@ public final class ToolReasoningSseBridge {
     }
 
     public static void onToolReasoning(String toolName, AgentThinking thinking) {
-        ToolReasoningStreamContext.get().ifPresent(ctx -> {
+        ToolReasoningStreamContext.currentHolder().ifPresent(ctx -> {
             int callIndex = ctx.callIndex().incrementAndGet();
             String innerThought = thinking != null && thinking.innerThought() != null
                     ? thinking.innerThought() : "（模型未提供推理）";

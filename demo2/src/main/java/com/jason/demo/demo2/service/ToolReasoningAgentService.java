@@ -89,7 +89,7 @@ public class ToolReasoningAgentService {
 
     public void streamChat(String sessionId, String message, SseEmitter emitter, JsonMapper jsonMapper) {
         validateSessionId(sessionId);
-        ToolReasoningStreamContext.set(emitter, jsonMapper, new AtomicInteger(0));
+        ToolReasoningStreamContext.bind(sessionId, emitter, jsonMapper, new AtomicInteger(0));
         try {
             sendSse(emitter, jsonMapper, ToolReasoningSseEvent.running());
             chatClient.prompt()
@@ -103,18 +103,18 @@ public class ToolReasoningAgentService {
                                 log.error("Tool reasoning stream failed, sessionId={}", sessionId, err);
                                 sendSse(emitter, jsonMapper,
                                         ToolReasoningSseEvent.failed(err.getMessage()));
-                                ToolReasoningStreamContext.clear();
+                                ToolReasoningStreamContext.clear(sessionId);
                                 emitter.completeWithError(err);
                             },
                             () -> {
                                 sendSse(emitter, jsonMapper, ToolReasoningSseEvent.completed());
-                                ToolReasoningStreamContext.clear();
+                                ToolReasoningStreamContext.clear(sessionId);
                                 emitter.complete();
                             });
         } catch (Exception e) {
             log.error("Tool reasoning chat failed, sessionId={}", sessionId, e);
             sendSse(emitter, jsonMapper, ToolReasoningSseEvent.failed(e.getMessage()));
-            ToolReasoningStreamContext.clear();
+            ToolReasoningStreamContext.clear(sessionId);
             emitter.completeWithError(e);
         }
     }
