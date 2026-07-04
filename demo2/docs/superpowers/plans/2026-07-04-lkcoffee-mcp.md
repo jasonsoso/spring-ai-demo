@@ -1,10 +1,21 @@
 # 瑞幸 MCP 点单 · SSE 对话 Implementation Plan
 
+> **Status:** ✅ 代码已完成（2026-07-04）— Task 1–7 全部落地，`mvn compile` / `mvn test`（23 tests）通过；**工作区尚未 git commit**；Task 8 启动日志与端到端联调待手工验证（需 `LKCOFFEE_TOKEN` / `AMAP_API_KEY` / `DEEPSEEK_API_KEY`）。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在 demo2 新增「☕ 瑞幸 MCP 点单」Tab：双远程 MCP（瑞幸 + 高德 geocode）+ 官方 My Coffee Skill 编排 + SSE 多轮对话，演示完整点单链路。
 
-**Architecture:** `LkCoffeeSkillLoader` 启动时读入官方 `SKILL.md` 并追加项目覆盖规则作为 System Prompt；`LkCoffeeMcpConfig` 通过 `McpSyncHttpClientRequestCustomizer` 注入 Bearer Token（ThreadLocal）；`LkCoffeeAgentService` 挂载**白名单过滤后**的 MCP `ToolCallback`，对齐 `ToolReasoningAgentService` 的 SSE 流式模式；前端对齐 `tool-reasoning.js`（`fetch` + `ReadableStream`）。
+**Architecture:** `LkCoffeeSkillLoader` 启动时读入官方 `SKILL.md` 并追加项目覆盖规则作为 System Prompt；`LkCoffeeMcpConfig` 通过 `McpClientCustomizer<HttpClientStreamableHttpTransport.Builder>` 注入 Bearer Token（ThreadLocal）；`LkCoffeeAgentService` 挂载**白名单过滤后**的 MCP `ToolCallback`，对齐 `ToolReasoningAgentService` 的 SSE 流式模式；前端对齐 `tool-reasoning.js`（`fetch` + `ReadableStream`）。
+
+**实施说明（与初稿差异）：**
+- Subagent `task-brief` 脚本在 Windows/WSL 下失败，改由主 Agent inline 完成全部 Task。
+- Bearer 注入改用 `McpClientCustomizer`（Spring AI 2.0 不再应用 `McpSyncHttpClientRequestCustomizer` Bean）。
+- `LkCoffeeAgentService` 双构造器需 `@Autowired` 标注正式构造器。
+- Token ThreadLocal 在 SSE `onError`/`onComplete` 中清除，不可在 `subscribe()` 后立即 `finally clear`。
+- 测试环境增加 `agent.lkcoffee.enabled=false`，避免启动时连接远程 MCP 超时。
+- `LkCoffeeMcpToolCallbacksProvider` 延迟加载 MCP 工具（须在 `McpClientInitializer` 之后），修复应用无法启动问题。
+- `geocodeAddress` 当前返回 `{ raw: content }`，结构化 `{ longitude, latitude }` 解析为可选后续改进。
 
 **Tech Stack:** Java 21, Spring Boot 4.1, Spring AI 2.0.0 MCP Client, DeepSeek `deepseek-v4-pro`, 原生 HTML/CSS/JS
 
@@ -47,7 +58,8 @@
 | `static/js/tabs/lkcoffee.js` | SSE 对话 + 定位/Token |
 | `static/index.html` | Tab 入口 |
 | `application.properties` | MCP 连接 + 模型 + Skill 路径 |
-| `application-test.properties` | 测试跳过远程 MCP 初始化 |
+| `application-test.properties` | 测试跳过远程 MCP 初始化（`agent.lkcoffee.enabled=false`） |
+| `sse/LkCoffeeStreamContext.java` | SSE 桥接（TOOL_CALL / ORDER_PREVIEW / PAYMENT_QR） |
 
 ---
 
@@ -62,7 +74,7 @@
 **Interfaces:**
 - Produces: `LkCoffeeChatRequest`（`sessionId`, `message`, `token`, `longitude`, `latitude`, `address`）；`LkCoffeeSseEvent` 静态工厂
 
-- [ ] **Step 1: 下载并复制官方 Skill**
+- [x] **Step 1: 下载并复制官方 Skill**
 
 Run（PowerShell）:
 
@@ -76,7 +88,7 @@ Copy-Item target/my-coffee-skill/my-coffee/manifest.json src/main/resources/.cla
 
 Expected: `SKILL.md` 约 19KB，`manifest.json` 中 `version` 为 `0.8.2`
 
-- [ ] **Step 2: 创建 `LkCoffeeChatRequest.java`**
+- [x] **Step 2: 创建 `LkCoffeeChatRequest.java`**
 
 ```java
 package com.jason.demo.demo2.model;
@@ -108,7 +120,7 @@ public class LkCoffeeChatRequest {
 }
 ```
 
-- [ ] **Step 3: 创建 `LkCoffeeSseEvent.java`**
+- [x] **Step 3: 创建 `LkCoffeeSseEvent.java`**
 
 ```java
 package com.jason.demo.demo2.model;
@@ -162,7 +174,7 @@ public class LkCoffeeSseEvent {
 }
 ```
 
-- [ ] **Step 4: 编译验证**
+- [x] **Step 4: 编译验证**
 
 Run: `cd demo2 && mvn -q compile`
 Expected: BUILD SUCCESS
@@ -189,7 +201,7 @@ git commit -m "feat(demo2): add lkcoffee skill vendoring and request/SSE models"
 - Consumes: `agent.lkcoffee.skill` Resource 路径
 - Produces: `LkCoffeeSkillLoader.buildSystemPrompt()` → `String`；`LkCoffeeTokenContext.set/get/clear`
 
-- [ ] **Step 1: 写失败测试 `LkCoffeeSkillLoaderTest.java`**
+- [x] **Step 1: 写失败测试 `LkCoffeeSkillLoaderTest.java`**
 
 ```java
 package com.jason.demo.demo2.service;
@@ -204,6 +216,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 @TestPropertySource(properties = {
         "agent.lkcoffee.skill=classpath:/.claude/skills/my-coffee/SKILL.md",
+        "agent.lkcoffee.enabled=false",
         "app.mcp.client.init-on-startup=false"
 })
 class LkCoffeeSkillLoaderTest {
@@ -222,12 +235,12 @@ class LkCoffeeSkillLoaderTest {
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd demo2 && mvn -q test -Dtest=LkCoffeeSkillLoaderTest`
 Expected: FAIL（类不存在）
 
-- [ ] **Step 3: 创建 `LkCoffeeTokenContext.java`**
+- [x] **Step 3: 创建 `LkCoffeeTokenContext.java`**
 
 ```java
 package com.jason.demo.demo2.mcp.client;
@@ -252,7 +265,7 @@ public final class LkCoffeeTokenContext {
 }
 ```
 
-- [ ] **Step 4: 创建 `LkCoffeeSkillLoader.java`**
+- [x] **Step 4: 创建 `LkCoffeeSkillLoader.java`**
 
 ```java
 package com.jason.demo.demo2.service;
@@ -309,7 +322,7 @@ public class LkCoffeeSkillLoader {
 }
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `cd demo2 && mvn -q test -Dtest=LkCoffeeSkillLoaderTest`
 Expected: BUILD SUCCESS
@@ -335,7 +348,7 @@ git commit -m "feat(demo2): add lkcoffee skill loader and token context"
 **Interfaces:**
 - Produces: `agent.lkcoffee.chat.model`、`lkcoffee.token` 配置项可读
 
-- [ ] **Step 1: 追加 `application.properties`**
+- [x] **Step 1: 追加 `application.properties`**
 
 在 MCP Client 配置块后追加：
 
@@ -351,16 +364,18 @@ agent.lkcoffee.chat.model=deepseek-v4-pro
 agent.lkcoffee.skill=classpath:/.claude/skills/my-coffee/SKILL.md
 ```
 
-- [ ] **Step 2: 追加 `application-test.properties`**
+- [x] **Step 2: 追加 `application-test.properties`**
 
 ```properties
 # 瑞幸 Tab 测试：跳过远程 MCP 手动初始化（与现有 local-server 一致）
 app.mcp.client.init-on-startup=false
+agent.lkcoffee.enabled=false
 lkcoffee.token=
 spring.ai.mcp.client.streamable-http.connections.amap.url=https://mcp.amap.com/mcp?key=
+agent.lkcoffee.skill=classpath:/.claude/skills/my-coffee/SKILL.md
 ```
 
-- [ ] **Step 3: 创建 `LkCoffeeAgentConfig.java`（ChatMemory 部分）**
+- [x] **Step 3: 创建 `LkCoffeeAgentConfig.java`（ChatMemory 部分）**
 
 ```java
 package com.jason.demo.demo2.config;
@@ -406,7 +421,7 @@ public class LkCoffeeAgentConfig {
 }
 ```
 
-- [ ] **Step 4: 编译验证**
+- [x] **Step 4: 编译验证**
 
 Run: `cd demo2 && mvn -q compile`
 Expected: BUILD SUCCESS
@@ -432,7 +447,7 @@ git commit -m "feat(demo2): add lkcoffee MCP connections and agent config beans"
 - Consumes: `SyncMcpToolCallbackProvider`、`LkCoffeeTokenContext`
 - Produces: `@Bean("lkCoffeeMcpToolCallbacks") ToolCallback[]` — 仅瑞幸 8 工具 + 高德 geocode 2 工具
 
-- [ ] **Step 1: 创建 `LkCoffeeMcpConfig.java`**
+- [x] **Step 1: 创建 `LkCoffeeMcpConfig.java`**
 
 ```java
 package com.jason.demo.demo2.mcp.client.config;
@@ -491,7 +506,7 @@ public class LkCoffeeMcpConfig {
 
 > **注意：** 若 `McpSyncHttpClientRequestCustomizer` 包名或方法签名与 Spring AI 2.0.0 不一致，以 IDE 自动导入为准；核心是仅对 `connectionName == "lkcoffee"` 注入 Bearer Header。
 
-- [ ] **Step 2: 创建 `LkCoffeeToolCallbackWrapper.java`**
+- [x] **Step 2: 创建 `LkCoffeeToolCallbackWrapper.java`**
 
 ```java
 package com.jason.demo.demo2.mcp.client;
@@ -543,7 +558,7 @@ public class LkCoffeeToolCallbackWrapper implements ToolCallback {
 }
 ```
 
-- [ ] **Step 3: 创建 `LkCoffeeStreamContext.java`（SSE 桥接，参照 ToolReasoningStreamContext）**
+- [x] **Step 3: 创建 `LkCoffeeStreamContext.java`（SSE 桥接，参照 ToolReasoningStreamContext）**
 
 路径: `demo2/src/main/java/com/jason/demo/demo2/sse/LkCoffeeStreamContext.java`
 
@@ -594,7 +609,7 @@ public final class LkCoffeeStreamContext {
 }
 ```
 
-- [ ] **Step 4: 编译验证**
+- [x] **Step 4: 编译验证**
 
 Run: `cd demo2 && mvn -q compile`
 Expected: BUILD SUCCESS（若 Customizer API 不匹配，按 Spring AI 2.0 文档调整）
@@ -620,7 +635,7 @@ git commit -m "feat(demo2): add lkcoffee MCP token customizer and filtered tool 
 - Consumes: `LkCoffeeSkillLoader.buildSystemPrompt()`、`@Qualifier("lkCoffeeMcpToolCallbacks") ToolCallback[]`、`@Qualifier("lkCoffeeMessageChatMemoryAdvisor")`、`LkCoffeeAgentConfig.getDefaultToken()`
 - Produces: `streamChat(LkCoffeeChatRequest, SseEmitter, JsonMapper)`、`clearSession(String)`、`validateSessionId(String)`、`resolveToken(String requestToken)`
 
-- [ ] **Step 1: 写失败测试 `LkCoffeeAgentServiceTest.java`**
+- [x] **Step 1: 写失败测试 `LkCoffeeAgentServiceTest.java`**
 
 ```java
 package com.jason.demo.demo2.service;
@@ -658,12 +673,12 @@ class LkCoffeeAgentServiceTest {
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd demo2 && mvn -q test -Dtest=LkCoffeeAgentServiceTest`
 Expected: FAIL
 
-- [ ] **Step 3: 实现 `LkCoffeeAgentService.java`**
+- [x] **Step 3: 实现 `LkCoffeeAgentService.java`**
 
 核心结构（完整文件实现时参照 `ToolReasoningAgentService`）：
 
@@ -755,7 +770,7 @@ public class LkCoffeeAgentService {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd demo2 && mvn -q test -Dtest=LkCoffeeAgentServiceTest`
 Expected: BUILD SUCCESS
@@ -779,7 +794,7 @@ git commit -m "feat(demo2): add lkcoffee agent SSE streaming service"
 - Consumes: `LkCoffeeAgentService`
 - Produces: `POST /agent/lkcoffee/chat/stream`、`DELETE /clear`、`GET /tools`、`GET /geocode`
 
-- [ ] **Step 1: 创建 `LkCoffeeAgentController.java`**
+- [x] **Step 1: 创建 `LkCoffeeAgentController.java`**
 
 参照 `ToolReasoningAgentController`，追加：
 
@@ -821,7 +836,7 @@ public class LkCoffeeAgentController {
 
 `geocodeAddress` 实现：在 Service 中临时构建仅含高德 geocode 工具的 ChatClient 调用，或直接通过 `McpSyncClient` 调工具（实现时选更简单路径；返回 `{ "longitude": ..., "latitude": ..., "formattedAddress": "..." }`）。
 
-- [ ] **Step 2: 编译验证**
+- [x] **Step 2: 编译验证**
 
 Run: `cd demo2 && mvn -q compile`
 Expected: BUILD SUCCESS
@@ -845,11 +860,11 @@ git commit -m "feat(demo2): add lkcoffee REST and SSE controller"
 **Interfaces:**
 - Consumes: `POST /agent/lkcoffee/chat/stream`、`GET /agent/lkcoffee/geocode`、`DELETE /agent/lkcoffee/clear`
 
-- [ ] **Step 1: 创建 `lkcoffee.css`**
+- [x] **Step 1: 创建 `lkcoffee.css`**
 
 主色 `#0022AB`；聊天气泡复用 `.message.user` / `.message.assistant`；设置区 `.lkcoffee-settings`；价格卡片 `.order-preview-card`；二维码 `.payment-qr img { max-width: 200px; }`
 
-- [ ] **Step 2: 创建 `lkcoffee.js`**
+- [x] **Step 2: 创建 `lkcoffee.js`**
 
 参照 `tool-reasoning.js` 结构，关键变量：
 
@@ -887,7 +902,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 `ORDER_PREVIEW`：解析 `payload` JSON 渲染价格卡片；`PAYMENT_QR`：插入 `<img src="qrUrl">`
 
-- [ ] **Step 3: 修改 `index.html`**
+- [x] **Step 3: 修改 `index.html`**
 
 在 `<link>` 区追加 `lkcoffee.css`；在 MCP Tab 按钮后追加：
 
@@ -918,12 +933,12 @@ git commit -m "feat(demo2): add lkcoffee MCP ordering frontend tab"
 **Files:**
 - Modify（若 Task 4 启动日志发现高德 tool name 不匹配）: `LkCoffeeMcpConfig.AMAP_GEO_TOOL_SUFFIXES`
 
-- [ ] **Step 1: 全量编译**
+- [x] **Step 1: 全量编译**
 
 Run: `cd demo2 && mvn -q compile`
 Expected: BUILD SUCCESS
 
-- [ ] **Step 2: 全量单元测试**
+- [x] **Step 2: 全量单元测试**
 
 Run: `cd demo2 && mvn -q test`
 Expected: BUILD SUCCESS
@@ -981,3 +996,4 @@ git commit -m "fix(demo2): align amap geocode tool names from MCP listTools"
 | 日期 | 变更 |
 |------|------|
 | 2026-07-04 | 初稿：8 Task 实现计划 |
+| 2026-07-04 | **实施完成**：Task 1–7 代码落地；联调修复 lazy MCP 工具加载；`mvn compile` / `mvn test` 通过；应用可启动，远程 MCP 需 Token/Key |

@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="/css/tabs/agent-tools.css">
     <link rel="stylesheet" href="/css/tabs/tool-reasoning.css">
     <link rel="stylesheet" href="/css/tabs/mcp.css">
+    <link rel="stylesheet" href="/css/tabs/lkcoffee.css">
     <link rel="stylesheet" href="/css/tabs/multi-agent.css">
 </head>
 <body>
@@ -37,6 +38,7 @@
         <button class="tab-btn" data-tab="agent-tools" onclick="switchTab('agent-tools')">🔧 Agent Tools 工具调用</button>
         <button class="tab-btn" data-tab="tool-reasoning" onclick="switchTab('tool-reasoning')">🧠 工具推理捕获</button>
         <button class="tab-btn" data-tab="mcp" onclick="switchTab('mcp')">🔌 MCP Client 聊天</button>
+        <button class="tab-btn" data-tab="lkcoffee" onclick="switchTab('lkcoffee')">☕ 瑞幸 MCP 点单</button>
         <button class="tab-btn" data-tab="multi-agent" onclick="switchTab('multi-agent')">🤝 多 Agent 协作</button>
         <button class="tab-btn" data-tab="ask-user" onclick="switchTab('ask-user')">❓ AskUserQuestion 技术选型</button>
         <button class="tab-btn" data-tab="todo-write" onclick="switchTab('todo-write')">📋 TodoWrite 学习计划</button>
@@ -766,6 +768,75 @@
         </div>
     </div>
 
+    <!-- ========== 瑞幸 MCP 点单 Tab ========== -->
+    <div id="tab-lkcoffee" class="tab-content">
+        <div class="lkcoffee-header">
+            <h1>☕ 瑞幸 MCP 点单</h1>
+            <p>My Coffee Skill 编排 + 瑞幸/高德 MCP · SSE 多轮对话 · deepseek-v4-pro</p>
+        </div>
+        <div class="rag-body">
+            <div class="lkcoffee-flow">
+                <span>用户</span><span class="arrow">→</span>
+                <span>My Coffee Skill</span><span class="arrow">→</span>
+                <span>瑞幸 MCP</span><span class="arrow">→</span>
+                <span>高德 geocode</span><span class="arrow">→</span>
+                <span>预览确认下单</span>
+            </div>
+
+            <div class="lkcoffee-settings card">
+                <div class="card-title">⚙️ 设置</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>Token</label>
+                        <input type="password" id="lkCoffeeTokenInput" placeholder="Bearer Token（open.lkcoffee.com/mcp）" style="flex:1;">
+                        <button type="button" class="btn btn-secondary" onclick="saveLkCoffeeToken()">保存</button>
+                    </div>
+                    <div class="form-row">
+                        <label>定位</label>
+                        <span id="lkCoffeeLocStatus" class="lkcoffee-loc-status">—</span>
+                        <button type="button" class="btn btn-secondary" onclick="initLkCoffeeLocation()">重新定位</button>
+                    </div>
+                    <div class="form-row">
+                        <label>经度</label>
+                        <input type="text" id="lkCoffeeLongitude" placeholder="118.089" style="width:140px;">
+                        <label style="min-width:40px;">纬度</label>
+                        <input type="text" id="lkCoffeeLatitude" placeholder="24.479" style="width:140px;">
+                    </div>
+                    <div class="form-row">
+                        <label>地址</label>
+                        <input type="text" id="lkCoffeeAddressInput" placeholder="如：厦门海西金谷广场" style="flex:1;">
+                        <button type="button" class="btn btn-secondary" onclick="geocodeLkCoffeeAddress()">解析经纬度</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">💡 快捷示例</div>
+                <div class="card-body sample-questions">
+                    <button class="lkcoffee-sample-btn" onclick="fillLkCoffeeMessage('帮我来一杯冰美式')">冰美式</button>
+                    <button class="lkcoffee-sample-btn" onclick="fillLkCoffeeMessage('找一下附近的瑞幸门店')">查附近门店</button>
+                    <button class="lkcoffee-sample-btn" onclick="fillLkCoffeeMessage('帮我看一下最近的订单')">最近订单</button>
+                </div>
+            </div>
+
+            <div class="lkcoffee-chat-panel">
+                <div class="lkcoffee-session-bar">
+                    <span>sessionId: <code id="lkCoffeeSessionIdDisplay"></code></span>
+                    <button type="button" class="btn btn-secondary" onclick="clearLkCoffeeSession()">清除会话</button>
+                </div>
+                <div id="lkCoffeeMessages" class="lkcoffee-messages">
+                    <div id="lkCoffeeWelcome" class="message assistant">
+                        <div class="message-content">配置 Token 与定位后，用自然语言点一杯咖啡。previewOrder 后需明确确认才会下单。</div>
+                    </div>
+                </div>
+                <form id="lkCoffeeForm" class="lkcoffee-input-bar">
+                    <input type="text" id="lkCoffeeMessageInput" placeholder="输入消息，Enter 发送..." autocomplete="off">
+                    <button type="submit" class="btn btn-lkcoffee" id="lkCoffeeSendBtn">发送</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== 多 Agent 协作 Tab ========== -->
     <div id="tab-multi-agent" class="tab-content">
         <div class="multi-agent-header">
@@ -1117,6 +1188,7 @@
 <script src="/js/tabs/agent-tools.js"></script>
 <script src="/js/tabs/tool-reasoning.js"></script>
 <script src="/js/tabs/mcp.js"></script>
+<script src="/js/tabs/lkcoffee.js"></script>
 <script src="/js/tabs/multi-agent.js"></script>
 <script src="/js/tabs/ask-user.js"></script>
 <script src="/js/tabs/todo-write.js"></script>
