@@ -1,6 +1,6 @@
 # 瑞幸 MCP 点单 · SSE 对话 Implementation Plan
 
-> **Status:** ✅ 代码已完成（2026-07-04）— Task 1–7 全部落地，`mvn compile` / `mvn test`（23 tests）通过；**工作区尚未 git commit**；Task 8 启动日志与端到端联调待手工验证（需 `LKCOFFEE_TOKEN` / `AMAP_API_KEY` / `DEEPSEEK_API_KEY`）。
+> **Status:** ✅ 已提交（2026-07-04，`74fc611`）— Task 1–7 完成，`mvn test` 通过，应用可启动；完整点单联调需配置 `LKCOFFEE_TOKEN` + `AMAP_API_KEY`。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -912,7 +912,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 追加 `#tab-lkcoffee` 面板（Header + 设置区 + 消息区 + 快捷按钮 + 输入栏）；`<script src="/js/tabs/lkcoffee.js">` 于 body 末尾。
 
-- [ ] **Step 4: 手工冒烟（需启动服务）**
+- [x] **Step 4: 手工冒烟（需启动服务）**
 
 Run: `cd demo2 && mvn spring-boot:run`
 打开 `http://localhost:8081`，切换「☕ 瑞幸 MCP 点单」Tab，确认 UI 渲染、定位/Token 输入框可见。
@@ -943,7 +943,7 @@ Expected: BUILD SUCCESS
 Run: `cd demo2 && mvn -q test`
 Expected: BUILD SUCCESS
 
-- [ ] **Step 3: 启动并确认 MCP 初始化日志**
+- [x] **Step 3: 启动并确认 MCP 初始化日志**
 
 Run: `cd demo2 && mvn spring-boot:run`（需 `DEEPSEEK_API_KEY`；可选 `LKCOFFEE_TOKEN`、`AMAP_API_KEY`）
 
