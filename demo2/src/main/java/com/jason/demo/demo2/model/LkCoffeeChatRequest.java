@@ -13,9 +13,6 @@ public class LkCoffeeChatRequest {
     @Schema(description = "用户消息", example = "帮我来一杯冰美式")
     private String message;
 
-    @Schema(description = "瑞幸 Bearer Token（可选，覆盖环境变量）")
-    private String token;
-
     @Schema(description = "经度（可选，来自浏览器定位或地址解析）")
     private Double longitude;
 

@@ -1,24 +1,5 @@
 // ========== 瑞幸 MCP 点单 ==========
 let lkCoffeeSessionId = crypto.randomUUID();
-const LK_TOKEN_KEY = 'lkcoffee_token';
-
-function initLkCoffeeToken() {
-    const saved = sessionStorage.getItem(LK_TOKEN_KEY);
-    if (saved) {
-        document.getElementById('lkCoffeeTokenInput').value = saved;
-    }
-}
-
-function saveLkCoffeeToken() {
-    const token = document.getElementById('lkCoffeeTokenInput').value.trim();
-    if (token) {
-        sessionStorage.setItem(LK_TOKEN_KEY, token);
-        alert('Token 已保存到 sessionStorage');
-    } else {
-        sessionStorage.removeItem(LK_TOKEN_KEY);
-        alert('Token 已清除');
-    }
-}
 
 function initLkCoffeeLocation() {
     const statusEl = document.getElementById('lkCoffeeLocStatus');
@@ -40,6 +21,50 @@ function initLkCoffeeLocation() {
     );
 }
 
+function extractLkCoffeeCoords(data) {
+    if (data.longitude != null && data.latitude != null) {
+        return {
+            longitude: Number(data.longitude),
+            latitude: Number(data.latitude),
+            formattedAddress: data.formattedAddress || ''
+        };
+    }
+    const raw = data.raw || '';
+    if (!raw) {
+        return null;
+    }
+    const locationMatch = raw.match(/"location"\s*:\s*"([\d.]+)\s*,\s*([\d.]+)"/);
+    if (locationMatch) {
+        return {
+            longitude: parseFloat(locationMatch[1]),
+            latitude: parseFloat(locationMatch[2]),
+            formattedAddress: ''
+        };
+    }
+    try {
+        const outer = JSON.parse(raw);
+        const textBlock = Array.isArray(outer) ? outer.find(item => item && item.text)?.text : null;
+        if (textBlock) {
+            const inner = JSON.parse(textBlock);
+            const hit = inner.results?.[0];
+            if (hit?.location) {
+                const parts = hit.location.split(',').map(s => s.trim());
+                if (parts.length === 2) {
+                    const formatted = [hit.province, hit.city, hit.district].filter(Boolean).join('');
+                    return {
+                        longitude: parseFloat(parts[0]),
+                        latitude: parseFloat(parts[1]),
+                        formattedAddress: formatted
+                    };
+                }
+            }
+        }
+    } catch (_) {
+        // fall through
+    }
+    return null;
+}
+
 async function geocodeLkCoffeeAddress() {
     const address = document.getElementById('lkCoffeeAddressInput').value.trim();
     if (!address) {
@@ -52,7 +77,15 @@ async function geocodeLkCoffeeAddress() {
         const res = await fetch('/agent/lkcoffee/geocode?address=' + encodeURIComponent(address));
         if (!res.ok) throw new Error(await res.text() || 'HTTP ' + res.status);
         const data = await res.json();
-        statusEl.textContent = '解析结果：' + (data.raw || JSON.stringify(data));
+        const coords = extractLkCoffeeCoords(data);
+        if (coords) {
+            document.getElementById('lkCoffeeLongitude').value = coords.longitude.toFixed(6);
+            document.getElementById('lkCoffeeLatitude').value = coords.latitude.toFixed(6);
+            statusEl.textContent = '解析成功'
+                + (coords.formattedAddress ? '：' + coords.formattedAddress : '');
+        } else {
+            statusEl.textContent = '未能提取坐标：' + (data.raw || JSON.stringify(data));
+        }
     } catch (e) {
         statusEl.textContent = '解析失败：' + e.message;
     }
@@ -106,13 +139,11 @@ async function sendLkCoffeeMessage() {
     const responseText = assistantContent.querySelector('.response-text');
     setLkCoffeeInputEnabled(false);
 
-    const token = sessionStorage.getItem(LK_TOKEN_KEY) || undefined;
     const lonVal = document.getElementById('lkCoffeeLongitude').value;
     const latVal = document.getElementById('lkCoffeeLatitude').value;
     const body = {
         sessionId: lkCoffeeSessionId,
         message: message,
-        token: token || undefined,
         longitude: lonVal ? parseFloat(lonVal) : undefined,
         latitude: latVal ? parseFloat(latVal) : undefined
     };
@@ -177,7 +208,7 @@ async function clearLkCoffeeSession() {
         if (!res.ok) throw new Error(await res.text() || 'HTTP ' + res.status);
         document.getElementById('lkCoffeeMessages').innerHTML =
             '<div id="lkCoffeeWelcome" class="message assistant"><div class="message-content">' +
-            '会话已清除。配置 Token 与定位后，用自然语言点一杯咖啡吧。</div></div>';
+            '会话已清除。请设置 LKCOFFEE_TOKEN 并配置定位后，用自然语言点单。</div></div>';
         lkCoffeeSessionId = crypto.randomUUID();
         document.getElementById('lkCoffeeSessionIdDisplay').textContent = lkCoffeeSessionId;
     } catch (e) {
@@ -191,7 +222,6 @@ document.getElementById('lkCoffeeForm')?.addEventListener('submit', function (e)
 });
 
 document.addEventListener('DOMContentLoaded', function () {
-    initLkCoffeeToken();
     initLkCoffeeLocation();
     const el = document.getElementById('lkCoffeeSessionIdDisplay');
     if (el) el.textContent = lkCoffeeSessionId;

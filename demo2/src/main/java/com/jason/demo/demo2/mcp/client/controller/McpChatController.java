@@ -1,5 +1,7 @@
 package com.jason.demo.demo2.mcp.client.controller;
 
+import com.jason.demo.demo2.mcp.client.McpConnection;
+import com.jason.demo.demo2.mcp.client.config.McpClientLifecycle;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +25,7 @@ public class McpChatController {
 
     private final ChatClient.Builder chatClientBuilder;
     private final SyncMcpToolCallbackProvider mcpToolCallbackProvider;
+    private final McpClientLifecycle mcpClientLifecycle;
 
     /**
      * 延迟构建，等 MCP Client 初始化完成后（ApplicationReadyEvent Order(2)）再组装
@@ -30,9 +33,11 @@ public class McpChatController {
     private volatile ChatClient chatClient;
 
     public McpChatController(ChatClient.Builder chatClientBuilder,
-                              SyncMcpToolCallbackProvider mcpToolCallbackProvider) {
+                              SyncMcpToolCallbackProvider mcpToolCallbackProvider,
+                              McpClientLifecycle mcpClientLifecycle) {
         this.chatClientBuilder = chatClientBuilder;
         this.mcpToolCallbackProvider = mcpToolCallbackProvider;
+        this.mcpClientLifecycle = mcpClientLifecycle;
     }
 
     /**
@@ -43,6 +48,7 @@ public class McpChatController {
     @EventListener(ApplicationReadyEvent.class)
     public void init() {
         try {
+            mcpClientLifecycle.ensureInitialized(McpConnection.LOCAL_SERVER);
             this.chatClient = chatClientBuilder
                     .defaultTools(mcpToolCallbackProvider)
                     .build();

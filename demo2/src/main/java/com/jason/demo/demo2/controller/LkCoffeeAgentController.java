@@ -83,6 +83,8 @@ public class LkCoffeeAgentController {
             return lkCoffeeAgentService.geocodeAddress(address, city);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
         }
     }
 

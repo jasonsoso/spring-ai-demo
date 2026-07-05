@@ -18,9 +18,9 @@ public class LkCoffeeSkillLoader {
             【demo2 项目覆盖规则 — 优先级高于 Skill 默认行为】
 
             1. Token 管理：
-               - 使用 Tab 设置区 / 请求体 token / 环境变量 LKCOFFEE_TOKEN。
+               - 使用环境变量 LKCOFFEE_TOKEN（由服务端配置，用户无需提供）。
                - 禁止读写 ~/.my-coffee/LUCKIN_MCP_TOKEN 本地文件。
-               - 禁止询问用户是否保存 token 到本地文件。
+               - 禁止询问用户提供 token 或是否保存 token 到本地文件。
 
             2. MCP 调用方式：
                - 仅通过 Spring AI 已挂载的 MCP 工具调用，禁止 curl 直连 MCP HTTP。
