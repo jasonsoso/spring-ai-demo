@@ -32,8 +32,14 @@ function appendSessionBubble(text, isUser) {
     const div = document.createElement('div');
     div.className = 'message ' + (isUser ? 'user' : 'assistant');
     const content = document.createElement('div');
-    content.className = 'message-content';
-    content.textContent = text;
+    content.className = 'message-content' + (isUser ? '' : ' markdown-body');
+    if (text) {
+        if (isUser) {
+            content.textContent = text;
+        } else {
+            content.innerHTML = renderMarkdown(text);
+        }
+    }
     div.appendChild(content);
     box.appendChild(div);
     scrollSessionMessages();
@@ -99,6 +105,8 @@ async function sendSessionMemoryMessage() {
     const assistantBubble = appendSessionBubble('', false);
     setSessionMemoryInputEnabled(false);
 
+    const stream = createMarkdownStreamRenderer(assistantBubble, scrollSessionMessages);
+
     try {
         const response = await fetch('/agent/session-memory/chat/stream', {
             method: 'POST',
@@ -124,16 +132,18 @@ async function sendSessionMemoryMessage() {
                 if (!json) continue;
                 const evt = JSON.parse(json);
                 if (evt.type === 'TOKEN' && evt.content) {
-                    assistantBubble.textContent += evt.content;
-                    scrollSessionMessages();
+                    stream.append(evt.content);
+                } else if (evt.type === 'COMPLETED') {
+                    stream.flush();
                 } else if (evt.type === 'FAILED') {
                     throw new Error(evt.error || 'Agent 失败');
                 }
             }
         }
+        stream.flush();
         await refreshSessionMemoryEvents();
     } catch (e) {
-        assistantBubble.textContent = '错误：' + e.message;
+        stream.setPlainError('错误：' + e.message);
         assistantBubble.classList.add('error');
     } finally {
         setSessionMemoryInputEnabled(true);

@@ -52,7 +52,7 @@ async function askMcp() {
             `<span class="mcp-badge">DeepSeek Chat</span>` +
             `<span class="mcp-badge">智谱 Embedding</span>` +
             `<div class="label">MCP 工具调用回答</div>` +
-            `<div>${escapeHtml(answer)}</div>`;
+            `<div class="markdown-body">${renderMarkdown(answer)}</div>`;
     } catch (e) {
         resultBox.className = 'mcp-answer error';
         resultBox.textContent = '请求失败：' + e.message +

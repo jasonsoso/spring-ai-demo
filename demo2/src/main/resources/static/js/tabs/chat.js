@@ -4,6 +4,10 @@ const chatForm = document.getElementById('chatForm');
 const messageInput = document.getElementById('messageInput');
 const sendButton = document.getElementById('sendButton');
 
+function scrollChatMessages() {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
 function removeWelcomeMessage() {
     const welcome = document.querySelector('.welcome-message');
     if (welcome) welcome.remove();
@@ -14,11 +18,15 @@ function addMessage(content, isUser = false) {
     const div = document.createElement('div');
     div.className = `message ${isUser ? 'user' : 'assistant'}`;
     const content_div = document.createElement('div');
-    content_div.className = 'message-content';
-    content_div.textContent = content;
+    content_div.className = isUser ? 'message-content' : 'message-content markdown-body';
+    if (isUser) {
+        content_div.textContent = content;
+    } else {
+        content_div.innerHTML = renderMarkdown(content);
+    }
     div.appendChild(content_div);
     chatMessages.appendChild(div);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    scrollChatMessages();
 }
 
 function addLoadingMessage() {
@@ -31,7 +39,7 @@ function addLoadingMessage() {
     content_div.textContent = 'AI 正在思考';
     div.appendChild(content_div);
     chatMessages.appendChild(div);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    scrollChatMessages();
 }
 
 function removeLoadingMessage() {
@@ -57,14 +65,13 @@ async function sendMessage(message) {
 
         const div = document.createElement('div');
         div.className = 'message assistant';
-        const content_div = document.createElement('div');
-        content_div.className = 'message-content';
+        const content_div = createAssistantMarkdownElement('div', 'message-content');
         div.appendChild(content_div);
         chatMessages.appendChild(div);
 
+        const stream = createMarkdownStreamRenderer(content_div, scrollChatMessages);
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let fullText = '';
 
         while (true) {
             const { done, value } = await reader.read();
@@ -74,13 +81,12 @@ async function sendMessage(message) {
                 try {
                     const data = JSON.parse(line.replace(/^data:\s*/, '').trim());
                     if (data.response) {
-                        fullText += data.response;
-                        content_div.textContent = fullText;
-                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                        stream.append(data.response);
                     }
                 } catch (e) {}
             }
         }
+        stream.flush();
     } catch (error) {
         removeLoadingMessage();
         addMessage('抱歉，发生了错误：' + error.message, false);

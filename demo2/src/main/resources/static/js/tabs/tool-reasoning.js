@@ -39,7 +39,7 @@ function appendToolReasoningBubble(text, isUser) {
     if (isUser) {
         content.textContent = text;
     } else {
-        content.innerHTML = '<div class="reasoning-inline-cards"></div><div class="response-text"></div>';
+        content.innerHTML = '<div class="reasoning-inline-cards"></div><div class="response-text markdown-body"></div>';
     }
     div.appendChild(content);
     box.appendChild(div);
@@ -90,6 +90,8 @@ async function sendToolReasoningMessage() {
     const responseText = assistantContent.querySelector('.response-text');
     setToolReasoningInputEnabled(false);
 
+    const stream = createMarkdownStreamRenderer(responseText, scrollToolReasoningMessages);
+
     try {
         const response = await fetch('/agent/tool-reasoning/chat/stream', {
             method: 'POST',
@@ -117,15 +119,17 @@ async function sendToolReasoningMessage() {
                 if (evt.type === 'TOOL_REASONING') {
                     appendReasoningCard(evt, inlineCards);
                 } else if (evt.type === 'TOKEN' && evt.content) {
-                    responseText.textContent += evt.content;
-                    scrollToolReasoningMessages();
+                    stream.append(evt.content);
+                } else if (evt.type === 'COMPLETED') {
+                    stream.flush();
                 } else if (evt.type === 'FAILED') {
                     throw new Error(evt.error || 'Agent 失败');
                 }
             }
         }
+        stream.flush();
     } catch (e) {
-        responseText.textContent = '错误：' + e.message;
+        stream.setPlainError('错误：' + e.message);
         assistantContent.parentElement.classList.add('error');
     } finally {
         setToolReasoningInputEnabled(true);

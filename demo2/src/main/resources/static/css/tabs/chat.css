@@ -39,6 +39,15 @@
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
 
+    .message.user .message-content.markdown-body strong,
+    .message.user .message-content.markdown-body a {
+        color: inherit;
+    }
+
+    .chat-messages .message-content.markdown-body {
+        max-width: 85%;
+    }
+
     .chat-input-container {
         padding: 16px 20px;
         background: white;

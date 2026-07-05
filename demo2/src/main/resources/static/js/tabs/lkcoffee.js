@@ -118,7 +118,7 @@ function appendLkCoffeeBubble(text, isUser) {
     if (isUser) {
         content.textContent = text;
     } else {
-        content.innerHTML = '<div class="tool-tags"></div><div class="order-preview-area"></div><div class="payment-qr-area"></div><div class="response-text"></div>';
+        content.innerHTML = '<div class="tool-tags"></div><div class="order-preview-area"></div><div class="payment-qr-area"></div><div class="response-text markdown-body"></div>';
     }
     div.appendChild(content);
     box.appendChild(div);
@@ -138,6 +138,8 @@ async function sendLkCoffeeMessage() {
     const qrArea = assistantContent.querySelector('.payment-qr-area');
     const responseText = assistantContent.querySelector('.response-text');
     setLkCoffeeInputEnabled(false);
+
+    const stream = createMarkdownStreamRenderer(responseText, scrollLkCoffeeMessages);
 
     const lonVal = document.getElementById('lkCoffeeLongitude').value;
     const latVal = document.getElementById('lkCoffeeLatitude').value;
@@ -179,21 +181,24 @@ async function sendLkCoffeeMessage() {
                     toolTags.appendChild(tag);
                 } else if (evt.type === 'ORDER_PREVIEW') {
                     const card = document.createElement('div');
-                    card.className = 'order-preview-card';
-                    card.textContent = typeof evt.payload === 'string' ? evt.payload : JSON.stringify(evt.payload, null, 2);
+                    card.className = 'order-preview-card markdown-body';
+                    const payload = typeof evt.payload === 'string' ? evt.payload : JSON.stringify(evt.payload, null, 2);
+                    card.innerHTML = renderMarkdown(payload);
                     previewArea.appendChild(card);
                 } else if (evt.type === 'PAYMENT_QR' && evt.qrUrl) {
                     qrArea.innerHTML = '<div class="payment-qr"><p>请扫码支付：</p><img src="' + escapeHtml(evt.qrUrl) + '" alt="支付二维码"></div>';
                 } else if (evt.type === 'TOKEN' && evt.content) {
-                    responseText.textContent += evt.content;
-                    scrollLkCoffeeMessages();
+                    stream.append(evt.content);
+                } else if (evt.type === 'COMPLETED') {
+                    stream.flush();
                 } else if (evt.type === 'FAILED') {
                     throw new Error(evt.error || 'Agent 失败');
                 }
             }
         }
+        stream.flush();
     } catch (e) {
-        responseText.textContent = '错误：' + e.message;
+        stream.setPlainError('错误：' + e.message);
         assistantContent.parentElement.classList.add('error');
     } finally {
         setLkCoffeeInputEnabled(true);
@@ -208,7 +213,7 @@ async function clearLkCoffeeSession() {
         if (!res.ok) throw new Error(await res.text() || 'HTTP ' + res.status);
         document.getElementById('lkCoffeeMessages').innerHTML =
             '<div id="lkCoffeeWelcome" class="message assistant"><div class="message-content">' +
-            '会话已清除。请设置 LKCOFFEE_TOKEN 并配置定位后，用自然语言点单。</div></div>';
+            '会话已清除。配置定位后，用自然语言点单。</div></div>';
         lkCoffeeSessionId = crypto.randomUUID();
         document.getElementById('lkCoffeeSessionIdDisplay').textContent = lkCoffeeSessionId;
     } catch (e) {

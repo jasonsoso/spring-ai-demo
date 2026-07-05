@@ -7,11 +7,21 @@ function fillAskUserMessage(text) {
     document.getElementById('askUserMessageInput').value = text;
 }
 
-function appendAskUserMessage(role, html) {
+function appendAskUserMessage(role, content, options) {
+    options = options || {};
     const area = document.getElementById('askUserChatArea');
     const div = document.createElement('div');
     div.className = 'message ' + role;
-    div.innerHTML = '<div class="message-content">' + html + '</div>';
+    const contentEl = document.createElement('div');
+    contentEl.className = 'message-content' + (options.markdown ? ' markdown-body' : '');
+    if (options.markdown) {
+        contentEl.innerHTML = renderMarkdown(content || '');
+    } else if (options.rawHtml) {
+        contentEl.innerHTML = content;
+    } else {
+        contentEl.textContent = content;
+    }
+    div.appendChild(contentEl);
     area.appendChild(div);
     area.scrollTop = area.scrollHeight;
 }
@@ -31,7 +41,7 @@ async function startAskUserChat() {
     document.getElementById('askUserQuestionPanel').style.display = 'none';
     document.getElementById('askUserQuestionPanel').innerHTML = '';
     document.getElementById('askUserChatArea').innerHTML = '';
-    appendAskUserMessage('user', escapeHtml(message));
+    appendAskUserMessage('user', message);
 
     const btn = document.getElementById('askUserStartBtn');
     btn.disabled = true;
@@ -51,28 +61,28 @@ async function startAskUserChat() {
             handleAskUserSseEvent(payload);
         };
         askUserEventSource.onerror = () => {
-            appendAskUserMessage('assistant', '<span style="color:#d00">SSE 连接中断</span>');
+            appendAskUserMessage('assistant', '<span style="color:#d00">SSE 连接中断</span>', { rawHtml: true });
             closeAskUserEventSource();
             btn.disabled = false;
         };
     } catch (e) {
-        appendAskUserMessage('assistant', '<span style="color:#d00">请求失败: ' + escapeHtml(e.message) + '</span>');
+        appendAskUserMessage('assistant', '<span style="color:#d00">请求失败: ' + escapeHtml(e.message) + '</span>', { rawHtml: true });
         btn.disabled = false;
     }
 }
 
 function handleAskUserSseEvent(payload) {
     if (payload.type === 'RUNNING') {
-        appendAskUserMessage('assistant', '<em>Agent 正在分析需求...</em>');
+        appendAskUserMessage('assistant', '<em>Agent 正在分析需求...</em>', { rawHtml: true });
     } else if (payload.type === 'QUESTIONS') {
         askUserPendingQuestions = payload.questions || [];
         renderAskUserQuestions(askUserPendingQuestions);
     } else if (payload.type === 'COMPLETED') {
-        appendAskUserMessage('assistant', '<div style="white-space:pre-wrap">' + escapeHtml(payload.response || '') + '</div>');
+        appendAskUserMessage('assistant', payload.response || '', { markdown: true });
         closeAskUserEventSource();
         document.getElementById('askUserStartBtn').disabled = false;
     } else if (payload.type === 'FAILED') {
-        appendAskUserMessage('assistant', '<span style="color:#d00">' + escapeHtml(payload.error || '未知错误') + '</span>');
+        appendAskUserMessage('assistant', '<span style="color:#d00">' + escapeHtml(payload.error || '未知错误') + '</span>', { rawHtml: true });
         closeAskUserEventSource();
         document.getElementById('askUserStartBtn').disabled = false;
     }

@@ -120,3 +120,24 @@
 }
 .payment-qr img { max-width: 200px; border-radius: 8px; margin-top: 8px; }
 .lkcoffee-loc-status { font-size: 13px; color: #666; }
+
+.lkcoffee-messages .response-text {
+    margin-top: 8px;
+}
+
+.lkcoffee-messages .markdown-body strong {
+    color: #001a66;
+}
+
+.lkcoffee-messages .markdown-body th {
+    background: #eef2ff;
+    color: #001a66;
+}
+
+.lkcoffee-messages .markdown-body tbody tr:hover {
+    background: #eef2ff;
+}
+
+.order-preview-card.markdown-body {
+    white-space: normal;
+}

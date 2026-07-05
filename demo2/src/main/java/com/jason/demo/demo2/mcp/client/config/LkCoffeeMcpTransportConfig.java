@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.mcp.client.config;
 
+import com.jason.demo.demo2.mcp.client.LkCoffeeMcpLoggingHttpClient;
 import com.jason.demo.demo2.mcp.client.LkCoffeeTokenResolver;
 import com.jason.demo.demo2.mcp.client.McpConnection;
 import io.modelcontextprotocol.client.McpClient;
@@ -16,6 +17,7 @@ import org.springframework.util.StringUtils;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 
 @Slf4j
@@ -48,9 +50,11 @@ public class LkCoffeeMcpTransportConfig {
             if (!McpConnection.LKCOFFEE.getConnectionName().equals(name)) {
                 return;
             }
-            log.info("[LkCoffee MCP] 注册 transport customizer（httpRequestCustomizer 按请求注入 Authorization）");
+            log.info("[LkCoffee MCP] 注册 transport customizer（httpRequestCustomizer 按请求注入 Authorization，HttpClient 包装响应日志）");
             builder.connectTimeout(Duration.ofSeconds(30));
-            builder.customizeClient(clientBuilder -> clientBuilder.version(HttpClient.Version.HTTP_1_1));
+            HttpClient.Builder innerClientBuilder = HttpClient.newBuilder()
+                    .version(HttpClient.Version.HTTP_1_1);
+            builder.clientBuilder(LkCoffeeMcpLoggingHttpClient.wrapBuilder(innerClientBuilder));
             builder.httpRequestCustomizer((requestBuilder, method, uri, body, ctx) -> {
                 String token = tokenResolver.resolveDefault();
                 if (StringUtils.hasText(token)) {
@@ -73,6 +77,40 @@ public class LkCoffeeMcpTransportConfig {
                 : body;
         log.debug("[LkCoffee MCP] >>> {} {}\n--- headers ---\n{}--- body ---\n{}",
                 method, uri, formatHeaders(probe.headers()), bodyLog);
+    }
+
+    public static void logIncomingResponse(HttpRequest request, HttpResponse<?> response) {
+        if (!log.isDebugEnabled()) {
+            return;
+        }
+        log.debug("[LkCoffee MCP] <<< {} {} status={}\n--- headers ---\n{}--- body ---\n{}",
+                request.method(),
+                request.uri(),
+                response.statusCode(),
+                formatHeaders(response.headers()),
+                formatResponseBody(response));
+    }
+
+    private static String formatResponseBody(HttpResponse<?> response) {
+        Object body = response.body();
+        if (body instanceof String text) {
+            return text.length() > DEBUG_BODY_MAX_LENGTH
+                    ? text.substring(0, DEBUG_BODY_MAX_LENGTH) + "..."
+                    : text;
+        }
+        if (isEventStream(response)) {
+            return "<SSE stream, body not logged>";
+        }
+        if (body == null) {
+            return null;
+        }
+        return "<" + body.getClass().getSimpleName() + ">";
+    }
+
+    private static boolean isEventStream(HttpResponse<?> response) {
+        return response.headers().firstValue("Content-Type")
+                .map(contentType -> contentType.toLowerCase().contains("text/event-stream"))
+                .orElse(false);
     }
 
     static String formatHeaders(HttpHeaders headers) {
