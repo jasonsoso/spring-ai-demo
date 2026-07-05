@@ -11,10 +11,15 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Flow;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 
@@ -81,32 +86,79 @@ public final class LkCoffeeMcpLoggingHttpClient extends HttpClient {
     @Override
     public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler)
             throws IOException, InterruptedException {
-        HttpResponse<T> response = delegate.send(request, responseBodyHandler);
-        LkCoffeeMcpTransportConfig.logIncomingResponse(request, response);
-        return response;
+        return delegate.send(request, wrapBodyHandler(request, responseBodyHandler));
     }
 
     @Override
     public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
             HttpResponse.BodyHandler<T> responseBodyHandler) {
-        return delegate.sendAsync(request, responseBodyHandler)
-                .whenComplete((response, error) -> {
-                    if (error == null) {
-                        LkCoffeeMcpTransportConfig.logIncomingResponse(request, response);
-                    }
-                });
+        return delegate.sendAsync(request, wrapBodyHandler(request, responseBodyHandler));
     }
 
     @Override
     public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
             HttpResponse.BodyHandler<T> responseBodyHandler,
             HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
-        return delegate.sendAsync(request, responseBodyHandler, pushPromiseHandler)
-                .whenComplete((response, error) -> {
-                    if (error == null) {
-                        LkCoffeeMcpTransportConfig.logIncomingResponse(request, response);
-                    }
-                });
+        return delegate.sendAsync(request, wrapBodyHandler(request, responseBodyHandler), pushPromiseHandler);
+    }
+
+    private static <T> HttpResponse.BodyHandler<T> wrapBodyHandler(HttpRequest request,
+            HttpResponse.BodyHandler<T> delegate) {
+        return responseInfo -> new CapturingBodySubscriber<>(delegate.apply(responseInfo), request, responseInfo);
+    }
+
+    /**
+     * MCP Streamable HTTP 使用 {@code BodySubscriber} 流式读取响应，
+     * {@link HttpResponse#body()} 常为 null；在此拦截原始字节并在 body 读完后打日志。
+     */
+    private static final class CapturingBodySubscriber<T> implements HttpResponse.BodySubscriber<T> {
+
+        private final HttpResponse.BodySubscriber<T> delegate;
+        private final HttpRequest request;
+        private final HttpResponse.ResponseInfo responseInfo;
+        private final StringBuilder captured = new StringBuilder();
+
+        private CapturingBodySubscriber(HttpResponse.BodySubscriber<T> delegate, HttpRequest request,
+                HttpResponse.ResponseInfo responseInfo) {
+            this.delegate = delegate;
+            this.request = request;
+            this.responseInfo = responseInfo;
+        }
+
+        @Override
+        public void onSubscribe(Flow.Subscription subscription) {
+            delegate.onSubscribe(subscription);
+        }
+
+        @Override
+        public void onNext(List<ByteBuffer> items) {
+            for (ByteBuffer item : items) {
+                ByteBuffer duplicate = item.duplicate();
+                byte[] chunk = new byte[duplicate.remaining()];
+                duplicate.get(chunk);
+                captured.append(new String(chunk, StandardCharsets.UTF_8));
+            }
+            delegate.onNext(items);
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            delegate.onError(throwable);
+        }
+
+        @Override
+        public void onComplete() {
+            delegate.onComplete();
+        }
+
+        @Override
+        public CompletionStage<T> getBody() {
+            return delegate.getBody().whenComplete((body, error) -> {
+                if (error == null) {
+                    LkCoffeeMcpTransportConfig.logIncomingResponse(request, responseInfo, captured.toString());
+                }
+            });
+        }
     }
 
     @Override

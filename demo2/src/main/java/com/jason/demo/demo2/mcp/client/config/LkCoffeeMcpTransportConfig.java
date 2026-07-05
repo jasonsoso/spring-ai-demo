@@ -79,38 +79,31 @@ public class LkCoffeeMcpTransportConfig {
                 method, uri, formatHeaders(probe.headers()), bodyLog);
     }
 
-    public static void logIncomingResponse(HttpRequest request, HttpResponse<?> response) {
+    public static void logIncomingResponse(HttpRequest request, HttpResponse.ResponseInfo responseInfo,
+            String rawBody) {
         if (!log.isDebugEnabled()) {
             return;
         }
         log.debug("[LkCoffee MCP] <<< {} {} status={}\n--- headers ---\n{}--- body ---\n{}",
                 request.method(),
                 request.uri(),
-                response.statusCode(),
-                formatHeaders(response.headers()),
-                formatResponseBody(response));
+                responseInfo.statusCode(),
+                formatHeaders(responseInfo.headers()),
+                formatRawBody(rawBody, responseInfo));
     }
 
-    private static String formatResponseBody(HttpResponse<?> response) {
-        Object body = response.body();
-        if (body instanceof String text) {
-            return text.length() > DEBUG_BODY_MAX_LENGTH
-                    ? text.substring(0, DEBUG_BODY_MAX_LENGTH) + "..."
-                    : text;
+    private static String formatRawBody(String rawBody, HttpResponse.ResponseInfo responseInfo) {
+        if (rawBody != null && !rawBody.isBlank()) {
+            String trimmed = rawBody.trim();
+            return trimmed.length() > DEBUG_BODY_MAX_LENGTH
+                    ? trimmed.substring(0, DEBUG_BODY_MAX_LENGTH) + "..."
+                    : trimmed;
         }
-        if (isEventStream(response)) {
-            return "<SSE stream, body not logged>";
+        String contentType = responseInfo.headers().firstValue("Content-Type").orElse("").toLowerCase();
+        if (contentType.contains("text/event-stream")) {
+            return "<empty SSE stream>";
         }
-        if (body == null) {
-            return null;
-        }
-        return "<" + body.getClass().getSimpleName() + ">";
-    }
-
-    private static boolean isEventStream(HttpResponse<?> response) {
-        return response.headers().firstValue("Content-Type")
-                .map(contentType -> contentType.toLowerCase().contains("text/event-stream"))
-                .orElse(false);
+        return "<empty body>";
     }
 
     static String formatHeaders(HttpHeaders headers) {
