@@ -9,7 +9,7 @@ Spring AI 学习与实验仓库，包含两个独立子项目：基于 **Spring 
 | [demo](demo/) | 8080 | 3.5.x | 1.1.7 | 17 | 原版演示，Swagger UI |
 | [demo2](demo2/) | 8081 | 4.1.x | 2.0.0 | 21 | 升级实验，虚拟线程 + OpenTelemetry + Scalar 文档 |
 
-两个子项目功能基本对齐，`demo2` 额外包含结构化输出与可观测性集成，并针对 Spring AI 2.0 API 变更做了适配。
+两个子项目功能基本对齐，`demo2` 额外包含结构化输出、可观测性集成、**瑞幸 MCP 点单**等实验功能，并针对 Spring AI 2.0 API 变更做了适配。
 
 ## 功能模块
 
@@ -26,6 +26,7 @@ Spring AI 学习与实验仓库，包含两个独立子项目：基于 **Spring 
 | 多 Agent | `/agent/multi/plan` | Supervisor 协调多子 Agent |
 | MySQL 记忆 Agent | `/agent/mysql/trip/*` | JDBC 持久化聊天记忆 |
 | MCP | `/mcp/client/*` | 同 JVM 内 MCP Server + Client |
+| 瑞幸 MCP 点单 | `/agent/lkcoffee/*` | 远程 MCP + My Coffee Skill SSE 点单（仅 demo2） |
 
 启动后访问 `http://localhost:{port}/` 可使用内置 Web 测试页面。
 
@@ -42,6 +43,8 @@ Spring AI 学习与实验仓库，包含两个独立子项目：基于 **Spring 
 |------|------|--------|
 | `DEEPSEEK_API_KEY` | DeepSeek 聊天 API Key | 空（必填） |
 | `ZHIPUAI_API_KEY` | 智谱 Embedding API Key | 空（必填） |
+| `LKCOFFEE_TOKEN` | 瑞幸 MCP Bearer Token（demo2 ☕ Tab） | 空（可选） |
+| `AMAP_API_KEY` | 高德 MCP Key（demo2 地址解析） | 空（可选） |
 | `DB_PASSWORD` | MySQL 密码 | `123456` |
 
 ### MySQL 初始化

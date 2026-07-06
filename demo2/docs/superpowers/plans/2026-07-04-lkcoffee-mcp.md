@@ -1,6 +1,6 @@
 # 瑞幸 MCP 点单 · SSE 对话 Implementation Plan
 
-> **Status:** ✅ 已提交（2026-07-04，`74fc611`）— Task 1–7 完成，`mvn test` 通过，应用可启动；完整点单联调需配置 `LKCOFFEE_TOKEN` + `AMAP_API_KEY`。
+> **Status:** ✅ 已完成（2026-07-06）— Task 1–8 完成；`LkCoffeeSkillLoaderTest` / `LkCoffeeAgentServiceTest` 通过；完整点单联调需配置 `LKCOFFEE_TOKEN` + `AMAP_API_KEY`。归档见 [archive/2026-07-06-lkcoffee-mcp.md](../archive/2026-07-06-lkcoffee-mcp.md)。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -997,3 +997,6 @@ git commit -m "fix(demo2): align amap geocode tool names from MCP listTools"
 |------|------|
 | 2026-07-04 | 初稿：8 Task 实现计划 |
 | 2026-07-04 | **实施完成**：Task 1–7 代码落地；联调修复 lazy MCP 工具加载；`mvn compile` / `mvn test` 通过；应用可启动，远程 MCP 需 Token/Key |
+| 2026-07-05 | `77c5f18`：Token 改为 `LkCoffeeTokenResolver`（移除 ThreadLocal / 前端 Token 输入）；`McpClientLifecycle` 延迟初始化远程 MCP；地理编码解析增强 |
+| 2026-07-05 | `16acbdf`：`LkCoffeeMcpLoggingHttpClient` 响应体调试日志 |
+| 2026-07-06 | 归档文档：`archive/2026-07-06-lkcoffee-mcp.md` |

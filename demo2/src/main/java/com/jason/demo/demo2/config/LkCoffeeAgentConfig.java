@@ -18,8 +18,6 @@ import org.springframework.util.StringUtils;
 @ConditionalOnProperty(name = "agent.lkcoffee.enabled", havingValue = "true", matchIfMissing = true)
 public class LkCoffeeAgentConfig {
 
-    public static final String ENV_TOKEN_KEY = LkCoffeeTokenResolver.ENV_TOKEN_KEY;
-
     @Value("${agent.lkcoffee.chat.model:deepseek-v4-pro}")
     private String lkCoffeeChatModel;
 

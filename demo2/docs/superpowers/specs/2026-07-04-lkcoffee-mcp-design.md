@@ -2,7 +2,7 @@
 
 **日期**: 2026-07-04  
 **项目**: spring-ai-demo / demo2  
-**状态**: 待实现
+**状态**: 已实现（2026-07-06）
 
 ---
 
@@ -451,3 +451,4 @@ SSE 超时：5 分钟（与 `tool-reasoning` 一致）。
 | 2026-07-04 | 地理编码由自写 GeocodingTool 改为高德官方 MCP + ToolFilter |
 | 2026-07-04 | 模型定为 `deepseek-v4-pro`，补充 reasoning_content 风险说明 |
 | 2026-07-04 | 引入官方 My Coffee Skill v0.8.2：内嵌 SKILL.md 为 System Prompt；追加项目覆盖规则（强制确认下单、Token/定位适配）；不用 SkillsTool |
+| 2026-07-06 | 归档：初版落地 + Token/地理编码/MCP 生命周期/HTTP 调试日志等后续迭代；详见 [archive/2026-07-06-lkcoffee-mcp.md](../archive/2026-07-06-lkcoffee-mcp.md) |
