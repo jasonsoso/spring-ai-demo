@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/css/components.css">
     <link rel="stylesheet" href="/css/markdown.css">
     <link rel="stylesheet" href="/css/tabs/chat.css">
+    <link rel="stylesheet" href="/css/tabs/voice-chat.css">
     <link rel="stylesheet" href="/css/tabs/embedding.css">
     <link rel="stylesheet" href="/css/tabs/rag.css">
     <link rel="stylesheet" href="/css/tabs/ecommerce.css">
@@ -27,6 +28,7 @@
     <!-- Tab 导航 -->
     <div class="tab-nav">
         <button class="tab-btn active" data-tab="chat" onclick="switchTab('chat')">💬 AI 聊天（DeepSeek）</button>
+        <button class="tab-btn" data-tab="voice-chat" onclick="switchTab('voice-chat')">🎙️ 语音对话（ElevenLabs）</button>
         <button class="tab-btn" data-tab="embedding" onclick="switchTab('embedding')">🔢 Embedding 向量化（智普AI）</button>
         <button class="tab-btn" data-tab="rag" onclick="switchTab('rag')">📖 RAG 基础版</button>
         <button class="tab-btn" data-tab="rag-opt" onclick="switchTab('rag-opt')">🚀 RAG 优化版 (Milvus)</button>
@@ -63,6 +65,36 @@
             <form class="chat-input-form" id="chatForm">
                 <input type="text" id="messageInput" placeholder="输入您的问题..." autocomplete="off" required>
                 <button type="submit" id="sendButton" class="btn btn-primary">发送</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========== 语音对话 Tab ========== -->
+    <div id="tab-voice-chat" class="tab-content">
+        <div class="voice-chat-header">
+            <h1>语音对话助手</h1>
+            <p>ElevenLabs Scribe 语音识别 + DeepSeek 流式对话 + ElevenLabs TTS 朗读</p>
+        </div>
+        <div class="voice-chat-toolbar">
+            <label>音色
+                <select id="voiceIdSelect">
+                    <option value="CwhRBWXzGAHq8TQ4Fs17">加载中…</option>
+                </select>
+            </label>
+            <label><input type="checkbox" id="voiceAutoSpeak" checked> 自动朗读</label>
+            <span class="voice-status" id="voiceStatus">待机</span>
+        </div>
+        <div class="voice-chat-messages chat-messages" id="voiceChatMessages">
+            <div id="voiceChatWelcome" class="welcome-message">
+                <h2>欢迎使用语音对话！</h2>
+                <p>按住 🎤 说话，松手后自动识别并发送；也可直接输入文字。需配置 <code>ELEVENLABS_API_KEY</code>。</p>
+            </div>
+        </div>
+        <div class="voice-chat-input-container">
+            <form class="voice-chat-input-form" id="voiceChatForm">
+                <button type="button" id="voiceMicBtn" class="voice-mic-btn" title="按住说话">🎤</button>
+                <input type="text" id="voiceMessageInput" placeholder="输入文字，或按住麦克风说话…" autocomplete="off">
+                <button type="submit" id="voiceSendButton" class="btn btn-primary">发送</button>
             </form>
         </div>
     </div>
@@ -1177,6 +1209,7 @@
 <script src="/js/core/markdown.js"></script>
 <script src="/js/core/tabs.js"></script>
 <script src="/js/tabs/chat.js"></script>
+<script src="/js/tabs/voice-chat.js"></script>
 <script src="/js/tabs/embedding.js"></script>
 <script src="/js/tabs/rag.js"></script>
 <script src="/js/tabs/ecommerce.js"></script>

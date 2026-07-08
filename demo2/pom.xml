@@ -77,6 +77,13 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-deepseek</artifactId>
         </dependency>
+
+        <!-- ElevenLabs TTS（语音对话 Tab） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-elevenlabs</artifactId>
+        </dependency>
+
         <!-- 智谱 Embedding：Spring AI 2.0 已移除 zhipuai 模块，通过 OpenAI 兼容 API 接入 -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
