@@ -4,6 +4,7 @@
 **项目**: spring-ai-demo / demo2  
 **状态**: 已实现  
 **实现计划**: [docs/superpowers/plans/2026-07-07-elevenlabs-voice-chat.md](../plans/2026-07-07-elevenlabs-voice-chat.md)  
+**归档**: [docs/superpowers/archive/2026-07-08-elevenlabs-voice-chat.md](../archive/2026-07-08-elevenlabs-voice-chat.md)  
 **原文**: [Spring AI 2.0 系列教程（十四）——用 ElevenLabs 打造高质量语音](https://mp.weixin.qq.com/s/wW900pqfY3uArU0guyj1pg)  
 **ElevenLabs STT**: [转录（STT）API](https://elevenlabs.io/zh/speech-to-text-api) · [Create transcript API](https://elevenlabs.io/docs/api-reference/speech-to-text/convert)
 

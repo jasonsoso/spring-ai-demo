@@ -167,3 +167,5 @@ cd d:\ai\spring-ai-demo\demo2
 ```
 
 打开 `http://localhost:8081` → **🎙️ 语音对话（ElevenLabs）**
+
+**归档**: [docs/superpowers/archive/2026-07-08-elevenlabs-voice-chat.md](../archive/2026-07-08-elevenlabs-voice-chat.md)

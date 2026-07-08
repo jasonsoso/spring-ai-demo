@@ -2,7 +2,7 @@
 
 > demo2 是 demo 的并行副本，默认端口 **8081**，用于后续 Spring AI 2 升级实验。可与 demo（8080）同时运行。
 
-基于 **Spring Boot 4.1 + Spring AI 2.0** 的综合 AI 能力演示项目，覆盖聊天对话、结构化输出、RAG 知识检索、Agent 工具调用、AskUserQuestion 人机澄清、TodoWrite 任务规划、Agent Skills、**Subagent 子代理编排**、**A2A 跨系统对话**、多 Agent 协作、MCP 协议集成、**瑞幸 MCP 点单**、**Micrometer + OpenTelemetry 可观测性**等核心场景，配套完整前端演示界面。
+基于 **Spring Boot 4.1 + Spring AI 2.0** 的综合 AI 能力演示项目，覆盖聊天对话、结构化输出、RAG 知识检索、Agent 工具调用、AskUserQuestion 人机澄清、TodoWrite 任务规划、Agent Skills、**Subagent 子代理编排**、**A2A 跨系统对话**、多 Agent 协作、MCP 协议集成、**瑞幸 MCP 点单**、**ElevenLabs 语音对话**、**Micrometer + OpenTelemetry 可观测性**等核心场景，配套完整前端演示界面。
 
 ---
 
@@ -27,7 +27,7 @@
 
 本项目是一个 Spring AI 功能演示应用，通过不同 Controller/Service 模块独立演示各类 AI 能力，适合学习 Spring AI 各组件的用法。
 
-**`controller` 包共 18 个 Controller**（另含 `mcp.client.controller.McpChatController`），与下表一一对应；功能模块章节按相同顺序归档。
+**`controller` 包共 19 个 Controller**（另含 `mcp.client.controller.McpChatController`），与下表一一对应；功能模块章节按相同顺序归档。
 
 ### Controller 一览
 
@@ -51,6 +51,7 @@
 | `SubagentAgentController` | `controller` | `/agent/subagent` | Subagent Orchestration（TaskTool） |
 | `A2aOrchestratorController` | `controller` | `/agent/a2a` | A2A 协调器（TaskTool + 远程 Agent） |
 | `LkCoffeeAgentController` | `controller` | `/agent/lkcoffee` | 瑞幸 MCP + My Coffee Skill SSE 点单 |
+| `VoiceApiController` | `controller` | `/api` | ElevenLabs TTS/STT + 语音对话 SSE |
 | `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
 
 | 模块 | 能力 | 依赖外部服务 |
@@ -73,6 +74,7 @@
 | 多 Agent 协作 | Supervisor-Worker（行程/天气/预算并行） | DeepSeek API |
 | MCP | MCP Server/Client 工具注册与调用 | DeepSeek API |
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
+| **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -89,6 +91,7 @@
 | A2A 子代理客户端 | spring-ai-agent-utils-a2a | 0.10.0 |
 | A2A Server | spring-ai-a2a-server-autoconfigure | 0.3.0 |
 | 聊天模型 | DeepSeek | deepseek-v4-pro |
+| TTS 模型 | ElevenLabs | eleven_multilingual_v2（`spring-ai-starter-model-elevenlabs`） |
 | Embedding 模型 | 智谱 AI | embedding-2（1024 维） |
 | 向量数据库 | Milvus | 2.6.18 |
 | 持久化记忆 | MySQL | 8.x |
@@ -290,6 +293,50 @@ agent.lkcoffee.skill=classpath:/.claude/skills/my-coffee/SKILL.md
 **前端 Tab**：**☕ 瑞幸 MCP 点单**（浏览器定位 / 地址解析 + 聊天气泡 + 价格卡片 + 支付二维码）。推荐验证：定位 → 查附近门店 → 选品预览 → 确认下单 → 扫码支付。
 
 Spec: `docs/superpowers/specs/2026-07-04-lkcoffee-mcp-design.md` · Plan: `docs/superpowers/plans/2026-07-04-lkcoffee-mcp.md` · **归档**: `docs/superpowers/archive/2026-07-06-lkcoffee-mcp.md`
+
+### 10.2 ElevenLabs 语音对话（`/api`）
+
+落地 [Spring AI 2.0 系列教程（十四）——用 ElevenLabs 打造高质量语音](https://mp.weixin.qq.com/s/wW900pqfY3uArU0guyj1pg)，并扩展为完整语音对话 Demo：**按住录音 → Scribe STT → DeepSeek 流式回复 → 分句 TTS 边播**。
+
+| 端点 | 说明 |
+|------|------|
+| `POST /api/stt/transcribe` | multipart 上传录音，ElevenLabs Scribe v2 转写 |
+| `POST /api/voice-chat/stream` | SSE 流式对话 + 分句 TTS，Body：`{ "message", "voiceId?", "autoSpeak?" }` |
+| `POST /api/tts/speak` | 文本转 MP3（文章 curl 场景） |
+| `GET /api/voices` | 所有可用语音（及 `/settings/default`、`/{voiceId}`、`/{voiceId}/settings`） |
+
+**SSE 事件**：`RUNNING` / `USER_TEXT` / `TOKEN` / `AUDIO_CHUNK` / `COMPLETED` / `FAILED`
+
+**核心类**：
+
+| 类 | 职责 |
+|----|------|
+| `VoiceApiController` | TTS / Voices / STT / 语音对话 SSE |
+| `ElevenLabsTranscriptionService` | RestClient 调 Scribe v2（非 Spring AI Starter） |
+| `VoiceChatService` | ChatClient 流式 + `SentenceBuffer` 分句 TTS |
+| `ElevenLabsHttpClientConfig` | RestClient 改用 JDK HTTP，读超时 120s（避免 Netty 超时） |
+
+**配置要点**：
+
+```properties
+spring.ai.model.audio.speech=elevenlabs
+spring.ai.elevenlabs.api-key=${ELEVENLABS_API_KEY:}
+spring.ai.elevenlabs.tts.voice-id=CwhRBWXzGAHq8TQ4Fs17
+agent.voice-chat.stt.model-id=scribe_v2
+agent.voice-chat.stt.language-code=zh
+```
+
+**环境变量**：
+
+| 变量 | 说明 |
+|------|------|
+| `ELEVENLABS_API_KEY` | ElevenLabs TTS + STT 共用（[获取 API Key](https://elevenlabs.io/app/developers/api-keys)） |
+
+**与「💬 AI 聊天」Tab 的关系**：完全独立——无 ChatMemory，单次问答；语音 Tab 含录音、音色选择与自动朗读。
+
+**前端 Tab**：**🎙️ 语音对话（ElevenLabs）**（按住 🎤 说话 / 文字输入 / 音色下拉 / 自动朗读开关）。推荐验证：录音中文 → 识别 → 流式 Markdown → 边播；切换音色；关闭自动朗读。
+
+Spec: `docs/superpowers/specs/2026-07-07-elevenlabs-voice-chat-design.md` · Plan: `docs/superpowers/plans/2026-07-07-elevenlabs-voice-chat.md` · **归档**: `docs/superpowers/archive/2026-07-08-elevenlabs-voice-chat.md`
 
 ### 11. AskUserQuestion 技术选型（`/agent/ask-user`）
 
@@ -652,6 +699,7 @@ mvn spring-boot:run
 | 🌐 A2A 跨系统对话 | TaskTool + A2A 天气专家 |
 | 🗂️ Session 事件溯源记忆 | Event Store + SSE 多轮对话 + 事件侧栏 |
 | ☕ 瑞幸 MCP 点单 | My Coffee Skill + 瑞幸/高德 MCP SSE 点单 |
+| 🎙️ 语音对话（ElevenLabs） | 按住录音 STT + 流式对话 + 分句 TTS 边播 |
 | 🔌 MCP Client 聊天 | 本地 MCP Server（天气/景点） |
 | 其他 Tab | Embedding、RAG、Agent 记忆、工具推理捕获、Skills 等 |
 
@@ -684,6 +732,7 @@ static/
 │       ├── tool-reasoning.css
 │       ├── mcp.css
 │       ├── lkcoffee.css    # 瑞幸 MCP 点单
+│       ├── voice-chat.css  # ElevenLabs 语音对话
 │       └── multi-agent.css
 └── js/
     ├── core/
@@ -703,6 +752,7 @@ static/
         ├── tool-reasoning.js
         ├── mcp.js
         ├── lkcoffee.js     # 瑞幸 MCP 点单 SSE 对话
+        ├── voice-chat.js   # ElevenLabs 录音 / STT / SSE / 音频队列
         ├── multi-agent.js
         ├── ask-user.js
         ├── todo-write.js
@@ -788,6 +838,16 @@ spring.ai.mcp.client.streamable-http.connections.amap.endpoint=/mcp?key=${AMAP_A
 agent.lkcoffee.chat.model=deepseek-v4-pro
 agent.lkcoffee.skill=classpath:/.claude/skills/my-coffee/SKILL.md
 agent.lkcoffee.enabled=true   # 测试环境可设为 false
+
+# ===== ElevenLabs 语音对话（TTS + STT 共用 API Key）=====
+spring.ai.model.audio.speech=elevenlabs
+spring.ai.elevenlabs.api-key=${ELEVENLABS_API_KEY:}
+spring.ai.elevenlabs.tts.model-id=eleven_multilingual_v2
+spring.ai.elevenlabs.tts.output-format=mp3_44100_128
+spring.ai.elevenlabs.tts.voice-id=CwhRBWXzGAHq8TQ4Fs17
+agent.voice-chat.stt.model-id=scribe_v2
+agent.voice-chat.stt.language-code=zh
+agent.voice-chat.tts.sentence-max-chars=40
 
 # ===== Agent Skills =====
 agent.skills.dirs=file:C:/Users/<you>/.cursor/skills,classpath:/.claude/skills
@@ -995,6 +1055,18 @@ flowchart LR
 | DELETE | `/agent/lkcoffee/clear` | 清除瑞幸点单会话记忆，参数：`sessionId` |
 | GET | `/agent/lkcoffee/tools` | 瑞幸 Tab 可用 MCP 工具列表 |
 | GET | `/agent/lkcoffee/geocode` | 地址转经纬度，参数：`address`，可选 `city` |
+
+### ElevenLabs 语音（`/api`）
+
+| Method | Path | 说明 |
+|--------|------|------|
+| POST | `/api/stt/transcribe` | 上传录音转文字（multipart，`file` + 可选 `languageCode`） |
+| POST | `/api/voice-chat/stream` | 语音对话 SSE，Body：`{"message","voiceId?","autoSpeak?"}` |
+| POST | `/api/tts/speak` | 文本转 MP3，Body：`TextToSpeechRequest` |
+| GET | `/api/voices` | 列出所有 ElevenLabs 语音 |
+| GET | `/api/voices/settings/default` | 默认语音设置 |
+| GET | `/api/voices/{voiceId}` | 语音详情 |
+| GET | `/api/voices/{voiceId}/settings` | 语音推荐参数 |
 
 ### MCP
 
@@ -1834,6 +1906,8 @@ demo2/
 │   │   ├── AutoMemoryAgentConfig.java # AutoMemoryTools + JDBC 短期记忆
 │   │   ├── SessionMemoryAgentConfig.java # SessionMemoryAdvisor + SessionEventTools
 │   │   ├── LkCoffeeAgentConfig.java      # 瑞幸点单 ChatMemory + 模型配置
+│   │   ├── ElevenLabsVoiceConfig.java    # ElevenLabs 语音对话配置属性
+│   │   ├── ElevenLabsHttpClientConfig.java # RestClient JDK HTTP + 读超时 120s
 │   │   ├── OpenApiConfig.java        # Swagger/OpenAPI 配置
 │   │   ├── RAGConfig.java            # RAG Advisor + 电商 ChatClient
 │   │   ├── SkillsAgentConfig.java    # SkillsTool + 文件/Shell 工具 Bean
@@ -1866,6 +1940,7 @@ demo2/
 │   │   ├── SubagentAgentController.java # Subagent 编排
 │   │   ├── A2aOrchestratorController.java # A2A 协调器
 │   │   ├── LkCoffeeAgentController.java   # 瑞幸 MCP SSE 点单
+│   │   ├── VoiceApiController.java        # ElevenLabs TTS/STT + 语音对话 SSE
 │   │   ├── MultiAgentController.java
 │   │   └── IndexController.java        # GET / → forward:/index.html
 │   ├── mcp/
@@ -1889,7 +1964,11 @@ demo2/
 │   │   ├── SessionMemoryChatRequest.java
 │   │   ├── SessionMemorySseEvent.java
 │   │   ├── LkCoffeeChatRequest.java
-│   │   └── LkCoffeeSseEvent.java
+│   │   ├── LkCoffeeSseEvent.java
+│   │   ├── TextToSpeechRequest.java
+│   │   ├── SttTranscribeResponse.java
+│   │   ├── VoiceChatRequest.java
+│   │   └── VoiceChatSseEvent.java
 │   ├── service/
 │   │   ├── TripPlanningAgentService.java
 │   │   ├── MemoryTripAgentService.java
@@ -1897,6 +1976,8 @@ demo2/
 │   │   ├── AutoMemoryTripAgentService.java
 │   │   ├── SessionMemoryTripAgentService.java
 │   │   ├── LkCoffeeAgentService.java       # 瑞幸 MCP SSE 点单
+│   │   ├── ElevenLabsTranscriptionService.java # Scribe STT
+│   │   ├── VoiceChatService.java           # 流式对话 + 分句 TTS
 │   │   ├── LkCoffeeSkillLoader.java      # My Coffee Skill 加载
 │   │   ├── ToolTripAgentService.java
 │   │   ├── MultiAgentService.java        # Supervisor-Worker 编排（5 次 LLM）
@@ -1953,7 +2034,8 @@ demo2/
 │   │   ├── 2026-06-30-index-html-refactor-design.md
 │   │   ├── 2026-07-01-session-memory-design.md
 │   │   ├── 2026-07-02-tool-reasoning-design.md
-│   │   └── 2026-07-04-lkcoffee-mcp-design.md
+│   │   ├── 2026-07-04-lkcoffee-mcp-design.md
+│   │   └── 2026-07-07-elevenlabs-voice-chat-design.md
 │   ├── plans/
 │   │   ├── 2026-06-27-ask-user-question-tool.md
 │   │   ├── 2026-06-29-todo-write-tool.md
@@ -1962,9 +2044,11 @@ demo2/
 │   │   ├── 2026-06-30-index-html-refactor.md
 │   │   ├── 2026-07-01-session-memory.md
 │   │   ├── 2026-07-02-tool-reasoning.md
-│   │   └── 2026-07-04-lkcoffee-mcp.md
+│   │   ├── 2026-07-04-lkcoffee-mcp.md
+│   │   └── 2026-07-07-elevenlabs-voice-chat.md
 │   └── archive/
-│       └── 2026-07-06-lkcoffee-mcp.md   # 瑞幸点单功能归档
+│       ├── 2026-07-06-lkcoffee-mcp.md        # 瑞幸点单功能归档
+│       └── 2026-07-08-elevenlabs-voice-chat.md # ElevenLabs 语音对话归档
 └── pom.xml
 ```
 
@@ -2026,6 +2110,13 @@ MCP Client 连接本机 MCP Server（`http://localhost:8081/mcp`，Streamable HT
 4. 多轮 ToolCall 若中断，可将 `agent.lkcoffee.chat.model` 降级为 `deepseek-chat`
 5. 详见 `docs/superpowers/archive/2026-07-06-lkcoffee-mcp.md`
 
+**Q：语音 Tab 报 HTTP 500 / 识别失败？**
+
+1. 确认已设置 `ELEVENLABS_API_KEY` 并**重启应用**
+2. 日志若出现 `reactor.netty...ReadTimeoutException`，说明旧进程未加载 `ElevenLabsHttpClientConfig`；重启后 STT 改用 JDK HTTP + 120s 读超时
+3. 免费套餐部分 library voice 可能 402，默认音色已改为 Roger（`CwhRBWXzGAHq8TQ4Fs17`）
+4. 详见 `docs/superpowers/archive/2026-07-08-elevenlabs-voice-chat.md`
+
 **Q：AskUserQuestion Demo 没有收到澄清问题？**
 
 确认已配置 `DEEPSEEK_API_KEY`，且前端在 `POST /chat` 后及时建立 `EventSource` 连接。Agent 仅在需求模糊时才会调用 `AskUserQuestionTool`；可尝试输入「帮我选一个数据库」等开放式问题。SSE 连接超时为 5 分钟。
@@ -2069,6 +2160,7 @@ MCP Client 连接本机 MCP Server（`http://localhost:8081/mcp`，Streamable HT
 - `TaskTool` + `spring-ai-agent-utils-a2a`：Subagent 本地编排与 A2A 远程子代理委派（`architect`/`builder`、内嵌 Weather Agent）
 - **spring-ai-session 0.2.0**：`SessionMemoryAdvisor` + JDBC Event Store（`AI_SESSION` / `AI_SESSION_EVENT`），见 §8.2 与 `docs/superpowers/specs/2026-07-01-session-memory-design.md`
 - **瑞幸 MCP 点单**：Streamable HTTP 双远程 MCP（瑞幸 + 高德）+ 官方 My Coffee Skill 内嵌 System Prompt，见 §10.1 与 `docs/superpowers/archive/2026-07-06-lkcoffee-mcp.md`
+- **ElevenLabs 语音对话**：TTS（`spring-ai-starter-model-elevenlabs`）+ 自封装 Scribe STT + 分句流式朗读，见 §10.2 与 `docs/superpowers/archive/2026-07-08-elevenlabs-voice-chat.md`
 - **Micrometer + OpenTelemetry**：Boot 4 内置，通过 `spring-boot-starter-opentelemetry` 接入；Spring AI 自动暴露 `gen_ai.*` 指标
 
 详细设计见 `docs/superpowers/specs/` 目录。
