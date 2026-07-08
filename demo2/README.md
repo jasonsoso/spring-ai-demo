@@ -298,6 +298,16 @@ Spec: `docs/superpowers/specs/2026-07-04-lkcoffee-mcp-design.md` · Plan: `docs/
 
 落地 [Spring AI 2.0 系列教程（十四）——用 ElevenLabs 打造高质量语音](https://mp.weixin.qq.com/s/wW900pqfY3uArU0guyj1pg)，并扩展为完整语音对话 Demo：**按住录音 → Scribe STT → DeepSeek 流式回复 → 分句 TTS 边播**。
 
+**三层架构**：**展示层**（录音 / 气泡 / 音频队列）→ **编排层**（`VoiceChatService` 流式对话 + `SentenceBuffer` 分句）→ **能力层**（ElevenLabs Scribe STT + DeepSeek LLM + ElevenLabs TTS）。详细流程见 [§19–21 功能设计图](#19-elevenlabs-语音对话--三层架构)。
+
+```mermaid
+flowchart LR
+    MIC[按住录音\nMediaRecorder] --> STT[POST /api/stt/transcribe\nScribe v2]
+    STT --> CHAT[POST /api/voice-chat/stream\nDeepSeek SSE]
+    CHAT --> TTS[分句 TTS\nElevenLabs MP3]
+    TTS --> PLAY[前端音频队列\n边收边播]
+```
+
 | 端点 | 说明 |
 |------|------|
 | `POST /api/stt/transcribe` | multipart 上传录音，ElevenLabs Scribe v2 转写 |
@@ -1888,6 +1898,169 @@ flowchart TD
 ```
 
 > **与 §9「MCP Server/Client」的区别**：§9 演示本机 MCP Server（天气/景点，`local-server`）；§16–18 演示 **远程 Streamable HTTP** 双 MCP（瑞幸 + 高德），System Prompt 内嵌官方 My Coffee Skill，不走 `SkillsTool` 语义匹配。
+
+### 19. ElevenLabs 语音对话 — 三层架构
+
+与 §10.2 及 `docs/superpowers/specs/2026-07-07-elevenlabs-voice-chat-design.md` 对齐：**展示层**（录音 + 聊天气泡 + 音频播放）→ **编排层**（STT 转写 + 流式对话 + 分句 TTS）→ **能力层**（ElevenLabs Scribe + DeepSeek + ElevenLabs TTS）。
+
+```mermaid
+flowchart TB
+    subgraph 展示层["前端 Tab「🎙️ 语音对话（ElevenLabs）」"]
+        MIC[按住 🎤 录音\nMediaRecorder webm]
+        TEXT_IN[文字输入框]
+        VOICE_SEL[音色下拉\nGET /api/voices]
+        BUBBLE[用户/助手气泡\nMarkdown 流式渲染]
+        QUEUE[Audio 队列\n顺序播放 MP3]
+        MIC --> UI[voice-chat.js]
+        TEXT_IN --> UI
+        VOICE_SEL --> UI
+        UI --> BUBBLE
+        UI --> QUEUE
+    end
+
+    subgraph 编排层["Spring Boot demo2 — 语音对话编排"]
+        CTRL[VoiceApiController]
+        STT_SVC[ElevenLabsTranscriptionService\nRestClient multipart]
+        VCHAT[VoiceChatService]
+        BUF[SentenceBuffer\n句末标点或 ≥40 字分句]
+        CC[ChatClient.stream\nDeepSeek]
+        TTS_BEAN["@Qualifier elevenLabsSpeechModel\nElevenLabsTextToSpeechModel"]
+        HTTP[ElevenLabsHttpClientConfig\nJDK HTTP 读超时 120s]
+
+        UI -->|松手 multipart| CTRL
+        UI -->|文字/SSE| CTRL
+        CTRL --> STT_SVC
+        CTRL --> VCHAT
+        VCHAT --> CC
+        VCHAT --> BUF
+        BUF --> TTS_BEAN
+        HTTP -.-> STT_SVC
+        HTTP -.-> TTS_BEAN
+    end
+
+    subgraph 能力层["外部 API"]
+        SCRIBE[ElevenLabs Scribe v2\nPOST /v1/speech-to-text]
+        DS[DeepSeek Chat API]
+        EL_TTS[ElevenLabs TTS\nmp3_44100_128]
+
+        STT_SVC --> SCRIBE
+        CC --> DS
+        TTS_BEAN --> EL_TTS
+    end
+
+    SCRIBE -->|text| VCHAT
+    DS -->|token 流| VCHAT
+    EL_TTS -->|AUDIO_CHUNK Base64| QUEUE
+```
+
+### 20. ElevenLabs 语音对话 — 语音输入与流式对话时序
+
+典型路径：**按住说话** → STT → 自动发起 SSE 对话（也可跳过 STT 直接文字发送）。
+
+```mermaid
+sequenceDiagram
+    participant 用户
+    participant 前端 as voice-chat.js
+    participant Ctrl as VoiceApiController
+    participant STT as ElevenLabsTranscriptionService
+    participant Svc as VoiceChatService
+    participant DS as DeepSeek
+    participant EL as ElevenLabs TTS
+
+    rect rgb(240, 248, 255)
+        Note over 用户,EL: 路径 A — 语音输入（按住录音）
+        用户->>前端: mousedown 按住 🎤
+        前端->>前端: MediaRecorder.start(200ms 分片)
+        用户->>前端: mouseup 松手
+        前端->>前端: 合并 webm Blob
+
+        前端->>Ctrl: POST /api/stt/transcribe (multipart file)
+        Ctrl->>STT: transcribe(file)
+        STT->>EL: POST /v1/speech-to-text (Scribe v2)
+        EL-->>STT: { text, language }
+        STT-->>Ctrl: SttTranscribeResponse
+        Ctrl-->>前端: 200 { text }
+
+        前端->>前端: 展示用户气泡
+    end
+
+    rect rgb(255, 248, 240)
+        Note over 用户,EL: 路径 B — 流式对话 + 分句朗读（语音/文字共用）
+        前端->>Ctrl: POST /api/voice-chat/stream\n{ message, voiceId, autoSpeak }
+        Ctrl->>Svc: streamChat(...)
+        Svc-->>前端: SSE RUNNING
+        Svc-->>前端: SSE USER_TEXT
+
+        loop LLM 流式 token
+            Svc->>DS: ChatClient.stream()
+            DS-->>Svc: token chunk
+            Svc-->>前端: SSE TOKEN
+            opt autoSpeak 且分句就绪
+                Svc->>EL: textToSpeech(sentence)
+                EL-->>Svc: MP3 bytes
+                Svc-->>前端: SSE AUDIO_CHUNK (Base64)
+                前端->>前端: 入队顺序播放
+            end
+        end
+
+        Svc-->>前端: SSE COMPLETED
+    end
+
+    Note over 用户,EL: 路径 C — 纯文字：跳过 STT，直接从 POST /voice-chat/stream 开始
+```
+
+### 21. ElevenLabs 语音对话 — 分句 TTS 缓冲与 SSE 事件
+
+`VoiceChatService.SentenceBuffer` 将 LLM token 缓冲至句末标点（`。！？；!?\\n`）或长度 ≥ `agent.voice-chat.tts.sentence-max-chars`（默认 40）后触发 TTS；单句失败仅 WARN 跳过，不中断文字流。
+
+```mermaid
+flowchart TD
+    START([用户消息就绪\n来自 STT 或文字输入]) --> STREAM[POST /api/voice-chat/stream]
+    STREAM --> RUN[SSE RUNNING]
+    RUN --> ECHO[SSE USER_TEXT 回显]
+
+    ECHO --> LOOP{ChatClient 流式 token}
+
+    LOOP --> APPEND[追加 SentenceBuffer\n同时推送 SSE TOKEN]
+    APPEND --> CHECK{句末标点\n或 ≥40 字?}
+
+    CHECK -->|否| LOOP
+    CHECK -->|是| SPEAK{autoSpeak?}
+
+    SPEAK -->|false| LOOP
+    SPEAK -->|true| TTS[ElevenLabsTextToSpeechModel.call]
+    TTS -->|成功| CHUNK[SSE AUDIO_CHUNK\nBase64 MP3]
+    TTS -->|失败| SKIP[WARN 跳过该句\n文字继续]
+    CHUNK --> LOOP
+    SKIP --> LOOP
+
+    LOOP -->|流结束| FLUSH[冲刷 buffer 剩余文本]
+    FLUSH --> DONE[SSE COMPLETED]
+
+    subgraph SSE事件类型["VoiceChatSseEvent 类型"]
+        direction TB
+        V1[RUNNING — 本轮开始]
+        V2[USER_TEXT — 回显用户消息]
+        V3[TOKEN — LLM 文本片段]
+        V4[AUDIO_CHUNK — 一句 TTS MP3]
+        V5[COMPLETED — 本轮结束]
+        V6[FAILED — LLM/STT/未配置 Key]
+    end
+
+    RUN -.-> V1
+    ECHO -.-> V2
+    CHUNK -.-> V4
+    DONE -.-> V5
+
+    subgraph STT错误["STT 独立端点错误码"]
+        direction TB
+        S1[400 — 空录音]
+        S2[502 — ElevenLabs 失败/网络超时]
+        S3[503 — 未配置 ELEVENLABS_API_KEY]
+    end
+```
+
+> **与 §1「AI 聊天」的区别**：§1 仅文字 SSE/MVC，无 TTS/STT；§19–21 为独立 Tab，无 ChatMemory，TTS 按句分段推送 `AUDIO_CHUNK` 而非等全文生成后再朗读。
 
 ---
 
