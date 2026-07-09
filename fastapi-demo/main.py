@@ -6,6 +6,7 @@ from demos import (
     auth,
     basic,
     errors,
+    middleware,
     mysql_users,
     params,
     request_body,
@@ -17,6 +18,9 @@ app = FastAPI(title="我的第一个FastAPI应用", version="1.0.0")
 
 # 全局异常处理（对所有路由生效）
 register_exception_handlers(app)
+
+# HTTP 中间件：请求耗时日志 + X-Process-Time 响应头
+middleware.register_middleware(app)
 
 # 挂载各 demo 模块；新增 demo 时在此 include_router 即可
 app.include_router(basic.router)

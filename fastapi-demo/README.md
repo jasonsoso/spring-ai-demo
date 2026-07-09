@@ -2,7 +2,7 @@
 
 基于 **FastAPI + Uvicorn** 的综合入门示例。按主题拆分为独立 demo 模块，通过 `main.py` 统一挂载，**一条命令启动全部接口**。
 
-覆盖：路由、参数校验、请求体、依赖注入、同步/异步、统一响应、全局异常、MySQL 异步查询。
+覆盖：路由、参数校验、请求体、依赖注入、同步/异步、统一响应、全局异常、HTTP 中间件、MySQL 异步查询。
 
 ---
 
@@ -97,6 +97,7 @@ fastapi-demo/
 │   ├── async_io.py         # 同步 / 异步
 │   ├── response_format.py  # 统一响应格式
 │   ├── errors.py           # 异常处理验证
+│   ├── middleware.py       # HTTP 中间件（请求耗时）
 │   └── mysql_users.py      # MySQL 异步查询
 ├── schema/
 │   └── users.sql
@@ -170,6 +171,13 @@ flowchart TB
 |------|------|------|
 | GET | `/demo/errors/http` | 触发 HTTPException → 统一错误体 |
 | GET | `/demo/errors/internal` | 触发 500 → 统一错误体 |
+
+### HTTP 中间件 · `demos/middleware.py`
+
+在 `main.py` 中通过 `middleware.register_middleware(app)` 注册，对所有请求生效：
+
+- 控制台打印请求方法、路径与耗时
+- 响应头写入 `X-Process-Time`
 
 ### MySQL 用户查询 · `demos/mysql_users.py`
 
