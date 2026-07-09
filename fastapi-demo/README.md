@@ -1,6 +1,8 @@
 # FastAPI Demo
 
-基于 **FastAPI + Uvicorn** 的综合入门示例，覆盖路由、参数校验、依赖注入、同步/异步、MySQL 异步查询等场景。各功能按 demo 拆分到独立文件，通过 `main.py` 统一启动。
+基于 **FastAPI + Uvicorn** 的综合入门示例。按主题拆分为独立 demo 模块，通过 `main.py` 统一挂载，**一条命令启动全部接口**。
+
+覆盖：路由、参数校验、请求体、依赖注入、同步/异步、统一响应、全局异常、MySQL 异步查询。
 
 ---
 
@@ -38,28 +40,18 @@ source venv/bin/activate
 ### 2. 安装依赖
 
 ```bash
-pip install fastapi "uvicorn[standard]" "pydantic[email]" sqlalchemy aiomysql
+pip install -r requirements.txt
 ```
 
-### 3. 初始化 MySQL 表（可选，使用 MySQL 查询 demo 时需要）
+### 3. 初始化 MySQL 表（可选，使用 MySQL demo 时需要）
 
 确保本地 MySQL 已启动，并存在数据库 `spring_ai_agent2`，然后执行：
 
 ```bash
-# 方式一：直接执行 SQL 文件
 mysql -u root -p spring_ai_agent2 < schema/users.sql
-
-# 方式二：使用 Python（Windows 无 mysql 命令时）
-python -c "
-import pymysql
-conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='123456', database='spring_ai_agent2', charset='utf8mb4')
-with conn.cursor() as cur:
-    cur.execute(open('schema/users.sql', encoding='utf-8').read())
-conn.commit(); conn.close()
-"
 ```
 
-默认连接参数（见 `mysql_users.py`）：
+默认连接参数（见 `db/mysql.py`）：
 
 | 参数 | 值 |
 |------|-----|
@@ -68,8 +60,6 @@ conn.commit(); conn.close()
 | Database | `spring_ai_agent2` |
 
 ### 4. 启动服务
-
-**一条命令启动全部 demo：**
 
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -81,8 +71,6 @@ Windows 若未激活虚拟环境：
 .\venv\Scripts\uvicorn.exe main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-启动后访问：
-
 | 地址 | 说明 |
 |------|------|
 | http://127.0.0.1:8000/ | 根路径 |
@@ -93,126 +81,157 @@ Windows 若未激活虚拟环境：
 
 ## 项目架构
 
-采用 **APIRouter 分模块 + main.py 统一入口** 的方式，无需每个文件单独启动：
-
+```text
+fastapi-demo/
+├── main.py                 # 薄入口：创建 app、注册异常、挂载 router
+├── common/
+│   ├── response.py         # ApiResponse[T] 统一响应模型
+│   └── exceptions.py       # 全局异常处理注册
+├── db/
+│   └── mysql.py            # MySQL 引擎、会话、User 模型
+├── demos/
+│   ├── basic.py            # 基础路由
+│   ├── params.py           # 路径 / 查询参数
+│   ├── request_body.py     # 请求体校验
+│   ├── auth.py             # 依赖注入 / Token
+│   ├── async_io.py         # 同步 / 异步
+│   ├── response_format.py  # 统一响应格式
+│   ├── errors.py           # 异常处理验证
+│   └── mysql_users.py      # MySQL 异步查询
+├── schema/
+│   └── users.sql
+├── requirements.txt
+├── README.md
+└── .gitignore
 ```
-main.py          ← 唯一入口，创建 FastAPI 实例，挂载各 demo 路由
-mysql_users.py   ← demo 模块，导出 router
-xxx_demo.py      ← 未来新增的 demo，同样导出 router
+
+```mermaid
+flowchart TB
+    main[main.py]
+    main --> exceptions[common.exceptions]
+    main --> demos[demos.*]
+    demos --> response[common.response]
+    demos --> mysql[db.mysql]
 ```
 
-`main.py` 中挂载路由：
+### 如何新增 demo
 
-```python
-from mysql_users import router as mysql_users_router
-
-app = FastAPI(...)
-app.include_router(mysql_users_router, tags=["MySQL 用户查询"])
-```
-
-新增 demo 时，只需：
-1. 新建文件，定义 `router = APIRouter()` 并注册路由
-2. 在 `main.py` 中 `app.include_router(...)` 一行挂载
-
-所有接口会出现在同一个 `/docs` 页面，并可通过 `tags` 分组展示。
+1. 在 `demos/` 新建文件，定义 `router = APIRouter(prefix="/demo/xxx", tags=["主题"])`
+2. 在 `main.py` 中 `app.include_router(xxx.router)`
+3. 重启（或依赖 `--reload`）后，接口会出现在 `/docs` 对应分组
 
 ---
 
 ## API 接口
 
-### 基础路由（main.py）
+### 基础路由 · `demos/basic.py`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/` | 欢迎页 |
-| GET | `/hello/{name}` | 路径参数示例 |
+| GET | `/` | 欢迎页 / 探活 |
+| GET | `/demo/basic/hello/{name}` | 路径参数问候 |
 
-### 参数与请求体（main.py）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/users/{user_id}` | 路径参数 + 类型校验 |
-| GET | `/items` | 查询参数（skip、limit、category） |
-| POST | `/users` | 请求体校验（Pydantic 模型） |
-
-### 依赖注入（main.py）
+### 路径与查询参数 · `demos/params.py`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/protected` | Token 认证，需请求头 `Authorization: Bearer valid-token` |
+| GET | `/demo/params/users/{user_id}` | 路径参数 + 类型校验 |
+| GET | `/demo/params/items` | 查询参数 skip / limit / category |
 
-### 同步 / 异步（main.py）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/sync` | 同步端点 |
-| GET | `/async` | 异步 I/O 模拟（`asyncio.sleep`） |
-| GET | `/mixed` | 异步中调用同步代码（`asyncio.to_thread`） |
-
-### MySQL 用户查询（mysql_users.py）
+### 请求体校验 · `demos/request_body.py`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/users` | 从 MySQL 查询用户列表 |
+| POST | `/demo/body/users` | Pydantic 请求体 / 响应体 |
+
+### 依赖注入 · `demos/auth.py`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/demo/auth/protected` | 需请求头 `Authorization: Bearer valid-token` |
+
+### 同步与异步 · `demos/async_io.py`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/demo/async/sync` | 同步端点 |
+| GET | `/demo/async/async` | 异步 I/O（`asyncio.sleep`） |
+| GET | `/demo/async/mixed` | 异步中调用同步（`asyncio.to_thread`） |
+
+### 统一响应 · `demos/response_format.py`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/demo/response/users/{user_id}` | 返回 `{code, msg, data}`；`user_id<=0` 时 `code=400` |
+
+### 异常处理 · `demos/errors.py`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/demo/errors/http` | 触发 HTTPException → 统一错误体 |
+| GET | `/demo/errors/internal` | 触发 500 → 统一错误体 |
+
+### MySQL 用户查询 · `demos/mysql_users.py`
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/demo/mysql/users` | 从 MySQL 查询用户列表 |
 
 **示例：**
 
 ```bash
 curl http://127.0.0.1:8000/
-curl http://127.0.0.1:8000/hello/Jason
-curl "http://127.0.0.1:8000/items?skip=0&limit=5&category=book"
-curl http://127.0.0.1:8000/users
-curl -H "Authorization: Bearer valid-token" http://127.0.0.1:8000/protected
+curl http://127.0.0.1:8000/demo/basic/hello/Jason
+curl "http://127.0.0.1:8000/demo/params/items?skip=0&limit=5"
+curl http://127.0.0.1:8000/demo/response/users/1
+curl http://127.0.0.1:8000/demo/mysql/users
+curl -H "Authorization: Bearer valid-token" http://127.0.0.1:8000/demo/auth/protected
 ```
 
 ---
 
-## 目录结构
+## 新旧路径对照
 
-```
-fastapi-demo/
-├── main.py              # 应用唯一入口，挂载各 demo 路由
-├── mysql_users.py       # MySQL 异步查询 demo（导出 router）
-├── schema/
-│   └── users.sql        # users 表建表语句与示例数据
-├── README.md
-├── .gitignore
-└── venv/                # 本地虚拟环境（已忽略，勿提交）
-```
+| 旧路径 | 新路径 |
+|--------|--------|
+| `GET /hello/{name}` | `GET /demo/basic/hello/{name}` |
+| `GET /users/{user_id}` | `GET /demo/params/users/{user_id}` |
+| `GET /items` | `GET /demo/params/items` |
+| `POST /users` | `POST /demo/body/users` |
+| `GET /protected` | `GET /demo/auth/protected` |
+| `GET /sync` | `GET /demo/async/sync` |
+| `GET /async` | `GET /demo/async/async` |
+| `GET /mixed` | `GET /demo/async/mixed` |
+| `GET /users`（MySQL） | `GET /demo/mysql/users` |
+
+`GET /` 保持不变。
 
 ---
 
 ## 开发说明
 
-- `--reload` 会在代码变更时自动重启，适合本地开发。
-- 修改任意 demo 文件后保存即可生效，无需手动重启。
-- 生产环境建议去掉 `--reload`，并使用进程管理器（如 systemd、Docker）部署。
-- 密码等敏感信息建议后续改为环境变量注入，勿提交到版本库。
+- `--reload` 适合本地开发；生产环境建议去掉并配合进程管理器部署
+- 全局异常处理已注册：`HTTPException` 与未捕获异常均返回 `{code, msg, data}`
+- 密码等敏感信息建议后续改为环境变量，勿提交到版本库
 
 ---
 
 ## 常见问题
 
-**Q: `/docs` 里看不到 `GET /users`？**
+**Q: `/docs` 里看不到某个接口？**
 
-确认是通过 `uvicorn main:app` 启动（而非 `mysql_users:app`），且 `main.py` 中已 `include_router` 挂载了 `mysql_users` 模块。
+确认通过 `uvicorn main:app` 启动，且 `main.py` 已 `include_router` 对应模块。
 
-**Q: `GET /users` 报数据库连接错误？**
+**Q: `GET /demo/mysql/users` 报数据库错误？**
 
-检查 MySQL 是否启动、连接参数是否正确，以及 `schema/users.sql` 是否已执行。
+检查 MySQL 是否启动、`db/mysql.py` 连接参数，以及 `schema/users.sql` 是否已执行。
 
-**Q: 提示 `No module named 'fastapi'` 或 `email_validator`？**
+**Q: 提示缺少模块？**
 
-确认已激活虚拟环境，并安装全部依赖（见「快速开始」第 2 步）。
-
-**Q: `/async` 报 `asyncio is not defined`？**
-
-确认 `main.py` 顶部有 `import asyncio`。
+```bash
+pip install -r requirements.txt
+```
 
 **Q: 端口 8000 已被占用？**
 
-更换端口，例如 `--port 8001`，或停止占用该端口的进程。
-
-**Q: PowerShell 无法执行激活脚本？**
-
-以管理员身份运行：`Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+使用 `--port 8001`，或停止占用该端口的进程。

@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import declarative_base, Mapped, mapped_column
-from sqlalchemy import String, select
+from sqlalchemy import String
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 
 # MySQL 数据库配置
 MYSQL_HOST = "127.0.0.1"
@@ -20,11 +19,7 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 Base = declarative_base()
 
-# 每个 demo 文件导出一个 router，由 main.py 统一挂载
-router = APIRouter()
 
-
-# 定义模型
 class User(Base):
     __tablename__ = "users"
 
@@ -33,14 +28,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255))
 
 
-# 依赖：获取数据库会话
 async def get_db():
+    """依赖：获取数据库会话。"""
     async with AsyncSessionLocal() as session:
         yield session
-
-
-@router.get("/users")
-async def get_users(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User))
-    users = result.scalars().all()
-    return [{"id": u.id, "username": u.username, "email": u.email} for u in users]
