@@ -2,7 +2,7 @@
 
 基于 **FastAPI + Uvicorn** 的综合入门示例。按主题拆分为独立 demo 模块，通过 `main.py` 统一挂载，**一条命令启动全部接口**。
 
-覆盖：路由、参数校验、请求体、依赖注入、同步/异步、统一响应、全局异常、HTTP 中间件、MySQL 异步查询。
+覆盖：路由、参数校验、请求体、依赖注入、同步/异步、统一响应、全局异常、HTTP 中间件、MySQL 异步 CRUD。
 
 ---
 
@@ -98,7 +98,7 @@ fastapi-demo/
 │   ├── response_format.py  # 统一响应格式
 │   ├── errors.py           # 异常处理验证
 │   ├── middleware.py       # HTTP 中间件（请求耗时）
-│   └── mysql_users.py      # MySQL 异步查询
+│   └── mysql_users.py      # MySQL 异步 CRUD
 ├── schema/
 │   └── users.sql
 ├── requirements.txt
@@ -179,11 +179,15 @@ flowchart TB
 - 控制台打印请求方法、路径与耗时
 - 响应头写入 `X-Process-Time`
 
-### MySQL 用户查询 · `demos/mysql_users.py`
+### MySQL 用户 CRUD · `demos/mysql_users.py`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/demo/mysql/users` | 从 MySQL 查询用户列表 |
+| GET | `/demo/mysql/users` | 查询用户列表 |
+| GET | `/demo/mysql/users/{user_id}` | 按 id 查询；不存在 → 404 |
+| POST | `/demo/mysql/users` | 创建用户；username 冲突 → 400 |
+| PUT | `/demo/mysql/users/{user_id}` | 全量更新；不存在 → 404 |
+| DELETE | `/demo/mysql/users/{user_id}` | 物理删除；不存在 → 404 |
 
 **示例：**
 
@@ -193,9 +197,10 @@ curl http://127.0.0.1:8000/demo/basic/hello/Jason
 curl "http://127.0.0.1:8000/demo/params/items?skip=0&limit=5"
 curl http://127.0.0.1:8000/demo/response/users/1
 curl http://127.0.0.1:8000/demo/mysql/users
+curl -X POST http://127.0.0.1:8000/demo/mysql/users -H "Content-Type: application/json" -d "{\"username\":\"alice\",\"email\":\"alice@example.com\"}"
+curl -X DELETE http://127.0.0.1:8000/demo/mysql/users/4
 curl -H "Authorization: Bearer valid-token" http://127.0.0.1:8000/demo/auth/protected
 ```
-
 ---
 
 ## 新旧路径对照
