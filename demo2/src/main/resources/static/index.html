@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="/css/tabs/mcp.css">
     <link rel="stylesheet" href="/css/tabs/lkcoffee.css">
     <link rel="stylesheet" href="/css/tabs/multi-agent.css">
+    <link rel="stylesheet" href="/css/tabs/embabel.css">
 </head>
 <body>
 <div class="app-container">
@@ -47,6 +48,7 @@
         <button class="tab-btn" data-tab="todo-write" onclick="switchTab('todo-write')">📋 TodoWrite 学习计划</button>
         <button class="tab-btn" data-tab="subagent" onclick="switchTab('subagent')">🔗 Subagent 编排</button>
         <button class="tab-btn" data-tab="a2a" onclick="switchTab('a2a')">🌐 A2A 跨系统对话</button>
+        <button class="tab-btn" data-tab="embabel" onclick="switchTab('embabel')">🔀 Embabel 自动选路</button>
     </div>
 
     <!-- ========== 聊天 Tab ========== -->
@@ -1201,6 +1203,31 @@
         </div>
     </div>
 
+    <!-- ========== Embabel 自动选路 Tab ========== -->
+    <div id="tab-embabel" class="tab-content">
+        <div class="embabel-header">
+            <h1>Embabel 自动选路</h1>
+            <p>Closed 模式：Autonomy 先选 Agent，再在选中 Agent 内跑 Action 链路（SSE 流式进度）</p>
+        </div>
+        <div class="embabel-samples">
+            <button type="button" class="embabel-sample-btn" onclick="fillEmbabelSample(1)">测试1：星座文案</button>
+            <button type="button" class="embabel-sample-btn" onclick="fillEmbabelSample(2)">测试2：差旅报销</button>
+        </div>
+        <div class="embabel-layout">
+            <div id="embabelMessages" class="embabel-messages">
+                <div id="embabelWelcome" class="message assistant">
+                    <div class="message-content">
+                        同一个入口两类请求：星座文案走 StarNewsAgent，制度问答走 PolicyAgent。发送后可看到选路与 Action 进度。
+                    </div>
+                </div>
+            </div>
+            <form id="embabelForm" class="embabel-input-bar">
+                <input type="text" id="embabelMessageInput" placeholder="输入问题，例如：给李白写一段白羊座今日运势文案" autocomplete="off" required>
+                <button type="submit" class="btn-embabel" id="embabelSendBtn">发送</button>
+            </form>
+        </div>
+    </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -1226,5 +1253,6 @@
 <script src="/js/tabs/todo-write.js"></script>
 <script src="/js/tabs/subagent.js"></script>
 <script src="/js/tabs/a2a.js"></script>
+<script src="/js/tabs/embabel.js"></script>
 </body>
 </html>
