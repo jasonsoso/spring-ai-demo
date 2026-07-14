@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  项目级 Maven settings：绕过全局 aliyun mirrorOf=*，
+  让 Embabel 2.0.0-SNAPSHOT 能从 repo.embabel.com 拉取。
+  通过 .mvn/maven.config 的 -s 自动生效，不修改全局 ~/.m2/settings.xml。
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+    <mirrors>
+        <mirror>
+            <id>aliyun-public</id>
+            <name>阿里云公共仓库（排除 Embabel snapshot）</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+            <mirrorOf>*,!embabel-snapshots</mirrorOf>
+        </mirror>
+    </mirrors>
+    <profiles>
+        <profile>
+            <id>embabel-snapshots</id>
+            <repositories>
+                <repository>
+                    <id>embabel-snapshots</id>
+                    <url>https://repo.embabel.com/artifactory/libs-snapshot</url>
+                    <releases>
+                        <enabled>true</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </repository>
+            </repositories>
+            <pluginRepositories>
+                <pluginRepository>
+                    <id>embabel-snapshots</id>
+                    <url>https://repo.embabel.com/artifactory/libs-snapshot</url>
+                    <releases>
+                        <enabled>true</enabled>
+                    </releases>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </pluginRepository>
+            </pluginRepositories>
+        </profile>
+    </profiles>
+    <activeProfiles>
+        <activeProfile>embabel-snapshots</activeProfile>
+    </activeProfiles>
+</settings>

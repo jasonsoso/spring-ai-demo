@@ -30,8 +30,22 @@
         <java.version>21</java.version>
         <spring-ai.version>2.0.0</spring-ai.version>
         <swagger-annotations.version>2.2.47</swagger-annotations.version>
-        <embabel-agent.version>0.5.0</embabel-agent.version>
+        <!-- Embabel 官方 Boot4/SAI2 迁移在 2.0.0 分支；Maven Central 尚无正式版，使用 snapshot -->
+        <embabel-agent.version>2.0.0-SNAPSHOT</embabel-agent.version>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>embabel-snapshots</id>
+            <url>https://repo.embabel.com/artifactory/libs-snapshot</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <dependencyManagement>
         <dependencies>
@@ -62,20 +76,13 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Embabel Agent BOM（2.0.0 = Spring Boot 4 + Spring AI 2.0） -->
             <dependency>
                 <groupId>com.embabel.agent</groupId>
-                <artifactId>embabel-agent-starter</artifactId>
+                <artifactId>embabel-agent-dependencies</artifactId>
                 <version>${embabel-agent.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.embabel.agent</groupId>
-                <artifactId>embabel-agent-starter-webmvc</artifactId>
-                <version>${embabel-agent.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.embabel.agent</groupId>
-                <artifactId>embabel-agent-starter-openai-custom</artifactId>
-                <version>${embabel-agent.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -216,7 +223,7 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Embabel Agent：自动选路 Demo -->
+        <!-- Embabel Agent 2.0：官方 Boot4 / Spring AI 2 兼容线 -->
         <dependency>
             <groupId>com.embabel.agent</groupId>
             <artifactId>embabel-agent-starter</artifactId>
@@ -225,13 +232,21 @@
             <groupId>com.embabel.agent</groupId>
             <artifactId>embabel-agent-starter-webmvc</artifactId>
         </dependency>
+        <!-- OpenAI 兼容端点注册 DeepSeek（2.0 OpenAiCompatibleModelFactory 已改写为 openai-java） -->
         <dependency>
             <groupId>com.embabel.agent</groupId>
             <artifactId>embabel-agent-starter-openai-custom</artifactId>
+            <version>${embabel-agent.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!-- Boot 4 BOM 不再管理 spring-retry；Embabel 文档要求直接声明 -->
+        <dependency>
+            <groupId>org.springframework.retry</groupId>
+            <artifactId>spring-retry</artifactId>
+            <version>2.0.12</version>
         </dependency>
     </dependencies>
 
