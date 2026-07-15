@@ -6,6 +6,7 @@ import com.embabel.agent.api.common.autonomy.NoAgentFound;
 import com.embabel.agent.api.common.autonomy.ProcessExecutionException;
 import com.embabel.agent.core.ProcessOptions;
 import com.jason.demo.demo2.embabel.agent.PolicyAgent;
+import com.jason.demo.demo2.embabel.agent.QuizAgent;
 import com.jason.demo.demo2.embabel.agent.StarNewsAgent;
 import com.jason.demo.demo2.embabel.model.AgentResponse;
 import com.jason.demo.demo2.embabel.model.EmbabelSseEvent;
@@ -15,6 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.json.JsonMapper;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 @Service
 public class EmbabelAgentService {
@@ -87,6 +92,12 @@ public class EmbabelAgentService {
             requireText(answer.source(), "PolicyAnswer.source");
             return;
         }
+        if (output instanceof QuizAgent.QuizPack quizPack) {
+            requireText(quizPack.title(), "QuizPack.title");
+            requireQuestions(quizPack.questions());
+            requireCompleteSentence(quizPack.review(), "QuizPack.review");
+            return;
+        }
         throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Unsupported agent output type");
     }
 
@@ -101,6 +112,38 @@ public class EmbabelAgentService {
         String text = value.strip();
         if (!text.matches(".*[。！？.!?]$")) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Agent returned incomplete field: " + fieldName);
+        }
+    }
+
+    private void requireQuestions(List<QuizAgent.QuizQuestion> questions) {
+        if (questions == null || questions.size() != 3) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "QuizPack.questions must contain exactly 3 items");
+        }
+        for (int i = 0; i < questions.size(); i++) {
+            QuizAgent.QuizQuestion q = questions.get(i);
+            if (q == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "QuizPack.questions[" + i + "] is null");
+            }
+            requireText(q.question(), "QuizPack.questions[" + i + "].question");
+            List<String> options = q.options();
+            if (options == null || options.size() != 4) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "QuizPack.questions[" + i + "].options must contain exactly 4 items");
+            }
+            for (int j = 0; j < options.size(); j++) {
+                requireText(options.get(j), "QuizPack.questions[" + i + "].options[" + j + "]");
+            }
+            Set<String> unique = new HashSet<>(options);
+            if (unique.size() != 4) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "QuizPack.questions[" + i + "].options must be unique");
+            }
+            requireText(q.answer(), "QuizPack.questions[" + i + "].answer");
+            if (!options.contains(q.answer())) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "QuizPack.questions[" + i + "].answer must match one option");
+            }
+            requireCompleteSentence(q.explanation(), "QuizPack.questions[" + i + "].explanation");
         }
     }
 }
