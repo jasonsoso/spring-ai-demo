@@ -24,7 +24,8 @@ class ArticleFetchServiceTest {
                 请根据下面技术文章生成 3 道单选测验题。标题：工具调用不是 Agent。正文：Tool Calling 解决的是模型如何请求外部工具。Agent 更关注任务目标与停止条件。
                 """;
         QuizAgent.ArticleInput article = service.resolve(raw);
-        assertThat(article.title()).contains("工具调用");
+        assertThat(article.title()).doesNotContain("正文");
+        assertThat(article.title()).isEqualTo("工具调用不是 Agent。");
         assertThat(article.content()).contains("Tool Calling");
         assertThat(article.sourceUrl()).isNull();
     }

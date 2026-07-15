@@ -100,7 +100,7 @@ public class ArticleFetchService {
     }
 
     private String extractLocalTitle(String raw) {
-        Matcher titled = Pattern.compile("标题[:：]\\s*(.+)").matcher(raw);
+        Matcher titled = Pattern.compile("标题[:：]\\s*(.+?)(?=\\s*正文[:：]|$)", Pattern.DOTALL).matcher(raw);
         if (titled.find()) {
             return titled.group(1).strip().split("[\\r\\n]")[0].strip();
         }
