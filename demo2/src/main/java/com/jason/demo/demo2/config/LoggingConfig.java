@@ -6,8 +6,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * LLM 请求响应日志配置：通过 SimpleLoggerAdvisor 全局拦截所有 ChatClient 调用。
- * 日志级别由 application.properties 中 SimpleLoggerAdvisor 的 DEBUG 配置控制。
+ * LLM 请求响应日志：
+ * <ul>
+ *   <li>业务 ChatClient：SimpleLoggerAdvisor（经 ChatClientBuilderCustomizer）</li>
+ *   <li>Embabel：LoggingChatModel 包装 ChatModel（见 EmbabelLlmModelFixConfig）</li>
+ * </ul>
+ * 说明：Spring AI 2.0 已废弃 {@code ChatClientCustomizer}（forRemoval），
+ * 且 Embabel 主路径经 {@code SpringAiLlmMessageSender} 直接 {@code ChatModel.call()}，
+ * 不会进入 ChatClient Advisor 链，故 Embabel 不能依赖 Advisor 打日志。
  */
 @Configuration
 public class LoggingConfig {
@@ -18,9 +24,7 @@ public class LoggingConfig {
     }
 
     /**
-     * ChatClientBuilderCustomizer 是 Spring AI 2.0 自动装配扩展点，
-     * 凡是通过 ChatClient.builder(...) 构建的实例都会自动注入此 Advisor，
-     * 无需修改任何 Service 代码。
+     * 业务 ChatClient.Builder 自动注入此 Advisor。
      */
     @Bean
     public ChatClientBuilderCustomizer loggingChatClientCustomizer(SimpleLoggerAdvisor simpleLoggerAdvisor) {

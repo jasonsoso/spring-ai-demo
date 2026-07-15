@@ -1,0 +1,29 @@
+# Embabel Agent 中文 Prompt（YAML 保证 UTF-8，避免 .properties 在部分环境下被按 Latin-1 读取导致乱码）
+demo:
+  star-news-agent:
+    prompts:
+      extract-star-person: |
+        请从用户输入中提取人物姓名和星座。只返回结构化对象，不要解释。
+
+        用户输入：
+        {userInput}
+      writeup: |
+        请基于人物和当天运势，写一段轻松但不过度玄学的中文文案。返回结构化对象，必须包含 title、summary、advice，三个字段都不能为空。summary 和 advice 都要是完整中文句子，以中文句号、问号或感叹号结尾。
+
+        人物：{name}
+        星座：{sign}
+        运势：{horoscope}
+  policy-agent:
+    prompts:
+      extract-policy-question: |
+        请从用户输入中提取制度问题类别和原始问题。category 可以是：差旅报销、请假、通用制度。只返回结构化对象，不要解释。
+
+        用户输入：
+        {userInput}
+      answer: |
+        请基于给定制度资料回答员工问题。不要编造资料里没有的规则。资料不覆盖时，提醒员工联系人事或财务确认。返回结构化对象，包含 title、answer、source。answer 必须是完整中文句子，以中文句号、问号或感叹号结尾。
+
+        问题：{question}
+        类别：{category}
+        制度标题：{title}
+        制度资料：{content}
