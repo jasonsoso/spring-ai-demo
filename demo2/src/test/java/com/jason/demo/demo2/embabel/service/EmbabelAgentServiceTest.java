@@ -4,6 +4,7 @@ import com.jason.demo.demo2.embabel.agent.PolicyAgent;
 import com.jason.demo.demo2.embabel.agent.QuizAgent;
 import com.jason.demo.demo2.embabel.agent.StarNewsAgent;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -36,16 +37,12 @@ class EmbabelAgentServiceTest {
 
     @Test
     void validateOutput_rejectsWrongOptionCount() {
-        var bad = new QuizAgent.QuizPack(
-                "标题",
-                List.of(new QuizAgent.QuizQuestion(
-                        "题干？",
-                        List.of("A1", "A2", "A3"),
-                        "A1",
-                        "解释完整。")),
-                "这套题考察核心概念。");
+        var badQ = new QuizAgent.QuizQuestion("题干？", List.of("A1", "A2", "A3"), "A1", "解释完整。");
+        var bad = new QuizAgent.QuizPack("标题", List.of(badQ, badQ, badQ), "这套题考察核心概念。");
         assertThatThrownBy(() -> service.validateOutput(bad))
-                .isInstanceOf(ResponseStatusException.class);
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_GATEWAY);
     }
 
     @Test
