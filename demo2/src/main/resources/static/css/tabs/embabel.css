@@ -61,6 +61,8 @@
     overflow-x: auto;
     font-size: 0.82rem;
     margin: 0;
+    white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .embabel-input-bar {
     display: flex;
@@ -101,6 +103,8 @@
     background: #f8fafc;
     border-radius: 8px;
     border: 1px solid #e2e8f0;
+    white-space: normal;
+    font: inherit;
 }
 
 .embabel-quiz-title {

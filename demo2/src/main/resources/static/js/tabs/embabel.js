@@ -90,7 +90,7 @@ async function sendEmbabelMessage() {
     const progressEl = document.createElement('div');
     progressEl.className = 'embabel-progress';
     assistant.appendChild(progressEl);
-    const resultEl = document.createElement('pre');
+    const resultEl = document.createElement('div');
     resultEl.className = 'embabel-result-json';
     assistant.appendChild(resultEl);
 
