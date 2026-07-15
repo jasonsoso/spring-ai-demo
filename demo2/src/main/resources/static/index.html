@@ -1207,22 +1207,23 @@
     <div id="tab-embabel" class="tab-content">
         <div class="embabel-header">
             <h1>Embabel 自动选路</h1>
-            <p>Closed 模式：Autonomy 先选 Agent，再在选中 Agent 内跑 Action 链路（SSE 流式进度）</p>
+            <p>Closed 模式：Autonomy 在 StarNews / Policy / Quiz 间选路，再跑 Action（SSE）</p>
         </div>
         <div class="embabel-samples">
             <button type="button" class="embabel-sample-btn" onclick="fillEmbabelSample(1)">测试1：星座文案</button>
             <button type="button" class="embabel-sample-btn" onclick="fillEmbabelSample(2)">测试2：差旅报销</button>
+            <button type="button" class="embabel-sample-btn" onclick="fillEmbabelSample(3)">测试3：技术文章出题</button>
         </div>
         <div class="embabel-layout">
             <div id="embabelMessages" class="embabel-messages">
                 <div id="embabelWelcome" class="message assistant">
                     <div class="message-content">
-                        同一个入口两类请求：星座文案走 StarNewsAgent，制度问答走 PolicyAgent。发送后可看到选路与 Action 进度。
+                        同一入口三类请求：星座文案、制度问答、技术文章测验题（Quizzard）。
                     </div>
                 </div>
             </div>
             <form id="embabelForm" class="embabel-input-bar">
-                <input type="text" id="embabelMessageInput" placeholder="输入问题，例如：给李白写一段白羊座今日运势文案" autocomplete="off" required>
+                <textarea id="embabelMessageInput" rows="3" placeholder="输入问题，或粘贴技术文章正文 / URL 做出题" required></textarea>
                 <button type="submit" class="btn-embabel" id="embabelSendBtn">发送</button>
             </form>
         </div>
