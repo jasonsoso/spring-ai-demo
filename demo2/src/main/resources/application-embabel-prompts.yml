@@ -27,3 +27,39 @@ demo:
         类别：{category}
         制度标题：{title}
         制度资料：{content}
+  quiz-agent:
+    prompts:
+      extract-concepts: |
+        请从技术文章中抽取 3 到 5 个适合出测验题的核心知识点。
+        每个知识点包含 name 和 explanation。
+        不要抽取太泛的词，比如“AI”“Java”。
+        只返回结构化对象，不要解释。
+
+        标题：{title}
+        正文：
+        {content}
+      generate-quiz: |
+        请根据技术文章和核心知识点生成 3 道单选题。
+        题干、选项、答案和解释都用中文输出。
+        每道题必须包含 question、options、answer、explanation。
+        options 必须正好 4 个选项。
+        answer 必须和 options 中的一个选项完全一致。
+        explanation 必须说明为什么选这个答案。
+        题目要考理解，不要考死记硬背。
+        只返回结构化对象，不要解释。
+
+        标题：{title}
+        核心知识点：{concepts}
+        正文：
+        {content}
+      review-quiz: |
+        请检查下面的测验题是否适合技术文章复盘。
+        如果题目过泛、答案不在选项里、解释不完整，请修正后返回。
+        最终返回 QuizPack：title、questions、review。
+        title、questions、review 都用中文输出。
+        questions 保留 3 道题，每题 4 个选项。
+        review 用一句完整中文说明这套题主要考察什么，以中文句号结尾。
+
+        文章标题：{title}
+        候选题：
+        {questions}
