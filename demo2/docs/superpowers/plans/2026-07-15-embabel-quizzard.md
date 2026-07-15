@@ -944,7 +944,7 @@ git commit -m "feat(demo2): render QuizPack in Embabel tab"
 **Interfaces:**
 - Consumes: Task 1–5 全部交付物
 
-- [ ] **Step 1: 全量相关测试 + 编译**
+- [x] **Step 1: 全量相关测试 + 编译**
 
 ```bash
 cd demo2
@@ -954,7 +954,7 @@ mvn -DskipTests compile
 
 Expected: 两次均 `BUILD SUCCESS`
 
-- [ ] **Step 2: 启动应用（需 `DEEPSEEK_API_KEY`）手工验收**
+- [x] **Step 2: 启动应用（需 `DEEPSEEK_API_KEY`）手工验收**
 
 ```bash
 cd demo2
@@ -968,9 +968,9 @@ mvn spring-boot:run
 | 3 | 测试3 粘贴出题 | `agentName=QuizAgent`，卡片渲染 3 题 |
 | 4 | 同步 URL（可选） | `curl -X POST http://localhost:8081/embabel/agent/ask -H "Content-Type: application/json" -d "{\"message\":\"请根据这篇技术文章生成 3 道单选测验题：https://docs.spring.io/spring-ai/reference/api/chatclient.html\"}"` → `QuizPack`；若文档站反爬则 502，改用粘贴路径 |
 
-- [ ] **Step 3: 若手工发现问题则修复并补测后另提 commit；无代码变更则跳过 commit**
+- [x] **Step 3: 若手工发现问题则修复并补测后另提 commit；无代码变更则跳过 commit**
 
-- [ ] **Step 4: 更新设计规范状态（可选小改）**
+- [x] **Step 4: 更新设计规范状态（可选小改）**
 
 将 `2026-07-15-embabel-quizzard-design.md` 顶部 `状态: 待实现` 改为 `已实现`，并 commit：
 
