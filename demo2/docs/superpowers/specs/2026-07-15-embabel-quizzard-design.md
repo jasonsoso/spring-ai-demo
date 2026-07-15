@@ -2,7 +2,7 @@
 
 **日期**: 2026-07-15  
 **项目**: spring-ai-demo / demo2  
-**状态**: 待实现  
+**状态**: 已实现  
 **参考文章**: [6. Embabel实战Quizzard：根据技术文章生成测验题](https://mp.weixin.qq.com/s/gHG78rBVANCM8Xk6Xn55_w)
 
 ---
