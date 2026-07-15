@@ -225,6 +225,11 @@
 
         <!-- Embabel Agent 2.0：官方 Boot4 / Spring AI 2 兼容线 -->
         <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.22.2</version>
+        </dependency>
+        <dependency>
             <groupId>com.embabel.agent</groupId>
             <artifactId>embabel-agent-starter</artifactId>
         </dependency>
