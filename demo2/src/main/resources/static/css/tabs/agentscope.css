@@ -1,36 +1,131 @@
-.agentscope-header { margin-bottom: 12px; }
+/* AgentScope HarnessAgent Tab — 对齐 Embabel 对话布局 */
+.agentscope-header {
+    padding: 20px 24px 8px;
+}
+.agentscope-header h2 {
+    margin: 0 0 6px;
+    font-size: 1.4rem;
+}
+.agentscope-header p {
+    margin: 0;
+    color: #6b7280;
+    font-size: 0.95rem;
+}
+
 .agentscope-meta {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-bottom: 8px;
+    padding: 0 24px 8px;
     align-items: center;
 }
 .agentscope-meta label {
     font-size: 13px;
+    color: #4b5563;
     display: flex;
-    gap: 4px;
+    gap: 6px;
     align-items: center;
 }
 .agentscope-meta input {
-    min-width: 160px;
-    padding: 4px 8px;
+    min-width: 180px;
+    padding: 6px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 13px;
 }
+.agentscope-meta button {
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+.agentscope-meta button:hover {
+    background: #eef2ff;
+    border-color: #a5b4fc;
+}
+
 .agentscope-status {
     font-size: 12px;
     color: #64748b;
-    margin-bottom: 8px;
+    padding: 0 24px 8px;
 }
+
+.agentscope-layout {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 220px);
+    min-height: 420px;
+    padding: 0 24px 16px;
+}
+
 .agentscope-messages {
-    min-height: 280px;
-    max-height: 480px;
+    flex: 1;
     overflow-y: auto;
+    background: #f5f5f5;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
     margin-bottom: 12px;
 }
+
+.agentscope-messages .message {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: flex-start;
+}
+.agentscope-messages .message.user { justify-content: flex-end; }
+.agentscope-messages .message.assistant { justify-content: flex-start; }
+
+.agentscope-messages .message-content {
+    max-width: 78%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    line-height: 1.5;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+.agentscope-messages .message.user .message-content {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+.agentscope-messages .message.assistant .message-content {
+    background: #fff;
+    color: #333;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
 .agentscope-input-bar {
     display: flex;
     gap: 8px;
+    align-items: flex-end;
 }
 .agentscope-input-bar textarea {
     flex: 1;
+    min-height: 72px;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    resize: vertical;
+    font: inherit;
+}
+.agentscope-input-bar textarea:focus {
+    outline: none;
+    border-color: #667eea;
+}
+.btn-agentscope {
+    background: #4f46e5;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.btn-agentscope:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }

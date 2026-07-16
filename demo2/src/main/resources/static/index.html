@@ -1245,15 +1245,17 @@
             <button type="button" onclick="fillAgentscopeSample(2)">示例：支付 500</button>
         </div>
         <div id="agentscopeStatus" class="agentscope-status">就绪</div>
-        <div id="agentscopeMessages" class="agentscope-messages">
-            <div id="agentscopeWelcome" class="message assistant">
-                <div class="message-content">输入研发任务，获取可执行检查清单。可点「换会话」验证 session 隔离。</div>
+        <div class="agentscope-layout">
+            <div id="agentscopeMessages" class="agentscope-messages">
+                <div id="agentscopeWelcome" class="message assistant">
+                    <div class="message-content">输入研发任务，获取可执行检查清单。可点「换会话」验证 session 隔离。</div>
+                </div>
             </div>
+            <form id="agentscopeForm" class="agentscope-input-bar">
+                <textarea id="agentscopeMessageInput" rows="3" placeholder="描述待排查的研发问题…" required></textarea>
+                <button type="submit" class="btn-agentscope" id="agentscopeSendBtn">发送</button>
+            </form>
         </div>
-        <form id="agentscopeForm" class="agentscope-input-bar">
-            <textarea id="agentscopeMessageInput" rows="3" placeholder="描述待排查的研发问题…" required></textarea>
-            <button type="submit" id="agentscopeSendBtn">发送</button>
-        </form>
     </div>
 
 </div>
