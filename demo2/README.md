@@ -362,6 +362,8 @@ Spec: `docs/superpowers/specs/2026-07-07-elevenlabs-voice-chat-design.md` · Pla
 | `PolicyAgent` | 差旅 / 请假等制度问答 | `PolicyAnswer` |
 | **`QuizAgent`（Quizzard）** | 技术文章 URL / 粘贴正文 → 单选测验题 | **`QuizPack`** |
 
+**三层架构**：**展示层**（Embabel Tab / curl）→ **编排层**（`Autonomy` 选路 + `EmbabelAgentService` 校验）→ **能力层**（三 Agent Action 链 + jsoup）。详细流程见 [§22–24 功能设计图](#22-embabel-自动选路--closed-模式三-agent)。
+
 **Quizzard Action 链**（参考微信：[Embabel实战Quizzard](https://mp.weixin.qq.com/s/gHG78rBVANCM8Xk6Xn55_w)）：
 
 ```text
@@ -2140,6 +2142,176 @@ flowchart TD
 ```
 
 > **与 §1「AI 聊天」的区别**：§1 仅文字 SSE/MVC，无 TTS/STT；§19–21 为独立 Tab，无 ChatMemory，TTS 按句分段推送 `AUDIO_CHUNK` 而非等全文生成后再朗读。
+
+### 22. Embabel 自动选路 — Closed 模式三 Agent
+
+与 §10.3 及 `docs/superpowers/archive/2026-07-16-embabel-quizzard.md` 对齐：**展示层**（Tab / curl）→ **编排层**（`Autonomy.chooseAndRunAgent` + `validateOutput`）→ **能力层**（`StarNewsAgent` / `PolicyAgent` / `QuizAgent`）。
+
+```mermaid
+flowchart TB
+    subgraph 展示层["前端 Tab「🔀 Embabel 自动选路」"]
+        BTN[测试1 星座 / 测试2 差旅 / 测试3 出题]
+        TA[textarea 输入 message]
+        PROG[过程区：选 Agent / Action 进度]
+        RES[结果区：JSON 或 QuizPack 卡片]
+        BTN --> UI[embabel.js]
+        TA --> UI
+        UI --> PROG
+        UI --> RES
+    end
+
+    subgraph 编排层["Spring Boot demo2 — Embabel 编排"]
+        CTRL[EmbabelAgentController]
+        SVC[EmbabelAgentService]
+        AUTO[Autonomy.chooseAndRunAgent\nClosed 模式]
+        VAL[validateOutput\nWriteup / PolicyAnswer / QuizPack]
+        BRIDGE[EmbabelSseBridge\nAgenticEventListener → SSE]
+        PROMPTS[application-embabel-prompts.yml\nstar / policy / quiz]
+
+        UI -->|POST /embabel/agent/ask/stream| CTRL
+        UI -.->|POST /embabel/agent/ask 同步调试| CTRL
+        CTRL --> SVC
+        SVC --> AUTO
+        SVC --> VAL
+        SVC --> BRIDGE
+        PROMPTS -.->|QuizAgentProperties 等| AUTO
+    end
+
+    subgraph 能力层["三个 @Agent"]
+        STAR[StarNewsAgent\n→ Writeup]
+        POL[PolicyAgent\n→ PolicyAnswer]
+        QUIZ[QuizAgent Quizzard\n→ QuizPack]
+        FETCH[ArticleFetchService\njsoup / 粘贴正文]
+
+        AUTO -->|description 排名选路| STAR
+        AUTO -->|description 排名选路| POL
+        AUTO -->|description 排名选路| QUIZ
+        QUIZ --> FETCH
+    end
+
+    subgraph 外部["DeepSeek"]
+        DS[deepseek-v4-pro\nembabel openai-custom]
+        STAR --> DS
+        POL --> DS
+        QUIZ --> DS
+    end
+
+    BRIDGE -->|PROGRESS / AGENT_SELECTED / RESULT| UI
+    VAL -->|502 结构不合格| UI
+```
+
+### 23. Quizzard — Action 链与对象流
+
+`QuizAgent` 四段 Action：抓取不调 LLM；知识点 / 候选题 / 审核用 `ai.withDefaultLlm().createObject(...)`。
+
+```mermaid
+flowchart LR
+    UI[UserInput] --> A1[extractArticle]
+    A1 -->|有 URL| JSOUP[jsoup 抓正文]
+    A1 -->|无 URL| MD[解析标题/正文]
+    JSOUP --> ART[ArticleInput]
+    MD --> ART
+    ART --> A2[extractConcepts]
+    A2 --> DIG[ConceptDigest\n3–5 知识点]
+    DIG --> A3[generateQuiz]
+    ART --> A3
+    A3 --> DRAFT[QuizDraft\n候选题]
+    DRAFT --> A4[reviewQuiz\n@AchievesGoal]
+    ART --> A4
+    A4 --> PACK[QuizPack\ntitle + questions + review]
+    PACK --> VAL[validateOutput\n3题×4选项\nanswer∈options]
+    VAL --> OUT[AgentResponse / SSE RESULT]
+```
+
+| 对象 | 字段要点 |
+|------|----------|
+| `ArticleInput` | `title`, `content`, `sourceUrl`；正文上限 12_000 |
+| `ConceptDigest` | `List<ConceptPoint(name, explanation)>` |
+| `QuizDraft` | `List<QuizQuestion>` 候选题 |
+| `QuizQuestion` | `question`, `options`(4), `answer`(全文匹配 option), `explanation` |
+| `QuizPack` | `title`, `questions`(恰好 3), `review`(完整句) |
+
+### 24. Embabel — SSE 时序与 QuizPack 渲染
+
+典型路径：测试3 粘贴出题 → Autonomy 选中 `QuizAgent` → 四段 Action → 校验 → 前端卡片渲染。
+
+```mermaid
+sequenceDiagram
+    participant 用户
+    participant 前端 as embabel.js
+    participant Ctrl as EmbabelAgentController
+    participant Svc as EmbabelAgentService
+    participant Auto as Autonomy
+    participant Quiz as QuizAgent
+    participant Fetch as ArticleFetchService
+    participant DS as DeepSeek
+
+    用户->>前端: 测试3 / 粘贴正文发送
+    前端->>Ctrl: POST /embabel/agent/ask/stream
+    Ctrl->>Svc: streamAsk(message, SseEmitter)
+    Svc-->>前端: SSE PROGRESS（分析请求…）
+
+    Svc->>Auto: chooseAndRunAgent(message)
+    Auto->>Auto: LlmRanker 按 @Agent description 排名
+    Auto-->>Svc: 选中 QuizAgent
+    Svc-->>前端: SSE AGENT_SELECTED
+
+    Auto->>Quiz: extractArticle(UserInput)
+    Quiz->>Fetch: resolve(raw)
+    Fetch-->>Quiz: ArticleInput
+    Note over Svc,前端: SSE ACTION_*（进度）
+
+    Auto->>Quiz: extractConcepts(ArticleInput, Ai)
+    Quiz->>DS: createObject → ConceptDigest
+    DS-->>Quiz: ConceptDigest
+
+    Auto->>Quiz: generateQuiz(Article, Digest, Ai)
+    Quiz->>DS: createObject → QuizDraft
+    DS-->>Quiz: QuizDraft
+
+    Auto->>Quiz: reviewQuiz → QuizPack (@AchievesGoal)
+    Quiz->>DS: createObject → QuizPack
+    DS-->>Quiz: QuizPack
+
+    Auto-->>Svc: AgentProcessExecution(output=QuizPack)
+    Svc->>Svc: validateOutput(QuizPack)
+    alt 校验失败
+        Svc-->>前端: SSE ERROR（502 语义）
+    else 校验通过
+        Svc-->>前端: SSE RESULT {agentName, outputType, output}
+        前端->>前端: renderEmbabelResult → QuizPack 卡片
+    end
+```
+
+```mermaid
+flowchart TD
+    START([POST /ask/stream]) --> RUN[SSE PROGRESS]
+    RUN --> RANK{Autonomy 选路}
+    RANK -->|星座意图| STAR[StarNewsAgent → Writeup]
+    RANK -->|制度意图| POL[PolicyAgent → PolicyAnswer]
+    RANK -->|测验题意图| QUIZ[QuizAgent 四段 Action]
+
+    STAR --> VAL{validateOutput}
+    POL --> VAL
+    QUIZ --> VAL
+
+    VAL -->|不合格| ERR[SSE ERROR / HTTP 502]
+    VAL -->|合格| RES[SSE RESULT]
+    RES --> TYPE{outputType}
+    TYPE -->|QuizPack| CARD[embabel-quiz-pack\n题干 / A–D / 解释 / review]
+    TYPE -->|其他| JSON[embabel-result-json\n美化 JSON]
+
+    subgraph SSE事件["EmbabelSseEvent"]
+        direction TB
+        E1[PROGRESS]
+        E2[ACTION_START / ACTION_COMPLETE]
+        E3[AGENT_SELECTED]
+        E4[RESULT]
+        E5[ERROR]
+    end
+```
+
+> **与 §12「多 Agent 协作」的区别**：§12 由 Java `CompletableFuture` 写死 Supervisor-Worker；§22–24 由 Embabel `Autonomy` 按 Agent description **自动选路**，Agent 内再跑 Action 对象链。Quizzard 不推送 `ConceptDigest` / `QuizDraft` 中间态到前端。
 
 ---
 

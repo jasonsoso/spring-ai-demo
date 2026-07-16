@@ -27,6 +27,8 @@
 
 ## 2. 架构（当前实现）
 
+详细 Mermaid 图见 `demo2/README.md` **功能设计图 §22–24**（Closed 选路 / Quizzard Action 链 / SSE 时序）。
+
 ```text
 用户 message（Tab / curl）
   → POST /embabel/agent/ask[/stream]
