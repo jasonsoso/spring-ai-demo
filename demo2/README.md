@@ -2,7 +2,7 @@
 
 > demo2 是 demo 的并行副本，默认端口 **8081**，用于后续 Spring AI 2 升级实验。可与 demo（8080）同时运行。
 
-基于 **Spring Boot 4.1 + Spring AI 2.0** 的综合 AI 能力演示项目，覆盖聊天对话、结构化输出、RAG 知识检索、Agent 工具调用、AskUserQuestion 人机澄清、TodoWrite 任务规划、Agent Skills、**Subagent 子代理编排**、**A2A 跨系统对话**、多 Agent 协作、MCP 协议集成、**瑞幸 MCP 点单**、**ElevenLabs 语音对话**、**Micrometer + OpenTelemetry 可观测性**等核心场景，配套完整前端演示界面。
+基于 **Spring Boot 4.1 + Spring AI 2.0** 的综合 AI 能力演示项目，覆盖聊天对话、结构化输出、RAG 知识检索、Agent 工具调用、AskUserQuestion 人机澄清、TodoWrite 任务规划、Agent Skills、**Subagent 子代理编排**、**A2A 跨系统对话**、多 Agent 协作、MCP 协议集成、**瑞幸 MCP 点单**、**ElevenLabs 语音对话**、**Embabel 自动选路（含 Quizzard 技术文章出题）**、**Micrometer + OpenTelemetry 可观测性**等核心场景，配套完整前端演示界面。
 
 ---
 
@@ -27,7 +27,7 @@
 
 本项目是一个 Spring AI 功能演示应用，通过不同 Controller/Service 模块独立演示各类 AI 能力，适合学习 Spring AI 各组件的用法。
 
-**`controller` 包共 19 个 Controller**（另含 `mcp.client.controller.McpChatController`），与下表一一对应；功能模块章节按相同顺序归档。
+**`controller` 包共 19 个 Controller**（另含 `mcp.client.controller.McpChatController`、`embabel.controller.EmbabelAgentController`），与下表一一对应；功能模块章节按相同顺序归档。
 
 ### Controller 一览
 
@@ -52,6 +52,7 @@
 | `A2aOrchestratorController` | `controller` | `/agent/a2a` | A2A 协调器（TaskTool + 远程 Agent） |
 | `LkCoffeeAgentController` | `controller` | `/agent/lkcoffee` | 瑞幸 MCP + My Coffee Skill SSE 点单 |
 | `VoiceApiController` | `controller` | `/api` | ElevenLabs TTS/STT + 语音对话 SSE |
+| `EmbabelAgentController` | `embabel.controller` | `/embabel/agent` | Embabel Autonomy 自动选路（SSE + 同步） |
 | `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
 
 | 模块 | 能力 | 依赖外部服务 |
@@ -75,6 +76,7 @@
 | MCP | MCP Server/Client 工具注册与调用 | DeepSeek API |
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
+| **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -87,6 +89,8 @@
 | 核心框架 | Spring Boot | 4.1.0 |
 | AI 框架 | Spring AI | 2.0.0 |
 | Agent 工具库 | spring-ai-agent-utils | 0.10.0（AskUser / TodoWrite / Skills / **TaskTool**） |
+| Embabel Agent | embabel-agent | 2.0.0-SNAPSHOT（Closed 模式 Autonomy 选路） |
+| HTML 抓取 | jsoup | 1.22.2（Quizzard 网页正文） |
 | Session 管理 | spring-ai-session（BOM） | 0.2.0（`spring-ai-starter-session-jdbc`） |
 | A2A 子代理客户端 | spring-ai-agent-utils-a2a | 0.10.0 |
 | A2A Server | spring-ai-a2a-server-autoconfigure | 0.3.0 |
@@ -347,6 +351,64 @@ agent.voice-chat.stt.language-code=zh
 **前端 Tab**：**🎙️ 语音对话（ElevenLabs）**（按住 🎤 说话 / 文字输入 / 音色下拉 / 自动朗读开关）。推荐验证：录音中文 → 识别 → 流式 Markdown → 边播；切换音色；关闭自动朗读。
 
 Spec: `docs/superpowers/specs/2026-07-07-elevenlabs-voice-chat-design.md` · Plan: `docs/superpowers/plans/2026-07-07-elevenlabs-voice-chat.md` · **归档**: `docs/superpowers/archive/2026-07-08-elevenlabs-voice-chat.md`
+
+### 10.3 Embabel 自动选路 + Quizzard（`/embabel/agent`）
+
+落地 [Embabel](https://github.com/embabel/embabel-agent) **Closed 模式**：同一入口由 `Autonomy.chooseAndRunAgent` 在多个 `@Agent` 间选路，再在选中 Agent 内跑 `@Action` 链。当前三个业务 Agent：
+
+| Agent | 能力 | 最终输出 |
+|-------|------|----------|
+| `StarNewsAgent` | 人物 + 星座运势文案 | `Writeup` |
+| `PolicyAgent` | 差旅 / 请假等制度问答 | `PolicyAnswer` |
+| **`QuizAgent`（Quizzard）** | 技术文章 URL / 粘贴正文 → 单选测验题 | **`QuizPack`** |
+
+**Quizzard Action 链**（参考微信：[Embabel实战Quizzard](https://mp.weixin.qq.com/s/gHG78rBVANCM8Xk6Xn55_w)）：
+
+```text
+UserInput → ArticleInput（jsoup / 粘贴，不调 LLM）
+         → ConceptDigest（抽知识点）
+         → QuizDraft（候选题）
+         → QuizPack（审核收口，@AchievesGoal）
+```
+
+| 端点 | 说明 |
+|------|------|
+| `POST /embabel/agent/ask/stream` | SSE 主入口：选路进度 + Action 事件 + 最终 RESULT |
+| `POST /embabel/agent/ask` | 同步调试（curl / Scalar） |
+
+请求体：`{ "message": "..." }`。响应：`{ processId, agentName, outputType, output }`。
+
+**SSE 事件**：`PROGRESS` / `ACTION_START` / `ACTION_COMPLETE` / `AGENT_SELECTED` / `RESULT` / `ERROR`（不推送知识点 / 草稿中间对象）
+
+**核心类**：
+
+| 类 | 职责 |
+|----|------|
+| `EmbabelAgentController` | REST + SSE |
+| `EmbabelAgentService` | `Autonomy` 选路 + `validateOutput`（含 QuizPack 工程校验） |
+| `QuizAgent` | 四段 Action + records |
+| `ArticleFetchService` | URL 抽取、jsoup 抓正文、本地 Markdown、12k 截断 |
+| `QuizAgentProperties` | `demo.quiz-agent.prompts.*` |
+| `StarNewsAgent` / `PolicyAgent` | 星座 / 制度（既有） |
+| `EmbabelSseBridge` | Embabel 事件 → SseEmitter |
+
+**配置要点**：
+
+```properties
+embabel.models.default-llm=deepseek-v4-pro
+embabel.agent.platform.models.openai.custom.api-key=${DEEPSEEK_API_KEY:}
+embabel.agent.platform.models.openai.custom.base-url=https://api.deepseek.com
+spring.config.import=optional:classpath:application-embabel-prompts.yml
+```
+
+中文 Prompt 在 `application-embabel-prompts.yml`（`demo.star-news-agent` / `demo.policy-agent` / `demo.quiz-agent`），避免 `.properties` Latin-1 乱码。
+
+**QuizPack 校验**（返回前）：恰好 3 道题；每题 4 个不重复选项；`answer` 与某一 option **全文一致**；`explanation` / `review` 为完整句子。失败 → HTTP 502。抓取失败 / 正文过短同样 502。
+
+**前端 Tab**：**🔀 Embabel 自动选路**（三样例按钮 + textarea + QuizPack 卡片渲染）。推荐验证：测试1 星座 → `StarNewsAgent`；测试2 差旅 → `PolicyAgent`；测试3 粘贴出题 → `QuizAgent` + 结构化题目。
+
+Spec: `docs/superpowers/specs/2026-07-15-embabel-quizzard-design.md` · Plan: `docs/superpowers/plans/2026-07-15-embabel-quizzard.md` · **归档**: `docs/superpowers/archive/2026-07-16-embabel-quizzard.md`  
+选路前置: `docs/superpowers/specs/2026-07-13-embabel-agent-routing-design.md`
 
 ### 11. AskUserQuestion 技术选型（`/agent/ask-user`）
 
@@ -710,6 +772,7 @@ mvn spring-boot:run
 | 🗂️ Session 事件溯源记忆 | Event Store + SSE 多轮对话 + 事件侧栏 |
 | ☕ 瑞幸 MCP 点单 | My Coffee Skill + 瑞幸/高德 MCP SSE 点单 |
 | 🎙️ 语音对话（ElevenLabs） | 按住录音 STT + 流式对话 + 分句 TTS 边播 |
+| 🔀 Embabel 自动选路 | Autonomy 三 Agent（星座 / 制度 / Quizzard 出题） |
 | 🔌 MCP Client 聊天 | 本地 MCP Server（天气/景点） |
 | 其他 Tab | Embedding、RAG、Agent 记忆、工具推理捕获、Skills 等 |
 
@@ -743,6 +806,7 @@ static/
 │       ├── mcp.css
 │       ├── lkcoffee.css    # 瑞幸 MCP 点单
 │       ├── voice-chat.css  # ElevenLabs 语音对话
+│       ├── embabel.css     # Embabel 自动选路 / QuizPack
 │       └── multi-agent.css
 └── js/
     ├── core/
@@ -763,6 +827,7 @@ static/
         ├── mcp.js
         ├── lkcoffee.js     # 瑞幸 MCP 点单 SSE 对话
         ├── voice-chat.js   # ElevenLabs 录音 / STT / SSE / 音频队列
+        ├── embabel.js      # Embabel SSE 选路 + QuizPack 渲染
         ├── multi-agent.js
         ├── ask-user.js
         ├── todo-write.js
@@ -858,6 +923,13 @@ spring.ai.elevenlabs.tts.voice-id=CwhRBWXzGAHq8TQ4Fs17
 agent.voice-chat.stt.model-id=scribe_v2
 agent.voice-chat.stt.language-code=zh
 agent.voice-chat.tts.sentence-max-chars=40
+
+# ===== Embabel 自动选路（Prompt 见 application-embabel-prompts.yml）=====
+embabel.models.default-llm=deepseek-v4-pro
+embabel.agent.platform.models.openai.custom.api-key=${DEEPSEEK_API_KEY:}
+embabel.agent.platform.models.openai.custom.base-url=https://api.deepseek.com
+embabel.agent.platform.models.openai.custom.models=deepseek-v4-pro
+spring.config.import=optional:classpath:application-embabel-prompts.yml
 
 # ===== Agent Skills =====
 agent.skills.dirs=file:C:/Users/<you>/.cursor/skills,classpath:/.claude/skills
@@ -1077,6 +1149,13 @@ flowchart LR
 | GET | `/api/voices/settings/default` | 默认语音设置 |
 | GET | `/api/voices/{voiceId}` | 语音详情 |
 | GET | `/api/voices/{voiceId}/settings` | 语音推荐参数 |
+
+### Embabel 自动选路（`/embabel/agent`）
+
+| Method | Path | 说明 |
+|--------|------|------|
+| POST | `/embabel/agent/ask/stream` | SSE：选路 + Action 进度 + RESULT，Body：`{"message":"..."}` |
+| POST | `/embabel/agent/ask` | 同步调试，返回 `{processId, agentName, outputType, output}` |
 
 ### MCP
 
@@ -2116,6 +2195,13 @@ demo2/
 │   │   ├── VoiceApiController.java        # ElevenLabs TTS/STT + 语音对话 SSE
 │   │   ├── MultiAgentController.java
 │   │   └── IndexController.java        # GET / → forward:/index.html
+│   ├── embabel/                          # Embabel Agent 自动选路 + Quizzard
+│   │   ├── agent/                        # StarNewsAgent / PolicyAgent / QuizAgent
+│   │   ├── config/                       # *AgentProperties、LLM 兼容修复
+│   │   ├── controller/EmbabelAgentController.java
+│   │   ├── model/                        # AgentRequest / AgentResponse / EmbabelSseEvent
+│   │   ├── service/                      # EmbabelAgentService、ArticleFetchService 等
+│   │   └── sse/EmbabelSseBridge.java
 │   ├── mcp/
 │   │   ├── client/
 │   │   │   ├── LkCoffeeTokenResolver.java
@@ -2175,7 +2261,8 @@ demo2/
 │       ├── WeatherTool.java          # @Tool 天气查询（模拟数据）
 │       └── AttractionTool.java       # @Tool 景点推荐（内置6城市数据）
 ├── src/main/resources/
-│   ├── application.properties        # 主配置（含 Subagent/A2A、Micrometer/OTel）
+│   ├── application.properties        # 主配置（含 Embabel / Subagent/A2A、Micrometer/OTel）
+│   ├── application-embabel-prompts.yml # Embabel 中文 Prompt（星座 / 制度 / Quizzard）
 │   ├── application-otel.properties   # OTLP 导出 Profile（--spring.profiles.active=otel）
 │   ├── agents/                       # Subagent 子代理定义（architect.md、builder.md）
 │   ├── .claude/skills/             # 内置 Agent Skills 示例（ai-tutor、pdf、my-coffee）
@@ -2208,7 +2295,9 @@ demo2/
 │   │   ├── 2026-07-01-session-memory-design.md
 │   │   ├── 2026-07-02-tool-reasoning-design.md
 │   │   ├── 2026-07-04-lkcoffee-mcp-design.md
-│   │   └── 2026-07-07-elevenlabs-voice-chat-design.md
+│   │   ├── 2026-07-07-elevenlabs-voice-chat-design.md
+│   │   ├── 2026-07-13-embabel-agent-routing-design.md
+│   │   └── 2026-07-15-embabel-quizzard-design.md
 │   ├── plans/
 │   │   ├── 2026-06-27-ask-user-question-tool.md
 │   │   ├── 2026-06-29-todo-write-tool.md
@@ -2218,10 +2307,13 @@ demo2/
 │   │   ├── 2026-07-01-session-memory.md
 │   │   ├── 2026-07-02-tool-reasoning.md
 │   │   ├── 2026-07-04-lkcoffee-mcp.md
-│   │   └── 2026-07-07-elevenlabs-voice-chat.md
+│   │   ├── 2026-07-07-elevenlabs-voice-chat.md
+│   │   ├── 2026-07-13-embabel-agent-routing.md
+│   │   └── 2026-07-15-embabel-quizzard.md
 │   └── archive/
 │       ├── 2026-07-06-lkcoffee-mcp.md        # 瑞幸点单功能归档
-│       └── 2026-07-08-elevenlabs-voice-chat.md # ElevenLabs 语音对话归档
+│       ├── 2026-07-08-elevenlabs-voice-chat.md # ElevenLabs 语音对话归档
+│       └── 2026-07-16-embabel-quizzard.md    # Embabel Quizzard 出题归档
 └── pom.xml
 ```
 
@@ -2290,6 +2382,14 @@ MCP Client 连接本机 MCP Server（`http://localhost:8081/mcp`，Streamable HT
 3. 免费套餐部分 library voice 可能 402，默认音色已改为 Roger（`CwhRBWXzGAHq8TQ4Fs17`）
 4. 详见 `docs/superpowers/archive/2026-07-08-elevenlabs-voice-chat.md`
 
+**Q：Embabel Tab 选不到 QuizAgent / 出题失败？**
+
+1. 确认 `DEEPSEEK_API_KEY` 已配置并重启应用
+2. 样例消息需带「测验题 / 单选」等意图（测试3 按钮已预填）
+3. URL 抓取若遇文档站反爬会返回 **502**，改用粘贴正文路径
+4. Prompt 在 `application-embabel-prompts.yml` 的 `demo.quiz-agent`，不在 `application.properties`
+5. 详见 `docs/superpowers/archive/2026-07-16-embabel-quizzard.md`
+
 **Q：AskUserQuestion Demo 没有收到澄清问题？**
 
 确认已配置 `DEEPSEEK_API_KEY`，且前端在 `POST /chat` 后及时建立 `EventSource` 连接。Agent 仅在需求模糊时才会调用 `AskUserQuestionTool`；可尝试输入「帮我选一个数据库」等开放式问题。SSE 连接超时为 5 分钟。
@@ -2334,6 +2434,7 @@ MCP Client 连接本机 MCP Server（`http://localhost:8081/mcp`，Streamable HT
 - **spring-ai-session 0.2.0**：`SessionMemoryAdvisor` + JDBC Event Store（`AI_SESSION` / `AI_SESSION_EVENT`），见 §8.2 与 `docs/superpowers/specs/2026-07-01-session-memory-design.md`
 - **瑞幸 MCP 点单**：Streamable HTTP 双远程 MCP（瑞幸 + 高德）+ 官方 My Coffee Skill 内嵌 System Prompt，见 §10.1 与 `docs/superpowers/archive/2026-07-06-lkcoffee-mcp.md`
 - **ElevenLabs 语音对话**：TTS（`spring-ai-starter-model-elevenlabs`）+ 自封装 Scribe STT + 分句流式朗读，见 §10.2 与 `docs/superpowers/archive/2026-07-08-elevenlabs-voice-chat.md`
+- **Embabel 自动选路 + Quizzard**：`embabel-agent` 2.0.0-SNAPSHOT Closed 模式三 Agent；jsoup 抓文 + Action 链出题，见 §10.3 与 `docs/superpowers/archive/2026-07-16-embabel-quizzard.md`
 - **Micrometer + OpenTelemetry**：Boot 4 内置，通过 `spring-boot-starter-opentelemetry` 接入；Spring AI 自动暴露 `gen_ai.*` 指标
 
 详细设计见 `docs/superpowers/specs/` 目录。
@@ -2342,6 +2443,7 @@ MCP Client 连接本机 MCP Server（`http://localhost:8081/mcp`，Streamable HT
 
 ## 相关资源
 
+- [Embabel Agent](https://github.com/embabel/embabel-agent)
 - [Spring Boot 可观测性文档](https://docs.spring.io/spring-boot/reference/actuator/observability.html)
 - [Micrometer OpenTelemetry 桥接](https://micrometer.io/docs/tracing#_open_telemetry)
 - [Spring AI Agent Utils（AskUserQuestionTool / TaskTool）](https://github.com/spring-ai-community/spring-ai-agent-utils)

@@ -9,7 +9,7 @@ Spring AI 学习与实验仓库，包含两个独立子项目：基于 **Spring 
 | [demo](demo/) | 8080 | 3.5.x | 1.1.7 | 17 | 原版演示，Swagger UI |
 | [demo2](demo2/) | 8081 | 4.1.x | 2.0.0 | 21 | 升级实验，虚拟线程 + OpenTelemetry + Scalar 文档 |
 
-两个子项目功能基本对齐，`demo2` 额外包含结构化输出、可观测性集成、**瑞幸 MCP 点单**等实验功能，并针对 Spring AI 2.0 API 变更做了适配。
+两个子项目功能基本对齐，`demo2` 额外包含结构化输出、可观测性集成、**瑞幸 MCP 点单**、**Embabel 自动选路（含 Quizzard）**等实验功能，并针对 Spring AI 2.0 API 变更做了适配。
 
 ## 功能模块
 
@@ -27,6 +27,7 @@ Spring AI 学习与实验仓库，包含两个独立子项目：基于 **Spring 
 | MySQL 记忆 Agent | `/agent/mysql/trip/*` | JDBC 持久化聊天记忆 |
 | MCP | `/mcp/client/*` | 同 JVM 内 MCP Server + Client |
 | 瑞幸 MCP 点单 | `/agent/lkcoffee/*` | 远程 MCP + My Coffee Skill SSE 点单（仅 demo2） |
+| Embabel 自动选路 | `/embabel/agent/*` | Autonomy 三 Agent + Quizzard 出题（仅 demo2） |
 
 启动后访问 `http://localhost:{port}/` 可使用内置 Web 测试页面。
 
@@ -128,6 +129,9 @@ spring-ai-demo/
 │   ├── docker/
 │   │   ├── milvus/
 │   │   └── observability/ # Grafana LGTM 栈
+│   ├── docs/superpowers/  # specs / plans / archive
 │   └── src/main/java/
 └── README.md
 ```
+
+更多模块说明与归档见 [demo2/README.md](demo2/README.md)（含 Embabel Quizzard：`docs/superpowers/archive/2026-07-16-embabel-quizzard.md`）。
