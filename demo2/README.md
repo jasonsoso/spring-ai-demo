@@ -27,7 +27,7 @@
 
 本项目是一个 Spring AI 功能演示应用，通过不同 Controller/Service 模块独立演示各类 AI 能力，适合学习 Spring AI 各组件的用法。
 
-**`controller` 包共 19 个 Controller**（另含 `mcp.client.controller.McpChatController`、`embabel.controller.EmbabelAgentController`），与下表一一对应；功能模块章节按相同顺序归档。
+**`controller` 包共 19 个 Controller**（另含 `mcp.client.controller.McpChatController`、`embabel.controller.EmbabelAgentController`、`agentscope.controller.DevAgentController`），与下表一一对应；功能模块章节按相同顺序归档。
 
 ### Controller 一览
 
@@ -53,6 +53,7 @@
 | `LkCoffeeAgentController` | `controller` | `/agent/lkcoffee` | 瑞幸 MCP + My Coffee Skill SSE 点单 |
 | `VoiceApiController` | `controller` | `/api` | ElevenLabs TTS/STT + 语音对话 SSE |
 | `EmbabelAgentController` | `embabel.controller` | `/embabel/agent` | Embabel Autonomy 自动选路（SSE + 同步） |
+| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE 任务清单 |
 | `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
 
 | 模块 | 能力 | 依赖外部服务 |
@@ -1158,6 +1159,21 @@ flowchart LR
 |--------|------|------|
 | POST | `/embabel/agent/ask/stream` | SSE：选路 + Action 进度 + RESULT，Body：`{"message":"..."}` |
 | POST | `/embabel/agent/ask` | 同步调试，返回 `{processId, agentName, outputType, output}` |
+
+### AgentScope HarnessAgent（`/agentscope/dev-agent`）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` → `MESSAGE*` → `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}` |
+
+同 `sessionId` 追问可验证进程内会话；换 `sessionId` 应不串话。curl 示例：
+
+```bash
+curl -N -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"dev-user-001\",\"sessionId\":\"dev-session-001\",\"message\":\"帮我整理一份今天排查订单接口超时的执行清单\"}"
+```
+
 
 ### MCP
 

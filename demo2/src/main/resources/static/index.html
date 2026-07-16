@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="/css/tabs/lkcoffee.css">
     <link rel="stylesheet" href="/css/tabs/multi-agent.css">
     <link rel="stylesheet" href="/css/tabs/embabel.css">
+    <link rel="stylesheet" href="/css/tabs/agentscope.css">
 </head>
 <body>
 <div class="app-container">
@@ -49,6 +50,7 @@
         <button class="tab-btn" data-tab="subagent" onclick="switchTab('subagent')">🔗 Subagent 编排</button>
         <button class="tab-btn" data-tab="a2a" onclick="switchTab('a2a')">🌐 A2A 跨系统对话</button>
         <button class="tab-btn" data-tab="embabel" onclick="switchTab('embabel')">🔀 Embabel 自动选路</button>
+        <button class="tab-btn" data-tab="agentscope" onclick="switchTab('agentscope')">🧭 AgentScope Harness</button>
     </div>
 
     <!-- ========== 聊天 Tab ========== -->
@@ -1229,6 +1231,31 @@
         </div>
     </div>
 
+    <!-- ========== AgentScope HarnessAgent Tab ========== -->
+    <div id="tab-agentscope" class="tab-content">
+        <div class="agentscope-header">
+            <h2>AgentScope HarnessAgent</h2>
+            <p>克制版研发任务清单：无工具，进程内会话状态，SSE：SESSION → MESSAGE* → DONE</p>
+        </div>
+        <div class="agentscope-meta">
+            <label>userId <input id="agentscopeUserId" type="text" placeholder="可选，如 dev-user-001" value="dev-user-001"></label>
+            <label>sessionId <input id="agentscopeSessionId" type="text" placeholder="会话 ID"></label>
+            <button type="button" id="agentscopeNewSessionBtn">换会话</button>
+            <button type="button" onclick="fillAgentscopeSample(1)">示例：订单超时</button>
+            <button type="button" onclick="fillAgentscopeSample(2)">示例：支付 500</button>
+        </div>
+        <div id="agentscopeStatus" class="agentscope-status">就绪</div>
+        <div id="agentscopeMessages" class="agentscope-messages">
+            <div id="agentscopeWelcome" class="message assistant">
+                <div class="message-content">输入研发任务，获取可执行检查清单。可点「换会话」验证 session 隔离。</div>
+            </div>
+        </div>
+        <form id="agentscopeForm" class="agentscope-input-bar">
+            <textarea id="agentscopeMessageInput" rows="3" placeholder="描述待排查的研发问题…" required></textarea>
+            <button type="submit" id="agentscopeSendBtn">发送</button>
+        </form>
+    </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -1255,5 +1282,6 @@
 <script src="/js/tabs/subagent.js"></script>
 <script src="/js/tabs/a2a.js"></script>
 <script src="/js/tabs/embabel.js"></script>
+<script src="/js/tabs/agentscope.js"></script>
 </body>
 </html>

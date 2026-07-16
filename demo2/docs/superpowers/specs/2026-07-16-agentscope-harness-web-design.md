@@ -2,7 +2,7 @@
 
 **日期**: 2026-07-16  
 **项目**: spring-ai-demo / demo2  
-**状态**: 待实现  
+**状态**: 已实现  
 **参考文章**: https://mp.weixin.qq.com/s/G8Lh_P-iFpvb13mzfdMpeg  
 （《2. AgentScope Java 2.0 上手：用 HarnessAgent 跑通第一个 Web 接口》）
 
