@@ -85,6 +85,14 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- AgentScope 模块版本统一由 BOM 管理，避免各 artifact 手写 version 冲突 -->
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-bom</artifactId>
+                <version>${agentscope.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -260,16 +268,14 @@
             <version>2.0.12</version>
         </dependency>
 
-        <!-- AgentScope Java 2.0：HarnessAgent Web 上手 -->
+        <!-- AgentScope Java 2.0：HarnessAgent Web 上手（版本见 agentscope-bom） -->
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-harness</artifactId>
-            <version>${agentscope.version}</version>
         </dependency>
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-model-openai</artifactId>
-            <version>${agentscope.version}</version>
         </dependency>
     </dependencies>
 
