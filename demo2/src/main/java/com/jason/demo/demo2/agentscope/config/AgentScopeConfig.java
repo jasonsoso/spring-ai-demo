@@ -1,6 +1,9 @@
 package com.jason.demo.demo2.agentscope.config;
 
+import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
 import io.agentscope.core.model.Model;
+import io.agentscope.core.permission.PermissionContextState;
+import io.agentscope.core.permission.PermissionMode;
 import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.extensions.model.openai.formatter.DeepSeekFormatter;
@@ -10,6 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.IOException;
+import java.nio.file.Path;
 
 @Configuration
 public class AgentScopeConfig {
@@ -28,14 +32,23 @@ public class AgentScopeConfig {
     }
 
     @Bean
+    ProjectInfoTools projectInfoTools(DevAgentProperties properties) {
+        return new ProjectInfoTools(Path.of(properties.projectRoot()));
+    }
+
+    @Bean
     HarnessAgent agentscopeDevAgent(
             @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
-            DevAgentProperties properties) throws IOException {
+            DevAgentProperties properties,
+            ProjectInfoTools projectInfoTools) throws IOException {
         HarnessAgent agent = HarnessAgent.builder()
                 .name(properties.name())
                 .sysPrompt(properties.systemPrompt())
                 .model(agentscopeDeepSeekModel)
                 .stateStore(new InMemoryAgentStateStore())
+                .permissionContext(PermissionContextState.builder()
+                        .mode(PermissionMode.EXPLORE)
+                        .build())
                 .enableAgentTracingLog(false)
                 .disableFilesystemTools()
                 .disableShellTool()
@@ -50,6 +63,7 @@ public class AgentScopeConfig {
                 .disableToolsConfig()
                 .build();
         agent.getToolkit().removeTool("wait_async_results");
+        agent.getToolkit().registerTool(projectInfoTools);
         return agent;
     }
 }

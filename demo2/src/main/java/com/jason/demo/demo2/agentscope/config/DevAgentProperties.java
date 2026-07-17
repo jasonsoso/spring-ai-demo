@@ -10,6 +10,7 @@ import org.springframework.validation.annotation.Validated;
 public record DevAgentProperties(
         @NotBlank String name,
         @NotBlank String systemPrompt,
+        @NotBlank String projectRoot,
         @Valid Model model) {
 
     /**
