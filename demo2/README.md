@@ -53,7 +53,7 @@
 | `LkCoffeeAgentController` | `controller` | `/agent/lkcoffee` | 瑞幸 MCP + My Coffee Skill SSE 点单 |
 | `VoiceApiController` | `controller` | `/api` | ElevenLabs TTS/STT + 语音对话 SSE |
 | `EmbabelAgentController` | `embabel.controller` | `/embabel/agent` | Embabel Autonomy 自动选路（SSE + 同步） |
-| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE 任务清单 |
+| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单整理 + 项目只读工具 + 工具事件透传 |
 | `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
 
 | 模块 | 能力 | 依赖外部服务 |
@@ -1164,14 +1164,20 @@ flowchart LR
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` → `MESSAGE*` → `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}` |
+| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END`）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}`。只读工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`） |
 
 同 `sessionId` 追问可验证进程内会话；换 `sessionId` 应不串话。curl 示例：
 
 ```bash
+# 清单整理
 curl -N -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"dev-user-001\",\"sessionId\":\"dev-session-001\",\"message\":\"帮我整理一份今天排查订单接口超时的执行清单\"}"
+
+# 项目问答（应出现 TOOL_* 事件）
+curl -N -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"dev-user-001\",\"sessionId\":\"toolkit-session-001\",\"message\":\"帮我看一下这个项目用了哪个 Java 版本、Spring Boot 版本，以及启动类在哪里\"}"
 ```
 
 
