@@ -1235,20 +1235,23 @@
     <div id="tab-agentscope" class="tab-content">
         <div class="agentscope-header">
             <h2>AgentScope HarnessAgent</h2>
-            <p>克制版研发任务清单：无工具，进程内会话状态，SSE：SESSION → MESSAGE* → DONE</p>
+            <p>清单整理 + 项目只读工具；SSE：SESSION → 工具/生命周期事件 → MESSAGE* → AGENT_RESULT → DONE</p>
         </div>
         <div class="agentscope-meta">
             <label>userId <input id="agentscopeUserId" type="text" placeholder="可选，如 dev-user-001" value="dev-user-001"></label>
             <label>sessionId <input id="agentscopeSessionId" type="text" placeholder="会话 ID"></label>
             <button type="button" id="agentscopeNewSessionBtn">换会话</button>
-            <button type="button" onclick="fillAgentscopeSample(1)">示例：订单超时</button>
-            <button type="button" onclick="fillAgentscopeSample(2)">示例：支付 500</button>
+            <span class="agentscope-samples">
+                <button type="button" onclick="fillAgentscopeSample(1)">示例：排查清单</button>
+                <button type="button" onclick="fillAgentscopeSample(2)">示例：支付回调清单</button>
+                <button type="button" onclick="fillAgentscopeSample(3)">示例：项目版本与启动类</button>
+            </span>
         </div>
         <div id="agentscopeStatus" class="agentscope-status">就绪</div>
         <div class="agentscope-layout">
             <div id="agentscopeMessages" class="agentscope-messages">
                 <div id="agentscopeWelcome" class="message assistant">
-                    <div class="message-content">输入研发任务，获取可执行检查清单。可点「换会话」验证 session 隔离。</div>
+                    <div class="message-content">输入排查问题获取检查清单，或询问 Java / Spring Boot 版本、源码结构、启动类。可点「换会话」验证 session 隔离。</div>
                 </div>
             </div>
             <form id="agentscopeForm" class="agentscope-input-bar">

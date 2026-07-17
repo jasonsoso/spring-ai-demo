@@ -13,7 +13,7 @@ function resetAgentscopeConversation() {
     const box = document.getElementById('agentscopeMessages');
     if (!box) return;
     box.innerHTML = '<div id="agentscopeWelcome" class="message assistant"><div class="message-content">'
-        + '输入研发任务，获取可执行检查清单。可点「换会话」验证 session 隔离。'
+        + '输入排查问题获取检查清单，或询问 Java / Spring Boot 版本、源码结构、启动类。可点「换会话」验证 session 隔离。'
         + '</div></div>';
     document.getElementById('agentscopeSessionId').value = newAgentscopeSessionId();
     setAgentscopeStatus('就绪');
@@ -51,10 +51,54 @@ function appendAgentscopeBubble(text, isUser) {
     return content;
 }
 
+function beginAgentscopeAssistantTurn() {
+    const box = document.getElementById('agentscopeMessages');
+    const welcome = document.getElementById('agentscopeWelcome');
+    if (welcome) welcome.remove();
+
+    const wrap = document.createElement('div');
+    wrap.className = 'message assistant';
+    const col = document.createElement('div');
+    col.className = 'agentscope-assistant-col';
+    const strip = document.createElement('div');
+    strip.className = 'agentscope-tool-strip';
+    const content = document.createElement('div');
+    content.className = 'message-content';
+    col.appendChild(strip);
+    col.appendChild(content);
+    wrap.appendChild(col);
+    box.appendChild(wrap);
+    scrollAgentscopeMessages();
+    return { strip: strip, content: content, tools: new Map() };
+}
+
+function upsertAgentscopeToolItem(turn, toolCallId, name, state) {
+    if (!turn || !toolCallId) return;
+    let item = turn.tools.get(toolCallId);
+    if (!item) {
+        item = document.createElement('div');
+        item.className = 'agentscope-tool-item';
+        item.dataset.toolCallId = toolCallId;
+        turn.strip.appendChild(item);
+        turn.tools.set(toolCallId, item);
+    }
+    item.classList.remove('is-done', 'is-error');
+    if (state) {
+        const upper = String(state).toUpperCase();
+        if (upper === 'SUCCESS') item.classList.add('is-done');
+        if (upper === 'ERROR' || upper === 'DENIED') item.classList.add('is-error');
+        item.textContent = (name || 'tool') + ' · ' + state;
+    } else {
+        item.textContent = '准备调用：' + (name || 'tool');
+    }
+    scrollAgentscopeMessages();
+}
+
 function fillAgentscopeSample(n) {
     const samples = {
         1: '帮我整理一份今天排查订单接口超时的执行清单',
-        2: '支付回调偶发 500，给我一份不超过 6 步的排查顺序'
+        2: '支付回调偶发 500，给我一份不超过 6 步的排查顺序',
+        3: '帮我看一下这个项目用了哪个 Java 版本、Spring Boot 版本，以及启动类在哪里'
     };
     const input = document.getElementById('agentscopeMessageInput');
     if (input) {
@@ -72,12 +116,12 @@ async function sendAgentscopeMessage() {
 
     appendAgentscopeBubble(message, true);
     document.getElementById('agentscopeMessageInput').value = '';
-    const assistant = appendAgentscopeBubble('', false);
+    const turn = beginAgentscopeAssistantTurn();
     setAgentscopeInputEnabled(false);
     setAgentscopeStatus('连接中…');
 
     try {
-        const body = { sessionId, message };
+        const body = { sessionId: sessionId, message: message };
         if (userId) body.userId = userId;
         const res = await fetch('/agentscope/dev-agent/ask', {
             method: 'POST',
@@ -109,21 +153,31 @@ async function sendAgentscopeMessage() {
                 const payload = JSON.parse(data);
                 if (payload.type === 'SESSION') {
                     setAgentscopeStatus('SESSION ' + (payload.sessionId || sessionId));
+                } else if (payload.type === 'AGENT_START' || payload.type === 'MODEL_CALL_START' || payload.type === 'AGENT_END') {
+                    setAgentscopeStatus(payload.type);
+                } else if (payload.type === 'TOOL_CALL_START') {
+                    setAgentscopeStatus('TOOL_CALL_START ' + (payload.name || ''));
+                    upsertAgentscopeToolItem(turn, payload.toolCallId, payload.name, null);
+                } else if (payload.type === 'TOOL_RESULT_END') {
+                    setAgentscopeStatus('TOOL_RESULT_END ' + (payload.state || ''));
+                    upsertAgentscopeToolItem(turn, payload.toolCallId, payload.name, payload.state);
                 } else if (payload.type === 'MESSAGE') {
                     setAgentscopeStatus('流式中…');
-                    assistant.textContent += (payload.content || '');
+                    turn.content.textContent += (payload.content || '');
                     scrollAgentscopeMessages();
+                } else if (payload.type === 'AGENT_RESULT') {
+                    setAgentscopeStatus('AGENT_RESULT');
                 } else if (payload.type === 'DONE') {
                     setAgentscopeStatus('DONE');
                 } else if (payload.type === 'ERROR') {
                     setAgentscopeStatus('ERROR');
-                    assistant.textContent += (assistant.textContent ? '\n' : '') + '[ERROR] ' + (payload.content || '出错');
+                    turn.content.textContent += (turn.content.textContent ? '\n' : '') + '[ERROR] ' + (payload.content || '出错');
                 }
             }
         }
     } catch (e) {
         setAgentscopeStatus('失败');
-        assistant.textContent += (assistant.textContent ? '\n' : '') + '[ERROR] ' + (e.message || e);
+        turn.content.textContent += (turn.content.textContent ? '\n' : '') + '[ERROR] ' + (e.message || e);
     } finally {
         setAgentscopeInputEnabled(true);
     }

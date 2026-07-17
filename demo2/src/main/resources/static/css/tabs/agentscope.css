@@ -129,3 +129,42 @@
     opacity: 0.6;
     cursor: not-allowed;
 }
+
+.agentscope-assistant-col {
+    display: flex;
+    flex-direction: column;
+    max-width: 78%;
+    gap: 6px;
+}
+.agentscope-messages .message.assistant .agentscope-assistant-col .message-content {
+    max-width: 100%;
+}
+.agentscope-tool-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+}
+.agentscope-tool-item {
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 4px 8px;
+    border-left: 3px solid #17864f;
+    background: #f3faf6;
+    color: #2f3b40;
+    border-radius: 0 6px 6px 0;
+}
+.agentscope-tool-item.is-done {
+    border-left-color: #4a90d9;
+    background: #eef5fb;
+}
+.agentscope-tool-item.is-error {
+    border-left-color: #c0392b;
+    background: #fdf0ee;
+}
+.agentscope-samples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+}
