@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record DevAgentEvent(
-        String type,
+        DevAgentEventType type,
         String sessionId,
         String content,
         String eventId,
@@ -13,25 +13,25 @@ public record DevAgentEvent(
         String state) {
 
     public static DevAgentEvent session(String sessionId) {
-        return new DevAgentEvent("SESSION", sessionId, "", null, null, null, null);
+        return new DevAgentEvent(DevAgentEventType.SESSION, sessionId, "", null, null, null, null);
     }
 
     public static DevAgentEvent message(String sessionId, String content) {
         return new DevAgentEvent(
-                "MESSAGE", sessionId, content == null ? "" : content, null, null, null, null);
+                DevAgentEventType.MESSAGE, sessionId, content == null ? "" : content, null, null, null, null);
     }
 
     public static DevAgentEvent done(String sessionId) {
-        return new DevAgentEvent("DONE", sessionId, "", null, null, null, null);
+        return new DevAgentEvent(DevAgentEventType.DONE, sessionId, "", null, null, null, null);
     }
 
     public static DevAgentEvent error(String sessionId, String content) {
         return new DevAgentEvent(
-                "ERROR", sessionId, content == null ? "" : content, null, null, null, null);
+                DevAgentEventType.ERROR, sessionId, content == null ? "" : content, null, null, null, null);
     }
 
     public static DevAgentEvent lifecycle(
-            String type, String sessionId, String eventId, String content) {
+            DevAgentEventType type, String sessionId, String eventId, String content) {
         return new DevAgentEvent(
                 type, sessionId, content == null ? "" : content, eventId, null, null, null);
     }
@@ -43,7 +43,7 @@ public record DevAgentEvent(
             String name,
             String content) {
         return new DevAgentEvent(
-                "TOOL_CALL_START",
+                DevAgentEventType.TOOL_CALL_START,
                 sessionId,
                 content == null ? "" : content,
                 eventId,
@@ -59,12 +59,12 @@ public record DevAgentEvent(
             String name,
             String state) {
         return new DevAgentEvent(
-                "TOOL_RESULT_END", sessionId, "", eventId, toolCallId, name, state);
+                DevAgentEventType.TOOL_RESULT_END, sessionId, "", eventId, toolCallId, name, state);
     }
 
     public static DevAgentEvent agentResult(String sessionId, String eventId, String content) {
         return new DevAgentEvent(
-                "AGENT_RESULT",
+                DevAgentEventType.AGENT_RESULT,
                 sessionId,
                 content == null ? "" : content,
                 eventId,

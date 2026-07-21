@@ -2,6 +2,7 @@ package com.jason.demo.demo2.agentscope.service;
 
 import com.jason.demo.demo2.agentscope.config.DevAgentProperties;
 import com.jason.demo.demo2.agentscope.model.DevAgentEvent;
+import com.jason.demo.demo2.agentscope.model.DevAgentEventType;
 import com.jason.demo.demo2.agentscope.model.DevAgentRequest;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
@@ -85,7 +86,7 @@ class DevAgentServiceTest {
 
         StepVerifier.create(service.ask(new DevAgentRequest(null, "s1", "hi")))
                 .expectNext(DevAgentEvent.session("s1"))
-                .expectNextMatches(e -> "ERROR".equals(e.type()) && e.content().contains("DEEPSEEK_API_KEY"))
+                .expectNextMatches(e -> e.type() == DevAgentEventType.ERROR && e.content().contains("DEEPSEEK_API_KEY"))
                 .verifyComplete();
     }
 
@@ -96,7 +97,7 @@ class DevAgentServiceTest {
 
         StepVerifier.create(service.ask(new DevAgentRequest("u1", "s1", "hi")))
                 .expectNext(DevAgentEvent.session("s1"))
-                .expectNextMatches(e -> "ERROR".equals(e.type()) && e.content().contains("upstream down"))
+                .expectNextMatches(e -> e.type() == DevAgentEventType.ERROR && e.content().contains("upstream down"))
                 .verifyComplete();
     }
 
@@ -135,7 +136,7 @@ class DevAgentServiceTest {
 
         StepVerifier.create(service.ask(new DevAgentRequest("u1", "s1", "问版本")))
                 .expectNext(DevAgentEvent.session("s1"))
-                .expectNextMatches(e -> "AGENT_START".equals(e.type()))
+                .expectNextMatches(e -> e.type() == DevAgentEventType.AGENT_START)
                 .expectNext(DevAgentEvent.toolCallStart(
                         "s1", "e-ts", "call-1", "read_pom", "准备调用工具：read_pom"))
                 .expectNext(DevAgentEvent.toolResultEnd(

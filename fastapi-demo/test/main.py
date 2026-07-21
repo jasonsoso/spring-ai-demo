@@ -16,7 +16,6 @@ years = 10
 print(f"我是{name},做了{years}年开发，现在学AI")
 
 
-
 def greet(name):
     """
     向用户打招呼

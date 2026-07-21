@@ -2,6 +2,7 @@ package com.jason.demo.demo2.agentscope.service;
 
 import com.jason.demo.demo2.agentscope.config.DevAgentProperties;
 import com.jason.demo.demo2.agentscope.model.DevAgentEvent;
+import com.jason.demo.demo2.agentscope.model.DevAgentEventType;
 import com.jason.demo.demo2.agentscope.model.DevAgentRequest;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
@@ -61,17 +62,17 @@ public class DevAgentService {
     private DevAgentEvent mapEvent(String sessionId, AgentEvent event) {
         return switch (event.getType()) {
             case AGENT_START -> DevAgentEvent.lifecycle(
-                    "AGENT_START",
+                    DevAgentEventType.AGENT_START,
                     sessionId,
                     event.getId(),
                     "Agent 开始");
             case MODEL_CALL_START -> DevAgentEvent.lifecycle(
-                    "MODEL_CALL_START",
+                    DevAgentEventType.MODEL_CALL_START,
                     sessionId,
                     event.getId(),
                     "模型调用开始");
             case AGENT_END -> DevAgentEvent.lifecycle(
-                    "AGENT_END",
+                    DevAgentEventType.AGENT_END,
                     sessionId,
                     event.getId(),
                     "Agent 结束");
