@@ -1198,6 +1198,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
 
 前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片，可选择批准或拒绝；示例按钮「写 notes 文件（HITL）」对应上述 curl 流程。
 
+**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 事件映射 + pending 确认）→ **能力层**（`HarnessAgent` + Toolkit / Permission）。详细流程见 [§25–27 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
 ### MCP
 
@@ -1245,6 +1246,8 @@ graph TB
             C12b[TodoAgentController]
             C13[SubagentAgentController]
             C14[A2aOrchestratorController]
+            C15[EmbabelAgentController]
+            C16[DevAgentController]
         end
 
         subgraph AgentUtilsTools
@@ -2353,6 +2356,168 @@ flowchart TD
 
 > **与 §12「多 Agent 协作」的区别**：§12 由 Java `CompletableFuture` 写死 Supervisor-Worker；§22–24 由 Embabel `Autonomy` 按 Agent description **自动选路**，Agent 内再跑 Action 对象链。Quizzard 不推送 `ConceptDigest` / `QuizDraft` 中间态到前端。
 
+### 25. AgentScope HarnessAgent — 三层架构
+
+与 API 节及 `docs/superpowers/specs/2026-07-22-agentscope-permission-hitl-design.md` 对齐：**展示层**（Tab / curl）→ **编排层**（`DevAgentController` + `DevAgentService`）→ **能力层**（`HarnessAgent` + 只读工具 + `FileChangeTool` + Permission）。
+
+```mermaid
+flowchart TB
+    subgraph 展示层["前端 Tab「🧭 AgentScope Harness」"]
+        META[userId / sessionId]
+        SAMPLES[示例：清单 / 项目问答 / 写 notes HITL]
+        MSG[消息区 + 工具条]
+        CARD[确认卡片 批准 / 拒绝]
+        META --> UI[agentscope.js]
+        SAMPLES --> UI
+        UI --> MSG
+        UI --> CARD
+    end
+
+    subgraph 编排层["Spring Boot demo2 — AgentScope 编排"]
+        CTRL[DevAgentController]
+        SVC[DevAgentService]
+        PENDING["pendingConfirmations<br/>key = userId + sessionId → ToolUseBlock"]
+        EVT["AgentEvent → DevAgentEvent<br/>含 REQUIRE_USER_CONFIRM / REQUEST_STOP"]
+        PROMPTS[application-agentscope-prompts.yml]
+
+        UI -->|POST /agentscope/dev-agent/ask| CTRL
+        UI -->|POST /agentscope/dev-agent/confirm| CTRL
+        CTRL --> SVC
+        SVC --> PENDING
+        SVC --> EVT
+        PROMPTS -.->|systemPrompt| HA
+    end
+
+    subgraph 能力层["HarnessAgent + Toolkit"]
+        HA[HarnessAgent\nPermissionMode.DEFAULT]
+        READ[ProjectInfoTools\nread_pom / list_source_folders / find_main_class\nALLOW]
+        WRITE[FileChangeTool\nrequest_file_change\nASK / DENY]
+        STORE[InMemoryAgentStateStore]
+
+        HA --> READ
+        HA --> WRITE
+        HA --> STORE
+        SVC -->|streamEvents| HA
+    end
+
+    subgraph 外部["DeepSeek"]
+        DS[deepseek-v4-pro\nOpenAIChatModel + DeepSeekFormatter]
+        HA --> DS
+    end
+
+    subgraph 本地文件["projectRoot"]
+        NOTES[notes/\n仅批准后写入]
+        WRITE --> NOTES
+    end
+
+    EVT -->|SSE SESSION / TOOL_* / MESSAGE / CONFIRM / DONE| UI
+```
+
+| 层 | 职责 |
+|----|------|
+| 展示层 | SSE 流式文字、工具条、`REQUIRE_USER_CONFIRM` 确认卡片 |
+| 编排层 | RuntimeContext、pending 缓存、`ConfirmResult` 恢复、事件 DTO 映射 |
+| 能力层 | 模型推理、工具选择、PermissionEngine 决策、真正写盘 |
+
+### 26. AgentScope — Permission HITL 决策与写文件流
+
+模型提出 `request_file_change` 后，**先** `checkPermissions()`，**后**才可能 `callAsync()` 写盘。
+
+```mermaid
+flowchart TD
+    USER[用户：请创建 notes/xxx.txt] --> ASK[POST /ask]
+    ASK --> LLM[模型生成 ToolUseBlock\nrequest_file_change]
+    LLM --> PE[PermissionEngine +\nFileChangeTool.checkPermissions]
+
+    PE -->|delete / remove| DENY1[DENY\nTOOL_RESULT_END DENIED\n无确认卡片]
+    PE -->|路径越界 / 绝对路径| DENY2[DENY\n无确认卡片]
+    PE -->|合法 notes/ 写入| ASK_P[ASK\nsafety: write requires approval]
+
+    ASK_P --> SSE1[SSE REQUIRE_USER_CONFIRM\n+ pendingToolCalls]
+    SSE1 --> STOP[SSE REQUEST_STOP\nPERMISSION_ASKING]
+    STOP --> WAIT[Agent 暂停\n文件尚未创建]
+
+    WAIT --> UI{用户点确认卡片}
+    UI -->|批准 approved=true| CONF[POST /confirm]
+    UI -->|拒绝 approved=false| CONF
+
+    CONF --> RESUME[ConfirmResult +\nMsg.METADATA_CONFIRM_RESULTS]
+    RESUME -->|批准| EXEC[callAsync 写 notes/\n再校验路径与符号链接]
+    RESUME -->|拒绝| DENIED[工具结果 DENIED\n不写文件]
+    EXEC --> LLM2[再调模型收尾回复]
+    DENIED --> LLM2
+    LLM2 --> DONE[SSE DONE]
+```
+
+```mermaid
+flowchart LR
+    subgraph ALLOW["直接执行"]
+        A1[read_pom]
+        A2[list_source_folders]
+        A3[find_main_class]
+    end
+
+    subgraph ASK["人工确认"]
+        B1["create / write / update / append\n且路径在 notes/"]
+    end
+
+    subgraph DENY["直接拒绝"]
+        C1[delete / remove]
+        C2[notes/../ 逃逸]
+        C3[绝对路径]
+        C4[不支持的 operation]
+    end
+```
+
+### 27. AgentScope — SSE 时序（HITL 批准）
+
+典型路径：示例「写 notes 文件」→ ASK 暂停 → 用户批准 → 写盘 → 模型总结。
+
+```mermaid
+sequenceDiagram
+    participant 用户
+    participant 前端 as agentscope.js
+    participant Ctrl as DevAgentController
+    participant Svc as DevAgentService
+    participant HA as HarnessAgent
+    participant PE as PermissionEngine
+    participant Tool as FileChangeTool
+    participant DS as DeepSeek
+
+    用户->>前端: 发送「创建 notes/permission-demo.txt」
+    前端->>Ctrl: POST /agentscope/dev-agent/ask
+    Ctrl->>Svc: ask(request)
+    Svc-->>前端: SSE SESSION
+    Svc->>HA: streamEvents(message, RuntimeContext)
+    HA->>DS: 模型推理
+    DS-->>HA: ToolUseBlock request_file_change
+    HA->>PE: 权限检查
+    PE->>Tool: checkPermissions → ASK
+    HA-->>Svc: RequireUserConfirmEvent
+    Svc->>Svc: pendingConfirmations.put(userId + sessionId)
+    Svc-->>前端: SSE REQUIRE_USER_CONFIRM
+    HA-->>Svc: RequestStopEvent PERMISSION_ASKING
+    Svc-->>前端: SSE REQUEST_STOP / DONE
+    Note over 前端,Tool: 此时 notes/ 文件尚未创建
+
+    用户->>前端: 点击「批准」
+    前端->>Ctrl: POST /agentscope/dev-agent/confirm approved=true
+    Ctrl->>Svc: confirm(request)
+    Svc->>Svc: remove pending → ConfirmResult
+    Svc->>HA: streamEvents(Msg + METADATA_CONFIRM_RESULTS)
+    HA->>Tool: callAsync 写文件
+    Tool-->>HA: SUCCESS
+    HA-->>Svc: TOOL_RESULT_* 
+    Svc-->>前端: SSE TOOL_RESULT_END SUCCESS
+    HA->>DS: 再调模型收尾
+    DS-->>HA: 文本回复
+    HA-->>Svc: MESSAGE / AGENT_RESULT
+    Svc-->>前端: SSE MESSAGE* / DONE
+    前端->>前端: 更新气泡；可检查 notes/permission-demo.txt
+```
+
+> **与 §10 AskUserQuestion 的区别**：AskUser 是业务澄清（选数据库等）；AgentScope HITL 是 **工具执行前权限闸门**——模型已提交写文件申请单，是否落盘由 Permission + 用户确认决定，不依赖 Prompt 自觉。
+
 ---
 
 ## 目录结构
@@ -2414,6 +2579,12 @@ demo2/
 │   │   ├── model/                        # AgentRequest / AgentResponse / EmbabelSseEvent
 │   │   ├── service/                      # EmbabelAgentService、ArticleFetchService 等
 │   │   └── sse/EmbabelSseBridge.java
+│   ├── agentscope/                       # AgentScope HarnessAgent + Permission HITL
+│   │   ├── config/                       # AgentScopeConfig、DevAgentProperties
+│   │   ├── controller/DevAgentController.java
+│   │   ├── model/                        # DevAgentEvent / ConfirmRequest / PendingToolCall
+│   │   ├── service/DevAgentService.java  # ask / confirm + pending 缓存
+│   │   └── tool/                         # ProjectInfoTools、FileChangeTool
 │   ├── mcp/
 │   │   ├── client/
 │   │   │   ├── LkCoffeeTokenResolver.java
