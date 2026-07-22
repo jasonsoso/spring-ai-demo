@@ -23,5 +23,9 @@ public enum DevAgentEventType {
     /** 工具调用结束（含成功/失败状态）。 */
     TOOL_RESULT_END,
     /** Agent 最终完整结果。 */
-    AGENT_RESULT
+    AGENT_RESULT,
+    /** 需要用户确认待执行的工具调用。 */
+    REQUIRE_USER_CONFIRM,
+    /** 本轮请求停止（如权限询问）。 */
+    REQUEST_STOP
 }
