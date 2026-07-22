@@ -7,7 +7,6 @@ import com.jason.demo.demo2.agentscope.model.DevAgentEventType;
 import com.jason.demo.demo2.agentscope.model.DevAgentRequest;
 import io.agentscope.core.event.ConfirmResult;
 import io.agentscope.core.agent.RuntimeContext;
-import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentEventType;
 import io.agentscope.core.event.AgentResultEvent;
 import io.agentscope.core.event.AgentStartEvent;
@@ -18,8 +17,12 @@ import io.agentscope.core.event.ToolCallStartEvent;
 import io.agentscope.core.event.ToolResultEndEvent;
 import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.ToolCallState;
 import io.agentscope.core.message.ToolResultState;
 import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.state.AgentState;
+import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.harness.agent.HarnessAgent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +35,7 @@ import reactor.test.StepVerifier;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -46,6 +50,9 @@ class DevAgentServiceTest {
     @Mock
     HarnessAgent harnessAgent;
 
+    @Mock
+    AgentStateStore agentStateStore;
+
     DevAgentProperties properties;
     DevAgentService service;
 
@@ -56,7 +63,7 @@ class DevAgentServiceTest {
                 "prompt",
                 ".",
                 new DevAgentProperties.Model("sk-test", "https://api.deepseek.com", "deepseek-v4-pro"));
-        service = new DevAgentService(harnessAgent, properties);
+        service = new DevAgentService(harnessAgent, properties, agentStateStore);
     }
 
     @Test
@@ -91,7 +98,8 @@ class DevAgentServiceTest {
                         "dev-task-agent",
                         "prompt",
                         ".",
-                        new DevAgentProperties.Model("  ", "https://api.deepseek.com", "deepseek-v4-pro")));
+                        new DevAgentProperties.Model("  ", "https://api.deepseek.com", "deepseek-v4-pro")),
+                agentStateStore);
 
         StepVerifier.create(service.ask(new DevAgentRequest(null, "s1", "hi")))
                 .expectNext(DevAgentEvent.session("s1"))
@@ -157,7 +165,7 @@ class DevAgentServiceTest {
     }
 
     @Test
-    void ask_mapsRequireUserConfirmAndStoresPending() {
+    void ask_mapsRequireUserConfirm() {
         RequireUserConfirmEvent confirm = mock(RequireUserConfirmEvent.class);
         when(confirm.getType()).thenReturn(AgentEventType.REQUIRE_USER_CONFIRM);
         when(confirm.getId()).thenReturn("e-c");
@@ -195,6 +203,9 @@ class DevAgentServiceTest {
 
     @Test
     void confirm_withoutPending_emitsError() {
+        when(agentStateStore.get(eq("u1"), eq("s-missing"), eq("agent_state"), eq(AgentState.class)))
+                .thenReturn(Optional.empty());
+
         StepVerifier.create(service.confirm(new DevAgentConfirmRequest("u1", "s-missing", true)))
                 .expectNext(DevAgentEvent.session("s-missing"))
                 .expectNextMatches(e ->
@@ -205,21 +216,23 @@ class DevAgentServiceTest {
 
     @Test
     void confirm_approved_resumesWithConfirmResultsMetadata() {
-        RequireUserConfirmEvent confirmEvt = mock(RequireUserConfirmEvent.class);
-        when(confirmEvt.getType()).thenReturn(AgentEventType.REQUIRE_USER_CONFIRM);
-        when(confirmEvt.getId()).thenReturn("e-c");
-        ToolUseBlock toolCall = ToolUseBlock.builder()
+        ToolUseBlock asking = ToolUseBlock.builder()
                 .id("call-9")
                 .name("request_file_change")
                 .input(Map.of("operation", "create", "path", "notes/a.txt", "content", "x"))
+                .state(ToolCallState.ASKING)
                 .build();
-        when(confirmEvt.getToolCalls()).thenReturn(List.of(toolCall));
-        when(harnessAgent.streamEvents(eq("写"), any(RuntimeContext.class)))
-                .thenReturn(Flux.just(confirmEvt));
-
-        StepVerifier.create(service.ask(new DevAgentRequest("u1", "s1", "写")))
-                .expectNextCount(3)
-                .verifyComplete();
+        Msg assistant = Msg.builder()
+                .role(MsgRole.ASSISTANT)
+                .content(asking)
+                .build();
+        AgentState state = AgentState.builder()
+                .userId("u1")
+                .sessionId("s1")
+                .context(List.of(assistant))
+                .build();
+        when(agentStateStore.get(eq("u1"), eq("s1"), eq("agent_state"), eq(AgentState.class)))
+                .thenReturn(Optional.of(state));
 
         ToolResultEndEvent toolEnd = mock(ToolResultEndEvent.class);
         when(toolEnd.getType()).thenReturn(AgentEventType.TOOL_RESULT_END);
@@ -227,7 +240,6 @@ class DevAgentServiceTest {
         when(toolEnd.getToolCallId()).thenReturn("call-9");
         when(toolEnd.getToolCallName()).thenReturn("request_file_change");
         when(toolEnd.getState()).thenReturn(ToolResultState.SUCCESS);
-
         when(harnessAgent.streamEvents(any(Msg.class), any(RuntimeContext.class)))
                 .thenReturn(Flux.just(toolEnd));
 
@@ -242,10 +254,9 @@ class DevAgentServiceTest {
         verify(harnessAgent).streamEvents(msgCaptor.capture(), any(RuntimeContext.class));
         Msg resume = msgCaptor.getValue();
         assertThat(resume.getTextContent()).isEqualTo("approved");
-        Object raw = resume.getMetadata().get(Msg.METADATA_CONFIRM_RESULTS);
-        assertThat(raw).isInstanceOf(List.class);
         @SuppressWarnings("unchecked")
-        List<ConfirmResult> results = (List<ConfirmResult>) raw;
+        List<ConfirmResult> results =
+                (List<ConfirmResult>) resume.getMetadata().get(Msg.METADATA_CONFIRM_RESULTS);
         assertThat(results).hasSize(1);
         assertThat(results.get(0).isConfirmed()).isTrue();
         assertThat(results.get(0).getToolCall().getId()).isEqualTo("call-9");

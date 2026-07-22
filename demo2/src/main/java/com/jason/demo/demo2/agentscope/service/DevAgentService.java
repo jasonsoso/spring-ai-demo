@@ -17,7 +17,10 @@ import io.agentscope.core.event.ToolCallStartEvent;
 import io.agentscope.core.event.ToolResultEndEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.message.ToolCallState;
 import io.agentscope.core.message.ToolUseBlock;
+import io.agentscope.core.state.AgentState;
+import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.harness.agent.HarnessAgent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -25,19 +28,21 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class DevAgentService {
 
     private final HarnessAgent agentscopeDevAgent;
     private final DevAgentProperties properties;
-    private final ConcurrentHashMap<String, List<ToolUseBlock>> pendingConfirmations =
-            new ConcurrentHashMap<>();
+    private final AgentStateStore agentStateStore;
 
-    public DevAgentService(HarnessAgent agentscopeDevAgent, DevAgentProperties properties) {
+    public DevAgentService(
+            HarnessAgent agentscopeDevAgent,
+            DevAgentProperties properties,
+            AgentStateStore agentStateStore) {
         this.agentscopeDevAgent = agentscopeDevAgent;
         this.properties = properties;
+        this.agentStateStore = agentStateStore;
     }
 
     public Flux<DevAgentEvent> ask(DevAgentRequest request) {
@@ -58,7 +63,7 @@ public class DevAgentService {
         Flux<DevAgentEvent> events = agentscopeDevAgent
                 .streamEvents(request.message(), context)
                 .handle((event, sink) -> {
-                    DevAgentEvent mapped = mapEvent(userId, sessionId, event);
+                    DevAgentEvent mapped = mapEvent(sessionId, event);
                     if (mapped != null) {
                         sink.next(mapped);
                     }
@@ -83,8 +88,8 @@ public class DevAgentService {
                     DevAgentEvent.error(sessionId, "DEEPSEEK_API_KEY is not configured"));
         }
 
-        List<ToolUseBlock> pending = pendingConfirmations.remove(confirmationKey(userId, sessionId));
-        if (pending == null || pending.isEmpty()) {
+        List<ToolUseBlock> pending = loadPendingToolCalls(userId, sessionId);
+        if (pending.isEmpty()) {
             return Flux.just(
                     DevAgentEvent.session(sessionId),
                     DevAgentEvent.error(sessionId, "没有待确认的工具调用"));
@@ -109,7 +114,7 @@ public class DevAgentService {
         Flux<DevAgentEvent> events = agentscopeDevAgent
                 .streamEvents(resumeMessage, context)
                 .handle((event, sink) -> {
-                    DevAgentEvent mapped = mapEvent(userId, sessionId, event);
+                    DevAgentEvent mapped = mapEvent(sessionId, event);
                     if (mapped != null) {
                         sink.next(mapped);
                     }
@@ -124,7 +129,30 @@ public class DevAgentService {
                         ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage())));
     }
 
-    private DevAgentEvent mapEvent(String userId, String sessionId, AgentEvent event) {
+    private List<ToolUseBlock> loadPendingToolCalls(String userId, String sessionId) {
+        return agentStateStore
+                .get(userId, sessionId, "agent_state", AgentState.class)
+                .map(this::findAskingToolCalls)
+                .orElseGet(List::of);
+    }
+
+    private List<ToolUseBlock> findAskingToolCalls(AgentState state) {
+        List<Msg> context = state.getContext();
+        if (context == null || context.isEmpty()) {
+            return List.of();
+        }
+        for (int i = context.size() - 1; i >= 0; i--) {
+            Msg msg = context.get(i);
+            if (msg.getRole() == MsgRole.ASSISTANT) {
+                return msg.getContentBlocks(ToolUseBlock.class).stream()
+                        .filter(block -> block.getState() == ToolCallState.ASKING)
+                        .toList();
+            }
+        }
+        return List.of();
+    }
+
+    private DevAgentEvent mapEvent(String sessionId, AgentEvent event) {
         return switch (event.getType()) {
             case AGENT_START -> DevAgentEvent.lifecycle(
                     DevAgentEventType.AGENT_START,
@@ -169,7 +197,6 @@ public class DevAgentService {
             case REQUIRE_USER_CONFIRM -> {
                 RequireUserConfirmEvent e = (RequireUserConfirmEvent) event;
                 List<ToolUseBlock> toolCalls = e.getToolCalls() == null ? List.of() : e.getToolCalls();
-                pendingConfirmations.put(confirmationKey(userId, sessionId), List.copyOf(toolCalls));
                 yield DevAgentEvent.confirmation(
                         sessionId,
                         e.getId(),
@@ -188,10 +215,6 @@ public class DevAgentService {
 
     static String normalizeUserId(String userId) {
         return userId == null || userId.isBlank() ? "_anonymous" : userId.strip();
-    }
-
-    static String confirmationKey(String userId, String sessionId) {
-        return normalizeUserId(userId) + "|" + sessionId;
     }
 
     private PendingToolCall toPendingToolCall(ToolUseBlock block) {

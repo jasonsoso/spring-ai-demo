@@ -8,7 +8,7 @@ import io.agentscope.core.permission.PermissionBehavior;
 import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionMode;
 import io.agentscope.core.permission.PermissionRule;
-import io.agentscope.core.state.InMemoryAgentStateStore;
+import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.extensions.model.openai.formatter.DeepSeekFormatter;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -51,16 +51,22 @@ public class AgentScopeConfig {
     }
 
     @Bean
+    AgentStateStore agentscopeAgentStateStore(AgentScopeDataSourceProperties dataSourceProperties) {
+        return AgentStateStoreFactory.create(dataSourceProperties);
+    }
+
+    @Bean
     HarnessAgent agentscopeDevAgent(
             @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
             DevAgentProperties properties,
             ProjectInfoTools projectInfoTools,
-            FileChangeTool fileChangeTool) throws IOException {
+            FileChangeTool fileChangeTool,
+            AgentStateStore agentscopeAgentStateStore) throws IOException {
         HarnessAgent agent = HarnessAgent.builder()
                 .name(properties.name())
                 .sysPrompt(properties.systemPrompt())
                 .model(agentscopeDeepSeekModel)
-                .stateStore(new InMemoryAgentStateStore())
+                .stateStore(agentscopeAgentStateStore)
                 .permissionContext(permissionContext())
                 .enableAgentTracingLog(false)
                 .disableFilesystemTools()
