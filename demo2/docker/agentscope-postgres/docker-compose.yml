@@ -1,0 +1,25 @@
+# AgentScope 会话状态用 PostgreSQL（与 MySQL spring.datasource 独立）
+# 启动：docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
+# 停止：docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml down
+# 连接：jdbc:postgresql://127.0.0.1:5432/agentscope  user/password=agentscope
+services:
+  agentscope-postgres:
+    container_name: demo2-agentscope-postgres
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: agentscope
+      POSTGRES_PASSWORD: agentscope
+      POSTGRES_DB: agentscope
+    volumes:
+      - agentscope_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentscope -d agentscope"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  agentscope_pg_data:
