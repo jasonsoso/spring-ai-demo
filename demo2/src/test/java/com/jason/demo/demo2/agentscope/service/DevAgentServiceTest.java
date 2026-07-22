@@ -1,9 +1,11 @@
 package com.jason.demo.demo2.agentscope.service;
 
 import com.jason.demo.demo2.agentscope.config.DevAgentProperties;
+import com.jason.demo.demo2.agentscope.model.DevAgentConfirmRequest;
 import com.jason.demo.demo2.agentscope.model.DevAgentEvent;
 import com.jason.demo.demo2.agentscope.model.DevAgentEventType;
 import com.jason.demo.demo2.agentscope.model.DevAgentRequest;
+import io.agentscope.core.event.ConfirmResult;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentEventType;
@@ -189,5 +191,63 @@ class DevAgentServiceTest {
                                 && e.content().contains("PERMISSION_ASKING"))
                 .expectNext(DevAgentEvent.done("s1"))
                 .verifyComplete();
+    }
+
+    @Test
+    void confirm_withoutPending_emitsError() {
+        StepVerifier.create(service.confirm(new DevAgentConfirmRequest("u1", "s-missing", true)))
+                .expectNext(DevAgentEvent.session("s-missing"))
+                .expectNextMatches(e ->
+                        e.type() == DevAgentEventType.ERROR
+                                && e.content().contains("待确认"))
+                .verifyComplete();
+    }
+
+    @Test
+    void confirm_approved_resumesWithConfirmResultsMetadata() {
+        RequireUserConfirmEvent confirmEvt = mock(RequireUserConfirmEvent.class);
+        when(confirmEvt.getType()).thenReturn(AgentEventType.REQUIRE_USER_CONFIRM);
+        when(confirmEvt.getId()).thenReturn("e-c");
+        ToolUseBlock toolCall = ToolUseBlock.builder()
+                .id("call-9")
+                .name("request_file_change")
+                .input(Map.of("operation", "create", "path", "notes/a.txt", "content", "x"))
+                .build();
+        when(confirmEvt.getToolCalls()).thenReturn(List.of(toolCall));
+        when(harnessAgent.streamEvents(eq("写"), any(RuntimeContext.class)))
+                .thenReturn(Flux.just(confirmEvt));
+
+        StepVerifier.create(service.ask(new DevAgentRequest("u1", "s1", "写")))
+                .expectNextCount(3)
+                .verifyComplete();
+
+        ToolResultEndEvent toolEnd = mock(ToolResultEndEvent.class);
+        when(toolEnd.getType()).thenReturn(AgentEventType.TOOL_RESULT_END);
+        when(toolEnd.getId()).thenReturn("e-te");
+        when(toolEnd.getToolCallId()).thenReturn("call-9");
+        when(toolEnd.getToolCallName()).thenReturn("request_file_change");
+        when(toolEnd.getState()).thenReturn(ToolResultState.SUCCESS);
+
+        when(harnessAgent.streamEvents(any(Msg.class), any(RuntimeContext.class)))
+                .thenReturn(Flux.just(toolEnd));
+
+        StepVerifier.create(service.confirm(new DevAgentConfirmRequest("u1", "s1", true)))
+                .expectNext(DevAgentEvent.session("s1"))
+                .expectNext(DevAgentEvent.toolResultEnd(
+                        "s1", "e-te", "call-9", "request_file_change", "SUCCESS"))
+                .expectNext(DevAgentEvent.done("s1"))
+                .verifyComplete();
+
+        ArgumentCaptor<Msg> msgCaptor = ArgumentCaptor.forClass(Msg.class);
+        verify(harnessAgent).streamEvents(msgCaptor.capture(), any(RuntimeContext.class));
+        Msg resume = msgCaptor.getValue();
+        assertThat(resume.getTextContent()).isEqualTo("approved");
+        Object raw = resume.getMetadata().get(Msg.METADATA_CONFIRM_RESULTS);
+        assertThat(raw).isInstanceOf(List.class);
+        @SuppressWarnings("unchecked")
+        List<ConfirmResult> results = (List<ConfirmResult>) raw;
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).isConfirmed()).isTrue();
+        assertThat(results.get(0).getToolCall().getId()).isEqualTo("call-9");
     }
 }

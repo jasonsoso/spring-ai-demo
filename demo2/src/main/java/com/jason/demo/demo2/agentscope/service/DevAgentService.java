@@ -1,6 +1,7 @@
 package com.jason.demo.demo2.agentscope.service;
 
 import com.jason.demo.demo2.agentscope.config.DevAgentProperties;
+import com.jason.demo.demo2.agentscope.model.DevAgentConfirmRequest;
 import com.jason.demo.demo2.agentscope.model.DevAgentEvent;
 import com.jason.demo.demo2.agentscope.model.DevAgentEventType;
 import com.jason.demo.demo2.agentscope.model.DevAgentRequest;
@@ -8,11 +9,14 @@ import com.jason.demo.demo2.agentscope.model.PendingToolCall;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentResultEvent;
+import io.agentscope.core.event.ConfirmResult;
 import io.agentscope.core.event.RequestStopEvent;
 import io.agentscope.core.event.RequireUserConfirmEvent;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.event.ToolCallStartEvent;
 import io.agentscope.core.event.ToolResultEndEvent;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.harness.agent.HarnessAgent;
 import org.springframework.stereotype.Service;
@@ -20,6 +24,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -52,6 +57,57 @@ public class DevAgentService {
 
         Flux<DevAgentEvent> events = agentscopeDevAgent
                 .streamEvents(request.message(), context)
+                .handle((event, sink) -> {
+                    DevAgentEvent mapped = mapEvent(userId, sessionId, event);
+                    if (mapped != null) {
+                        sink.next(mapped);
+                    }
+                });
+
+        return Flux.concat(
+                        Mono.just(DevAgentEvent.session(sessionId)),
+                        events,
+                        Mono.just(DevAgentEvent.done(sessionId)))
+                .onErrorResume(ex -> Flux.just(DevAgentEvent.error(
+                        sessionId,
+                        ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage())));
+    }
+
+    public Flux<DevAgentEvent> confirm(DevAgentConfirmRequest request) {
+        String sessionId = request.sessionId();
+        String userId = normalizeUserId(request.userId());
+        String apiKey = properties.model().apiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            return Flux.just(
+                    DevAgentEvent.session(sessionId),
+                    DevAgentEvent.error(sessionId, "DEEPSEEK_API_KEY is not configured"));
+        }
+
+        List<ToolUseBlock> pending = pendingConfirmations.remove(confirmationKey(userId, sessionId));
+        if (pending == null || pending.isEmpty()) {
+            return Flux.just(
+                    DevAgentEvent.session(sessionId),
+                    DevAgentEvent.error(sessionId, "没有待确认的工具调用"));
+        }
+
+        List<ConfirmResult> confirmResults = pending.stream()
+                .map(toolCall -> new ConfirmResult(request.approved(), toolCall))
+                .toList();
+
+        Msg resumeMessage = Msg.builder()
+                .name("user")
+                .role(MsgRole.USER)
+                .textContent(request.approved() ? "approved" : "denied")
+                .metadata(Map.of(Msg.METADATA_CONFIRM_RESULTS, confirmResults))
+                .build();
+
+        RuntimeContext context = RuntimeContext.builder()
+                .sessionId(sessionId)
+                .userId(userId)
+                .build();
+
+        Flux<DevAgentEvent> events = agentscopeDevAgent
+                .streamEvents(resumeMessage, context)
                 .handle((event, sink) -> {
                     DevAgentEvent mapped = mapEvent(userId, sessionId, event);
                     if (mapped != null) {
