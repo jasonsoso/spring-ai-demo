@@ -1169,7 +1169,15 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 | POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END` / **`REQUIRE_USER_CONFIRM`** / **`REQUEST_STOP`**）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}` |
 | POST | `/agentscope/dev-agent/confirm` | 批准或拒绝待确认写文件。Body：`{"userId?":"...","sessionId":"...","approved":true\|false}`。返回 SSE 续流（批准后执行 `request_file_change`） |
 
-同 `userId` + `sessionId` 追问可验证进程内会话；换 `sessionId` 应不串话。`userId` 为空时内部使用占位 `_anonymous`（ask 与 confirm 须一致）。
+同 `userId` + `sessionId` 追问可跨重启恢复（PostgreSQL）；换 `sessionId` 应不串话，不同 `userId` 相同 `sessionId` 也不串话。`userId` 为空时内部使用占位 `_anonymous`（ask 与 confirm 须一致）。HITL 待确认工具从 `AgentStateStore` 读取 `ASKING` 状态，不再依赖进程内 Map。
+
+**会话持久化（PostgreSQL，独立于 MySQL）：**
+
+```bash
+docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
+```
+
+配置见 `app.agentscope.datasource.*`。PG 可用时日志含 `stateStore=postgres`；连不上时应用仍启动并降级 `stateStore=memory`（WARN）。
 
 curl 示例：
 
@@ -1198,7 +1206,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
 
 前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片，可选择批准或拒绝；示例按钮「写 notes 文件（HITL）」对应上述 curl 流程。
 
-**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 事件映射 + pending 确认）→ **能力层**（`HarnessAgent` + Toolkit / Permission）。详细流程见 [§25–27 功能设计图](#25-agentscope-harnessagent--三层架构)。
+**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 事件映射 + store 恢复确认）→ **能力层**（`HarnessAgent` + Toolkit / Permission / `AgentStateStore`）。详细流程见 [§25–27 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
 ### MCP
 
