@@ -10,10 +10,12 @@ import org.springframework.context.annotation.Configuration;
  * <ul>
  *   <li>业务 ChatClient：SimpleLoggerAdvisor（经 ChatClientBuilderCustomizer）</li>
  *   <li>Embabel：LoggingChatModel 包装 ChatModel（见 EmbabelLlmModelFixConfig）</li>
+ *   <li>AgentScope：LoggingAgentscopeModel 包装 Model（见 AgentScopeConfig）</li>
  * </ul>
  * 说明：Spring AI 2.0 已废弃 {@code ChatClientCustomizer}（forRemoval），
  * 且 Embabel 主路径经 {@code SpringAiLlmMessageSender} 直接 {@code ChatModel.call()}，
  * 不会进入 ChatClient Advisor 链，故 Embabel 不能依赖 Advisor 打日志。
+ * AgentScope 使用自有 {@code io.agentscope.core.model.Model}，同样不经 Advisor。
  */
 @Configuration
 public class LoggingConfig {

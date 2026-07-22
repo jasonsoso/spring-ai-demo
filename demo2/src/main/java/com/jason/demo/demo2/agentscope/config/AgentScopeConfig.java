@@ -2,6 +2,7 @@ package com.jason.demo.demo2.agentscope.config;
 
 import com.jason.demo.demo2.agentscope.tool.FileChangeTool;
 import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
+import com.jason.demo.demo2.config.LoggingAgentscopeModel;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.permission.PermissionBehavior;
 import io.agentscope.core.permission.PermissionContextState;
@@ -29,13 +30,14 @@ public class AgentScopeConfig {
     @Qualifier("agentscopeDeepSeekModel")
     Model agentscopeDeepSeekModel(DevAgentProperties properties) {
         DevAgentProperties.Model model = properties.model();
-        return OpenAIChatModel.builder()
+        Model openAi = OpenAIChatModel.builder()
                 .apiKey(model.apiKey() == null ? "" : model.apiKey())
                 .baseUrl(model.baseUrl())
                 .modelName(model.name())
                 .formatter(new DeepSeekFormatter())
                 .stream(true)
                 .build();
+        return new LoggingAgentscopeModel(openAi, "agentscope-deepseek");
     }
 
     @Bean
