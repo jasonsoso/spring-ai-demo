@@ -168,3 +168,43 @@
     gap: 8px;
     margin: 0;
 }
+
+.agentscope-confirm-card {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px solid #c5d0d6;
+    background: #f7faf8;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.agentscope-confirm-card pre {
+    margin: 6px 0 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 160px;
+    overflow: auto;
+    background: #eef2f1;
+    padding: 8px;
+    border-radius: 6px;
+}
+.agentscope-confirm-actions {
+    display: flex;
+    gap: 8px;
+}
+.agentscope-confirm-actions button {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #9bb0a5;
+    background: #fff;
+    cursor: pointer;
+}
+.agentscope-confirm-actions button.approve {
+    background: #17864f;
+    color: #fff;
+    border-color: #17864f;
+}
+.agentscope-confirm-actions button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
