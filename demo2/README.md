@@ -1162,7 +1162,7 @@ flowchart LR
 
 ### AgentScope HarnessAgent（`/agentscope/dev-agent`）
 
-HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL**。只读工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。
+HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL**。只读工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
