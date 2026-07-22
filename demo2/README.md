@@ -53,7 +53,7 @@
 | `LkCoffeeAgentController` | `controller` | `/agent/lkcoffee` | 瑞幸 MCP + My Coffee Skill SSE 点单 |
 | `VoiceApiController` | `controller` | `/api` | ElevenLabs TTS/STT + 语音对话 SSE |
 | `EmbabelAgentController` | `embabel.controller` | `/embabel/agent` | Embabel Autonomy 自动选路（SSE + 同步） |
-| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单整理 + 项目只读工具 + 工具事件透传 |
+| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单整理 + 项目只读工具 + `notes/` 写文件 HITL 确认 |
 | `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
 
 | 模块 | 能力 | 依赖外部服务 |
@@ -1162,11 +1162,16 @@ flowchart LR
 
 ### AgentScope HarnessAgent（`/agentscope/dev-agent`）
 
+HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL**。只读工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END`）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}`。只读工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`） |
+| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END` / **`REQUIRE_USER_CONFIRM`** / **`REQUEST_STOP`**）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}` |
+| POST | `/agentscope/dev-agent/confirm` | 批准或拒绝待确认写文件。Body：`{"userId?":"...","sessionId":"...","approved":true\|false}`。返回 SSE 续流（批准后执行 `request_file_change`） |
 
-同 `sessionId` 追问可验证进程内会话；换 `sessionId` 应不串话。curl 示例：
+同 `userId` + `sessionId` 追问可验证进程内会话；换 `sessionId` 应不串话。`userId` 为空时内部使用占位 `_anonymous`（ask 与 confirm 须一致）。
+
+curl 示例：
 
 ```bash
 # 清单整理
@@ -1178,7 +1183,20 @@ curl -N -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
 curl -N -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"dev-user-001\",\"sessionId\":\"toolkit-session-001\",\"message\":\"帮我看一下这个项目用了哪个 Java 版本、Spring Boot 版本，以及启动类在哪里\"}"
+
+# 写 notes/ 文件（HITL：先 ask 触发 REQUIRE_USER_CONFIRM，再 confirm 批准）
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"dev-user-001\",\"sessionId\":\"permission-write-001\",\"message\":\"请创建 notes/permission-demo.txt，内容是：AgentScope Permission HITL 已通过。\"}"
+
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"dev-user-001\",\"sessionId\":\"permission-write-001\",\"approved\":true}"
+
+# 检查 {projectRoot}/notes/permission-demo.txt
 ```
+
+前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片，可选择批准或拒绝；示例按钮「写 notes 文件（HITL）」对应上述 curl 流程。
 
 
 ### MCP

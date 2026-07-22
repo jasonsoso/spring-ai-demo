@@ -14,7 +14,7 @@ function resetAgentscopeConversation() {
     if (!box) return;
     box.innerHTML = '<div id="agentscopeWelcome" class="message assistant"><div class="message-content">'
         + '输入排查问题获取检查清单，或询问 Java / Spring Boot 版本、源码结构、启动类。'
-        + '写 notes/ 下文件需人工批准或拒绝。可点「换会话」验证 session 隔离。'
+        + '写 notes/ 下文件会弹出确认卡片，可选择批准或拒绝。可点「换会话」验证 session 隔离。'
         + '</div></div>';
     document.getElementById('agentscopeSessionId').value = newAgentscopeSessionId();
     setAgentscopeStatus('就绪');
