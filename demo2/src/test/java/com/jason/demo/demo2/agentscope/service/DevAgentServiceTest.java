@@ -9,11 +9,15 @@ import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentEventType;
 import io.agentscope.core.event.AgentResultEvent;
 import io.agentscope.core.event.AgentStartEvent;
+import io.agentscope.core.event.RequestStopEvent;
+import io.agentscope.core.event.RequireUserConfirmEvent;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.event.ToolCallStartEvent;
 import io.agentscope.core.event.ToolResultEndEvent;
+import io.agentscope.core.message.GenerateReason;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.ToolResultState;
+import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.harness.agent.HarnessAgent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +27,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -143,6 +150,43 @@ class DevAgentServiceTest {
                         "s1", "e-te", "call-1", "read_pom", "SUCCESS"))
                 .expectNext(DevAgentEvent.message("s1", "Java 17"))
                 .expectNext(DevAgentEvent.agentResult("s1", "e-res", "Java 17"))
+                .expectNext(DevAgentEvent.done("s1"))
+                .verifyComplete();
+    }
+
+    @Test
+    void ask_mapsRequireUserConfirmAndStoresPending() {
+        RequireUserConfirmEvent confirm = mock(RequireUserConfirmEvent.class);
+        when(confirm.getType()).thenReturn(AgentEventType.REQUIRE_USER_CONFIRM);
+        when(confirm.getId()).thenReturn("e-c");
+        ToolUseBlock toolCall = ToolUseBlock.builder()
+                .id("call-9")
+                .name("request_file_change")
+                .input(Map.of(
+                        "operation", "create",
+                        "path", "notes/a.txt",
+                        "content", "x"))
+                .build();
+        when(confirm.getToolCalls()).thenReturn(List.of(toolCall));
+
+        RequestStopEvent stop = mock(RequestStopEvent.class);
+        when(stop.getType()).thenReturn(AgentEventType.REQUEST_STOP);
+        when(stop.getId()).thenReturn("e-s");
+        when(stop.getGenerateReason()).thenReturn(GenerateReason.PERMISSION_ASKING);
+
+        when(harnessAgent.streamEvents(eq("写文件"), any(RuntimeContext.class)))
+                .thenReturn(Flux.just(confirm, stop));
+
+        StepVerifier.create(service.ask(new DevAgentRequest("u1", "s1", "写文件")))
+                .expectNext(DevAgentEvent.session("s1"))
+                .expectNextMatches(e ->
+                        e.type() == DevAgentEventType.REQUIRE_USER_CONFIRM
+                                && e.pendingToolCalls() != null
+                                && e.pendingToolCalls().size() == 1
+                                && "call-9".equals(e.pendingToolCalls().get(0).toolCallId()))
+                .expectNextMatches(e ->
+                        e.type() == DevAgentEventType.REQUEST_STOP
+                                && e.content().contains("PERMISSION_ASKING"))
                 .expectNext(DevAgentEvent.done("s1"))
                 .verifyComplete();
     }

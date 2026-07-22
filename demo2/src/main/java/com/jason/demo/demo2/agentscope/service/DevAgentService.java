@@ -4,22 +4,31 @@ import com.jason.demo.demo2.agentscope.config.DevAgentProperties;
 import com.jason.demo.demo2.agentscope.model.DevAgentEvent;
 import com.jason.demo.demo2.agentscope.model.DevAgentEventType;
 import com.jason.demo.demo2.agentscope.model.DevAgentRequest;
+import com.jason.demo.demo2.agentscope.model.PendingToolCall;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentResultEvent;
+import io.agentscope.core.event.RequestStopEvent;
+import io.agentscope.core.event.RequireUserConfirmEvent;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.event.ToolCallStartEvent;
 import io.agentscope.core.event.ToolResultEndEvent;
+import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.harness.agent.HarnessAgent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class DevAgentService {
 
     private final HarnessAgent agentscopeDevAgent;
     private final DevAgentProperties properties;
+    private final ConcurrentHashMap<String, List<ToolUseBlock>> pendingConfirmations =
+            new ConcurrentHashMap<>();
 
     public DevAgentService(HarnessAgent agentscopeDevAgent, DevAgentProperties properties) {
         this.agentscopeDevAgent = agentscopeDevAgent;
@@ -35,16 +44,16 @@ public class DevAgentService {
                     DevAgentEvent.error(sessionId, "DEEPSEEK_API_KEY is not configured"));
         }
 
-        RuntimeContext.Builder contextBuilder = RuntimeContext.builder().sessionId(sessionId);
-        if (request.userId() != null && !request.userId().isBlank()) {
-            contextBuilder.userId(request.userId().strip());
-        }
-        RuntimeContext context = contextBuilder.build();
+        String userId = normalizeUserId(request.userId());
+        RuntimeContext context = RuntimeContext.builder()
+                .sessionId(sessionId)
+                .userId(userId)
+                .build();
 
         Flux<DevAgentEvent> events = agentscopeDevAgent
                 .streamEvents(request.message(), context)
                 .handle((event, sink) -> {
-                    DevAgentEvent mapped = mapEvent(sessionId, event);
+                    DevAgentEvent mapped = mapEvent(userId, sessionId, event);
                     if (mapped != null) {
                         sink.next(mapped);
                     }
@@ -59,7 +68,7 @@ public class DevAgentService {
                         ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage())));
     }
 
-    private DevAgentEvent mapEvent(String sessionId, AgentEvent event) {
+    private DevAgentEvent mapEvent(String userId, String sessionId, AgentEvent event) {
         return switch (event.getType()) {
             case AGENT_START -> DevAgentEvent.lifecycle(
                     DevAgentEventType.AGENT_START,
@@ -101,7 +110,35 @@ public class DevAgentService {
                 String text = e.getResult() == null ? "" : e.getResult().getTextContent();
                 yield DevAgentEvent.agentResult(sessionId, e.getId(), text);
             }
+            case REQUIRE_USER_CONFIRM -> {
+                RequireUserConfirmEvent e = (RequireUserConfirmEvent) event;
+                List<ToolUseBlock> toolCalls = e.getToolCalls() == null ? List.of() : e.getToolCalls();
+                pendingConfirmations.put(confirmationKey(userId, sessionId), List.copyOf(toolCalls));
+                yield DevAgentEvent.confirmation(
+                        sessionId,
+                        e.getId(),
+                        toolCalls.stream().map(this::toPendingToolCall).toList());
+            }
+            case REQUEST_STOP -> {
+                RequestStopEvent e = (RequestStopEvent) event;
+                String content = e.getGenerateReason() == null
+                        ? e.getReason()
+                        : e.getGenerateReason().name();
+                yield DevAgentEvent.requestStop(sessionId, e.getId(), content);
+            }
             default -> null;
         };
+    }
+
+    static String normalizeUserId(String userId) {
+        return userId == null || userId.isBlank() ? "_anonymous" : userId.strip();
+    }
+
+    static String confirmationKey(String userId, String sessionId) {
+        return normalizeUserId(userId) + "|" + sessionId;
+    }
+
+    private PendingToolCall toPendingToolCall(ToolUseBlock block) {
+        return new PendingToolCall(block.getId(), block.getName(), block.getInput());
     }
 }
