@@ -35,3 +35,7 @@ node_modules
 
 # Docker runtime data
 docker/milvus/volumes/
+
+### AgentScope permission demo writes ###
+notes/*
+!notes/.gitkeep

@@ -1,9 +1,12 @@
 package com.jason.demo.demo2.agentscope.config;
 
+import com.jason.demo.demo2.agentscope.tool.FileChangeTool;
 import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
 import io.agentscope.core.model.Model;
+import io.agentscope.core.permission.PermissionBehavior;
 import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionMode;
+import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.extensions.model.openai.formatter.DeepSeekFormatter;
@@ -14,9 +17,13 @@ import org.springframework.context.annotation.Configuration;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 
 @Configuration
 public class AgentScopeConfig {
+
+    private static final List<String> READ_ONLY_TOOL_NAMES =
+            List.of("read_pom", "list_source_folders", "find_main_class");
 
     @Bean
     @Qualifier("agentscopeDeepSeekModel")
@@ -37,18 +44,22 @@ public class AgentScopeConfig {
     }
 
     @Bean
+    FileChangeTool fileChangeTool(DevAgentProperties properties) {
+        return new FileChangeTool(Path.of(properties.projectRoot()));
+    }
+
+    @Bean
     HarnessAgent agentscopeDevAgent(
             @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
             DevAgentProperties properties,
-            ProjectInfoTools projectInfoTools) throws IOException {
+            ProjectInfoTools projectInfoTools,
+            FileChangeTool fileChangeTool) throws IOException {
         HarnessAgent agent = HarnessAgent.builder()
                 .name(properties.name())
                 .sysPrompt(properties.systemPrompt())
                 .model(agentscopeDeepSeekModel)
                 .stateStore(new InMemoryAgentStateStore())
-                .permissionContext(PermissionContextState.builder()
-                        .mode(PermissionMode.EXPLORE)
-                        .build())
+                .permissionContext(permissionContext())
                 .enableAgentTracingLog(false)
                 .disableFilesystemTools()
                 .disableShellTool()
@@ -64,6 +75,19 @@ public class AgentScopeConfig {
                 .build();
         agent.getToolkit().removeTool("wait_async_results");
         agent.getToolkit().registerTool(projectInfoTools);
+        agent.getToolkit().registerAgentTool(fileChangeTool);
         return agent;
+    }
+
+    private static PermissionContextState permissionContext() {
+        PermissionContextState.Builder builder =
+                PermissionContextState.builder().mode(PermissionMode.DEFAULT);
+        READ_ONLY_TOOL_NAMES.forEach(
+                toolName -> builder.addAllowRule(toolName, allowRule(toolName)));
+        return builder.build();
+    }
+
+    private static PermissionRule allowRule(String toolName) {
+        return new PermissionRule(toolName, null, PermissionBehavior.ALLOW, "app");
     }
 }
