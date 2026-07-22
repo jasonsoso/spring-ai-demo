@@ -1,4 +1,6 @@
 // ========== AgentScope HarnessAgent ==========
+let agentscopeAwaitingConfirm = false;
+
 function newAgentscopeSessionId() {
     if (crypto.randomUUID) return crypto.randomUUID();
     return 'sess-' + Date.now() + '-' + Math.random().toString(16).slice(2);
@@ -17,6 +19,8 @@ function resetAgentscopeConversation() {
         + '写 notes/ 下文件会弹出确认卡片，可选择批准或拒绝。可点「换会话」验证 session 隔离。'
         + '</div></div>';
     document.getElementById('agentscopeSessionId').value = newAgentscopeSessionId();
+    agentscopeAwaitingConfirm = false;
+    setAgentscopeInputEnabled(true);
     setAgentscopeStatus('就绪');
 }
 
@@ -249,7 +253,7 @@ async function sendAgentscopeMessage() {
     setAgentscopeInputEnabled(false);
     setAgentscopeStatus('连接中…');
 
-    let awaitingConfirm = false;
+    agentscopeAwaitingConfirm = false;
     try {
         const body = { sessionId: sessionId, message: message };
         if (userId) body.userId = userId;
@@ -266,12 +270,12 @@ async function sendAgentscopeMessage() {
         }
 
         const result = await consumeAgentscopeSse(res, turn, sessionId);
-        awaitingConfirm = result.awaitingConfirm;
+        agentscopeAwaitingConfirm = result.awaitingConfirm;
     } catch (e) {
         setAgentscopeStatus('失败');
         turn.content.textContent += (turn.content.textContent ? '\n' : '') + '[ERROR] ' + (e.message || e);
     } finally {
-        if (!awaitingConfirm) {
+        if (!agentscopeAwaitingConfirm) {
             setAgentscopeInputEnabled(true);
         }
     }
