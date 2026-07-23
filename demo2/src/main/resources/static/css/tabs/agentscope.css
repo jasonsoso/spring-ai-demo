@@ -77,6 +77,7 @@
 }
 .agentscope-messages .message.user { justify-content: flex-end; }
 .agentscope-messages .message.assistant { justify-content: flex-start; }
+.agentscope-messages .message.system { justify-content: center; }
 
 .agentscope-messages .message-content {
     max-width: 78%;
@@ -96,6 +97,14 @@
     color: #333;
     border-bottom-left-radius: 4px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.agentscope-messages .message.system .message-content {
+    background: #f3f4f6;
+    color: #6b7280;
+    border: 1px dashed #d1d5db;
+    font-size: 0.85rem;
+    max-width: 90%;
+    text-align: center;
 }
 
 .agentscope-input-bar {

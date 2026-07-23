@@ -1235,7 +1235,7 @@
     <div id="tab-agentscope" class="tab-content">
         <div class="agentscope-header">
             <h2>AgentScope HarnessAgent</h2>
-            <p>清单整理 + 项目只读工具；写 notes/ 文件需人工确认（批准/拒绝）；SSE：SESSION → 工具/生命周期 → REQUIRE_USER_CONFIRM → MESSAGE* → DONE</p>
+            <p>清单整理 + 项目只读工具；写 notes/ 文件需人工确认（批准/拒绝）；长会话达阈值会压缩并提示条数；SSE：SESSION → 工具/生命周期 → REQUIRE_USER_CONFIRM → MESSAGE* → COMPACTION? → DONE</p>
         </div>
         <div class="agentscope-meta">
             <label>userId <input id="agentscopeUserId" type="text" placeholder="可选，如 dev-user-001" value="dev-user-001"></label>
@@ -1247,13 +1247,14 @@
                 <button type="button" onclick="fillAgentscopeSample(3)">示例：项目版本与启动类</button>
                 <button type="button" onclick="fillAgentscopeSample(4)">示例：写 notes 文件（HITL）</button>
                 <button type="button" onclick="fillAgentscopeSample(5)">示例：Workspace / AGENTS.md</button>
+                <button type="button" onclick="fillAgentscopeSample(6)">示例：Compaction 四轮</button>
             </span>
         </div>
         <div id="agentscopeStatus" class="agentscope-status">就绪</div>
         <div class="agentscope-layout">
             <div id="agentscopeMessages" class="agentscope-messages">
                 <div id="agentscopeWelcome" class="message assistant">
-                    <div class="message-content">输入排查问题获取检查清单，或询问 Java / Spring Boot 版本、源码结构、启动类。可用「Workspace / AGENTS.md」示例验证项目规则注入。写 notes/ 下文件会弹出确认卡片，可选择批准或拒绝。可点「换会话」验证 session 隔离。</div>
+                    <div class="message-content">输入排查问题获取检查清单，或询问 Java / Spring Boot 版本、源码结构、启动类。可用「Workspace / AGENTS.md」示例验证项目规则注入。可用「Compaction 四轮」示例，同一 session 连发四轮观察压缩提示。写 notes/ 下文件会弹出确认卡片，可选择批准或拒绝。可点「换会话」验证 session 隔离。</div>
                 </div>
             </div>
             <form id="agentscopeForm" class="agentscope-input-bar">
