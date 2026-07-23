@@ -16,6 +16,7 @@ function resetAgentscopeConversation() {
     if (!box) return;
     box.innerHTML = '<div id="agentscopeWelcome" class="message assistant"><div class="message-content">'
         + '输入排查问题获取检查清单，或询问 Java / Spring Boot 版本、源码结构、启动类。'
+        + '可用「Workspace / AGENTS.md」示例验证项目规则注入。'
         + '写 notes/ 下文件会弹出确认卡片，可选择批准或拒绝。可点「换会话」验证 session 隔离。'
         + '</div></div>';
     document.getElementById('agentscopeSessionId').value = newAgentscopeSessionId();
@@ -104,12 +105,17 @@ function fillAgentscopeSample(n) {
         1: '帮我整理一份今天排查订单接口超时的执行清单',
         2: '支付回调偶发 500，给我一份不超过 6 步的排查顺序',
         3: '帮我看一下这个项目用了哪个 Java 版本、Spring Boot 版本，以及启动类在哪里',
-        4: '请创建 notes/permission-demo.txt，内容是：AgentScope Permission HITL 已通过。'
+        4: '请创建 notes/permission-demo.txt，内容是：AgentScope Permission HITL 已通过。',
+        5: '按项目规则回答：当前项目名称、项目理解任务编号和三步理解顺序。不要调用工具。'
     };
     const input = document.getElementById('agentscopeMessageInput');
     if (input) {
         input.value = samples[n] || '';
         input.focus();
+    }
+    if (n === 5) {
+        const userId = document.getElementById('agentscopeUserId');
+        if (userId) userId.value = 'workspace-user-008';
     }
 }
 
