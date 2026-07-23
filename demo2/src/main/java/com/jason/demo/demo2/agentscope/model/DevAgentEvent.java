@@ -102,4 +102,16 @@ public record DevAgentEvent(
                 null,
                 null);
     }
+
+    public static DevAgentEvent compaction(String sessionId, String content) {
+        return new DevAgentEvent(
+                DevAgentEventType.COMPACTION,
+                sessionId,
+                content == null ? "" : content,
+                null,
+                null,
+                null,
+                null,
+                null);
+    }
 }

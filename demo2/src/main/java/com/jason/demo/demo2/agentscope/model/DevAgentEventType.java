@@ -27,5 +27,7 @@ public enum DevAgentEventType {
     /** 需要用户确认待执行的工具调用。 */
     REQUIRE_USER_CONFIRM,
     /** 本轮请求停止（如权限询问）。 */
-    REQUEST_STOP
+    REQUEST_STOP,
+    /** 本轮会话上下文已压缩（摘要替换较早消息）。 */
+    COMPACTION
 }

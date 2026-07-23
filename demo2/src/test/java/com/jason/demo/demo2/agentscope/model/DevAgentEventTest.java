@@ -69,4 +69,14 @@ class DevAgentEventTest {
         assertThat(stop.content()).isEqualTo("PERMISSION_ASKING");
         assertThat(stop.pendingToolCalls()).isNull();
     }
+
+    @Test
+    void compaction_setsTypeAndContent() {
+        DevAgentEvent event = DevAgentEvent.compaction(
+                "s1", "上下文已压缩：7 条 → 1 条摘要 + 2 条原文（共 3 条）");
+        assertThat(event.type()).isEqualTo(DevAgentEventType.COMPACTION);
+        assertThat(event.sessionId()).isEqualTo("s1");
+        assertThat(event.content()).contains("7 条").contains("共 3 条");
+        assertThat(event.pendingToolCalls()).isNull();
+    }
 }
