@@ -12,6 +12,7 @@ import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.extensions.model.openai.formatter.DeepSeekFormatter;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,6 +26,22 @@ public class AgentScopeConfig {
 
     private static final List<String> READ_ONLY_TOOL_NAMES =
             List.of("read_pom", "list_source_folders", "find_main_class");
+
+    static CompactionConfig toCompactionConfig(DevAgentProperties.Compaction c) {
+        return CompactionConfig.builder()
+                .triggerMessages(c.triggerMessages())
+                .keepMessages(c.keepMessages())
+                .keepTokens(0)
+                .summaryPrompt(c.summaryPrompt())
+                .flushBeforeCompact(false)
+                .offloadBeforeCompact(false)
+                .build();
+    }
+
+    @Bean
+    CompactionConfig agentscopeCompactionConfig(DevAgentProperties properties) {
+        return toCompactionConfig(properties.compaction());
+    }
 
     @Bean
     @Qualifier("agentscopeDeepSeekModel")
@@ -59,6 +76,7 @@ public class AgentScopeConfig {
     HarnessAgent agentscopeDevAgent(
             @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
             DevAgentProperties properties,
+            CompactionConfig agentscopeCompactionConfig,
             ProjectInfoTools projectInfoTools,
             FileChangeTool fileChangeTool,
             AgentStateStore agentscopeAgentStateStore) throws IOException {
@@ -74,7 +92,7 @@ public class AgentScopeConfig {
                 .disableShellTool()
                 .disableMemoryTools()
                 .disableMemoryHooks()
-                .disableCompaction()
+                .compaction(agentscopeCompactionConfig)
                 .disableSubagents()
                 .disableAtPathExpansion()
                 .disableDynamicSkills()
