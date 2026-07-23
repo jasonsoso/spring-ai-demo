@@ -1171,6 +1171,14 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 
 同 `userId` + `sessionId` 追问可跨重启恢复（PostgreSQL）；换 `sessionId` 应不串话，不同 `userId` 相同 `sessionId` 也不串话。`userId` 为空时内部使用占位 `_anonymous`（ask 与 confirm 须一致）。HITL 待确认工具从 `AgentStateStore` 读取 `ASKING` 状态，不再依赖进程内 Map。
 
+**Workspace（`AGENTS.md`）：**
+
+- 配置：`app.agentscope.dev-agent.workspace-root`（默认 `workspace`）
+- 目录：`demo2/workspace/AGENTS.md`（项目规则）；`MEMORY.md` / `knowledge/KNOWLEDGE.md` 本版为空骨架
+- `project-root` 供只读项目工具读源码；`workspace-root` 供 Agent 工作区规则注入
+- 启用 Workspace Context **不会**放开内置文件 / Shell 工具
+- 修改 `AGENTS.md` 后下一轮推理生效，无需重启
+
 **会话持久化（PostgreSQL，独立于 MySQL）：**
 
 ```bash
@@ -1192,6 +1200,11 @@ curl -N -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"dev-user-001\",\"sessionId\":\"toolkit-session-001\",\"message\":\"帮我看一下这个项目用了哪个 Java 版本、Spring Boot 版本，以及启动类在哪里\"}"
 
+# Workspace：仅凭 AGENTS.md 回答项目名 / 任务编号 / 三步顺序（不要调用工具）
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"workspace-user-008\",\"sessionId\":\"workspace-session-008\",\"message\":\"按项目规则回答：当前项目名称、项目理解任务编号和三步理解顺序。不要调用工具。\"}"
+
 # 写 notes/ 文件（HITL：先 ask 触发 REQUIRE_USER_CONFIRM，再 confirm 批准）
 curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
@@ -1206,7 +1219,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
 
 前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片，可选择批准或拒绝；示例按钮「写 notes 文件（HITL）」对应上述 curl 流程。
 
-**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 事件映射 + store 恢复确认）→ **能力层**（`HarnessAgent` + Toolkit / Permission / `AgentStateStore`）。详细流程见 [§25–27 功能设计图](#25-agentscope-harnessagent--三层架构)。
+**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 事件映射 + store 恢复确认）→ **能力层**（`HarnessAgent` + Toolkit / Permission / Workspace / `AgentStateStore`）。详细流程见 [§25–27 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
 ### MCP
 
