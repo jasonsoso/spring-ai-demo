@@ -1166,7 +1166,7 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END` / **`REQUIRE_USER_CONFIRM`** / **`REQUEST_STOP`**）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}` |
+| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END` / **`REQUIRE_USER_CONFIRM`** / **`REQUEST_STOP`**）→（可选 **`COMPACTION`**）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}` |
 | POST | `/agentscope/dev-agent/confirm` | 批准或拒绝待确认写文件。Body：`{"userId?":"...","sessionId":"...","approved":true\|false}`。返回 SSE 续流（批准后执行 `request_file_change`） |
 
 同 `userId` + `sessionId` 追问可跨重启恢复（PostgreSQL）；换 `sessionId` 应不串话，不同 `userId` 相同 `sessionId` 也不串话。`userId` 为空时内部使用占位 `_anonymous`（ask 与 confirm 须一致）。HITL 待确认工具从 `AgentStateStore` 读取 `ASKING` 状态，不再依赖进程内 Map。
@@ -1187,6 +1187,15 @@ docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
 
 配置见 `app.agentscope.datasource.*`。PG 可用时日志含 `stateStore=postgres`；连不上时应用仍启动并降级 `stateStore=memory`（WARN）。
 
+**Compaction（长会话上下文压缩）：**
+
+- PostgreSQL 负责**恢复**会话；Compaction 负责**缩短** `AgentState.context` 历史（与 Session Memory Tab 的 RecursiveSummarization **无关**）
+- 可配置：`app.agentscope.dev-agent.compaction.trigger-messages`（默认 `6`）、`keep-messages`（默认 `2`）；`summary-prompt` 在 `application-agentscope-prompts.yml`
+- 写死：`keepTokens=0`、`flushBeforeCompact=false`、`offloadBeforeCompact=false`；不单独配置 ToolResultEviction
+- Demo 默认偏低便于四轮触发；正式环境请按上下文窗口上调，**勿贴模型上限**（SSE 超限后不会自动压缩重试）
+- 流结束后若上下文条数相对请求前**真正变少**，在 `DONE` 前推送 `COMPACTION`（文案含前后条数）；前端聊天区显示系统提示
+- 日志关键字：`Compaction triggered` / `Compaction complete`
+
 curl 示例：
 
 ```bash
@@ -1205,6 +1214,12 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"workspace-user-008\",\"sessionId\":\"workspace-session-008\",\"message\":\"按项目规则回答：当前项目名称、项目理解任务编号和三步理解顺序。不要调用工具。\"}"
 
+# Compaction：同一 session 连发四轮（只确认、不调工具）；第四轮日志应出现 Compaction triggered/complete，SSE 含 COMPACTION
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"context-user-009\",\"sessionId\":\"context-session-009\",\"message\":\"任务编号是 CTX-009。需要确认 Java 版本、Spring Boot 版本、启动类、源码目录、构建命令和测试命令。只确认收到，不要调用工具。\"}"
+# 第 2～3 轮补充已确认信息；第 4 轮：「汇总已经确认的信息，并列出还没有确认的事项。不要调用工具。」
+
 # 写 notes/ 文件（HITL：先 ask 触发 REQUIRE_USER_CONFIRM，再 confirm 批准）
 curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
@@ -1217,9 +1232,9 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
 # 检查 {projectRoot}/notes/permission-demo.txt
 ```
 
-前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片，可选择批准或拒绝；示例按钮「写 notes 文件（HITL）」对应上述 curl 流程。
+前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；示例「Compaction 四轮」固定 `context-user-009` / `context-session-009`。
 
-**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 事件映射 + store 恢复确认）→ **能力层**（`HarnessAgent` + Toolkit / Permission / Workspace / `AgentStateStore`）。详细流程见 [§25–27 功能设计图](#25-agentscope-harnessagent--三层架构)。
+**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Toolkit / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–27 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
 ### MCP
 
