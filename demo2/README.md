@@ -1256,7 +1256,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
 
 前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；示例「Compaction 四轮」固定 `context-user-009` / `context-session-009`。
 
-**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Toolkit / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–27 功能设计图](#25-agentscope-harnessagent--三层架构)。
+**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Toolkit / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
 ### MCP
 
@@ -2468,14 +2468,15 @@ flowchart TB
         WRITE --> NOTES
     end
 
-    EVT -->|SSE SESSION / TOOL_* / MESSAGE / CONFIRM / DONE| UI
+    EVT -->|SSE SESSION / TOOL_* / MESSAGE / CONFIRM / COMPACTION / DONE| UI
+    UI --> SYS[系统提示：上下文已压缩]
 ```
 
 | 层 | 职责 |
 |----|------|
-| 展示层 | SSE 流式文字、工具条、`REQUIRE_USER_CONFIRM` 确认卡片 |
-| 编排层 | RuntimeContext、pending 缓存、`ConfirmResult` 恢复、事件 DTO 映射 |
-| 能力层 | 模型推理、工具选择、PermissionEngine 决策、真正写盘 |
+| 展示层 | SSE 流式文字、工具条、`REQUIRE_USER_CONFIRM` 确认卡片、**`COMPACTION` 系统提示** |
+| 编排层 | RuntimeContext、从 store 读 `ASKING`、流后对比条数发 `COMPACTION`、事件 DTO 映射 |
+| 能力层 | 模型推理、工具 / Permission、Workspace 注入、`CompactionMiddleware`、AgentState 持久化 |
 
 ### 26. AgentScope — Permission HITL 决策与写文件流
 
@@ -2552,7 +2553,7 @@ sequenceDiagram
     HA->>PE: 权限检查
     PE->>Tool: checkPermissions → ASK
     HA-->>Svc: RequireUserConfirmEvent
-    Svc->>Svc: pendingConfirmations.put(userId + sessionId)
+    Svc->>Svc: AgentStateStore 读 ASKING ToolUseBlock
     Svc-->>前端: SSE REQUIRE_USER_CONFIRM
     HA-->>Svc: RequestStopEvent PERMISSION_ASKING
     Svc-->>前端: SSE REQUEST_STOP / DONE
@@ -2561,7 +2562,7 @@ sequenceDiagram
     用户->>前端: 点击「批准」
     前端->>Ctrl: POST /agentscope/dev-agent/confirm approved=true
     Ctrl->>Svc: confirm(request)
-    Svc->>Svc: remove pending → ConfirmResult
+    Svc->>Svc: 组装 ConfirmResult（approved）
     Svc->>HA: streamEvents(Msg + METADATA_CONFIRM_RESULTS)
     HA->>Tool: callAsync 写文件
     Tool-->>HA: SUCCESS
@@ -2575,6 +2576,57 @@ sequenceDiagram
 ```
 
 > **与 §10 AskUserQuestion 的区别**：AskUser 是业务澄清（选数据库等）；AgentScope HITL 是 **工具执行前权限闸门**——模型已提交写文件申请单，是否落盘由 Permission + 用户确认决定，不依赖 Prompt 自觉。
+
+### 28. AgentScope — Compaction 长会话压缩
+
+PostgreSQL 负责**找回**会话；Compaction 负责**缩短**历史。压缩发生在模型推理前（`CompactionMiddleware.onReasoning`）；本项目另在流结束后对比 `AgentState.context` 条数，向前端推送 `COMPACTION`。
+
+```mermaid
+flowchart LR
+    subgraph 信息归属
+        A[当前目标 / 已确认 / 待办] --> S[Compaction 摘要]
+        B[项目规则 / 工具约定] --> G[AGENTS.md]
+        C[审批 / 订单等业务事实] --> DB[业务表]
+        D[压缩前完整原文] --> X[本版不 offload]
+    end
+```
+
+```mermaid
+sequenceDiagram
+    participant 用户
+    participant 前端 as agentscope.js
+    participant Ctrl as DevAgentController
+    participant Svc as DevAgentService
+    participant Store as AgentStateStore
+    participant HA as HarnessAgent
+    participant CM as CompactionMiddleware
+    participant DS as DeepSeek
+
+    Note over 用户,DS: 同 userId + sessionId，前三轮各产生 User+Assistant（共 6 条）
+    用户->>前端: 第 4 轮「汇总已确认信息…」
+    前端->>Ctrl: POST /agentscope/dev-agent/ask
+    Ctrl->>Svc: ask(request)
+    Svc->>Store: 读 beforeCount（如 6）
+    Svc-->>前端: SSE SESSION
+    Svc->>HA: streamEvents(message, RuntimeContext)
+    HA->>CM: onReasoning（total≥triggerMessages）
+    CM->>DS: 生成摘要（summary-prompt）
+    DS-->>CM: 摘要文本
+    CM->>CM: context = 1 摘要 + keepMessages 原文
+    CM->>DS: 继续本轮推理
+    DS-->>HA: 文本回复
+    HA-->>Svc: MESSAGE* / AGENT_RESULT / AGENT_END
+    Svc-->>前端: SSE MESSAGE*
+    HA->>Store: 写回压缩后 AgentState
+    Svc->>Store: 读 afterCount（如 4）
+    alt afterCount > 0 且 afterCount < beforeCount
+        Svc-->>前端: SSE COMPACTION（含前后条数）
+        前端->>前端: 插入系统提示气泡
+    end
+    Svc-->>前端: SSE DONE
+```
+
+> **与 Session Memory Tab 的区别**：Session Memory 用 Spring AI `RecursiveSummarizationCompactionStrategy`（Turn / Event Store）；AgentScope Compaction 是 Harness 原生中间件，压缩的是同一份 `AgentState.context`，与 PostgreSQL store 配合使用。
 
 ---
 
@@ -2637,8 +2689,8 @@ demo2/
 │   │   ├── model/                        # AgentRequest / AgentResponse / EmbabelSseEvent
 │   │   ├── service/                      # EmbabelAgentService、ArticleFetchService 等
 │   │   └── sse/EmbabelSseBridge.java
-│   ├── agentscope/                       # AgentScope HarnessAgent + Permission HITL
-│   │   ├── config/                       # AgentScopeConfig、DevAgentProperties
+│   ├── agentscope/                       # AgentScope HarnessAgent + HITL + Compaction
+│   │   ├── config/                       # AgentScopeConfig、DevAgentProperties（含 Compaction）
 │   │   ├── controller/DevAgentController.java
 │   │   ├── model/                        # DevAgentEvent / ConfirmRequest / PendingToolCall
 │   │   ├── service/DevAgentService.java  # ask / confirm + pending 缓存

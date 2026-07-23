@@ -317,6 +317,12 @@ document.getElementById('agentscopeForm')?.addEventListener('submit', function (
     e.preventDefault();
     sendAgentscopeMessage();
 });
+document.getElementById('agentscopeMessageInput')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendAgentscopeMessage();
+    }
+});
 document.getElementById('agentscopeNewSessionBtn')?.addEventListener('click', function () {
     resetAgentscopeConversation();
 });
