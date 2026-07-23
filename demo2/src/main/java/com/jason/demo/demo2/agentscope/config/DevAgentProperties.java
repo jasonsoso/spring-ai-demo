@@ -11,6 +11,7 @@ public record DevAgentProperties(
         @NotBlank String name,
         @NotBlank String systemPrompt,
         @NotBlank String projectRoot,
+        @NotBlank String workspaceRoot,
         @Valid Model model) {
 
     /**

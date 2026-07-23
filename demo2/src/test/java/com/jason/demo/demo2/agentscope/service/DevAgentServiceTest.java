@@ -62,6 +62,7 @@ class DevAgentServiceTest {
                 "dev-task-agent",
                 "prompt",
                 ".",
+                "workspace",
                 new DevAgentProperties.Model("sk-test", "https://api.deepseek.com", "deepseek-v4-pro"));
         service = new DevAgentService(harnessAgent, properties, agentStateStore);
     }
@@ -98,6 +99,7 @@ class DevAgentServiceTest {
                         "dev-task-agent",
                         "prompt",
                         ".",
+                        "workspace",
                         new DevAgentProperties.Model("  ", "https://api.deepseek.com", "deepseek-v4-pro")),
                 agentStateStore);
 
