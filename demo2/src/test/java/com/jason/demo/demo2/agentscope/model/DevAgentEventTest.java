@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.agentscope.model;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -13,7 +14,17 @@ class DevAgentEventTest {
     void legacyFactories_keepNullOptionalFields() {
         assertThat(DevAgentEvent.session("s1"))
                 .isEqualTo(new DevAgentEvent(
-                        DevAgentEventType.SESSION, "s1", "", null, null, null, null, null));
+                        DevAgentEventType.SESSION,
+                        "s1",
+                        "",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null));
         assertThat(DevAgentEvent.message("s1", "hi").content()).isEqualTo("hi");
         assertThat(DevAgentEvent.done("s1").type()).isEqualTo(DevAgentEventType.DONE);
         assertThat(DevAgentEvent.error("s1", "boom").content()).isEqualTo("boom");
@@ -78,5 +89,40 @@ class DevAgentEventTest {
         assertThat(event.sessionId()).isEqualTo("s1");
         assertThat(event.content()).contains("7 条").contains("共 3 条");
         assertThat(event.pendingToolCalls()).isNull();
+    }
+
+    @Test
+    void requestContext_carriesOnlyCorrelationFields() {
+        DevAgentEvent event =
+                DevAgentEvent.requestContext("s1", "request-1", "trace-1", "span-1");
+
+        assertThat(event.type()).isEqualTo(DevAgentEventType.REQUEST_CONTEXT);
+        assertThat(event.sessionId()).isEqualTo("s1");
+        assertThat(event.content()).isEmpty();
+        assertThat(event.requestId()).isEqualTo("request-1");
+        assertThat(event.traceId()).isEqualTo("trace-1");
+        assertThat(event.spanId()).isEqualTo("span-1");
+        assertThat(event.eventId()).isNull();
+        assertThat(event.pendingToolCalls()).isNull();
+    }
+
+    @Test
+    void json_includesCorrelationOnlyForRequestContext() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        String requestContext = objectMapper.writeValueAsString(
+                DevAgentEvent.requestContext(
+                        "s1", "request-1", "trace-1", "span-1"));
+        String session = objectMapper.writeValueAsString(
+                DevAgentEvent.session("s1"));
+
+        assertThat(requestContext)
+                .contains("\"requestId\":\"request-1\"")
+                .contains("\"traceId\":\"trace-1\"")
+                .contains("\"spanId\":\"span-1\"");
+        assertThat(session)
+                .doesNotContain("requestId")
+                .doesNotContain("traceId")
+                .doesNotContain("spanId");
     }
 }

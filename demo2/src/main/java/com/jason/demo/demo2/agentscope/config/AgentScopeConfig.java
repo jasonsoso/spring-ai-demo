@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.agentscope.config;
 
+import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
 import com.jason.demo.demo2.agentscope.tool.FileChangeTool;
 import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
 import com.jason.demo.demo2.config.LoggingAgentscopeModel;
@@ -73,13 +74,19 @@ public class AgentScopeConfig {
     }
 
     @Bean
+    AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware() {
+        return new AgentExecutionLoggingMiddleware();
+    }
+
+    @Bean
     HarnessAgent agentscopeDevAgent(
             @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
             DevAgentProperties properties,
             CompactionConfig agentscopeCompactionConfig,
             ProjectInfoTools projectInfoTools,
             FileChangeTool fileChangeTool,
-            AgentStateStore agentscopeAgentStateStore) throws IOException {
+            AgentStateStore agentscopeAgentStateStore,
+            AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware) throws IOException {
         HarnessAgent agent = HarnessAgent.builder()
                 .name(properties.name())
                 .sysPrompt(properties.systemPrompt())
@@ -87,6 +94,7 @@ public class AgentScopeConfig {
                 .workspace(Path.of(properties.workspaceRoot()))
                 .stateStore(agentscopeAgentStateStore)
                 .permissionContext(permissionContext())
+                .middleware(agentExecutionLoggingMiddleware)
                 .enableAgentTracingLog(false)
                 .disableFilesystemTools()
                 .disableShellTool()

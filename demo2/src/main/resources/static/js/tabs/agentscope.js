@@ -76,7 +76,14 @@ function beginAgentscopeAssistantTurn() {
     wrap.appendChild(col);
     box.appendChild(wrap);
     scrollAgentscopeMessages();
-    return { col: col, strip: strip, content: content, tools: new Map() };
+    return {
+        col: col,
+        strip: strip,
+        content: content,
+        tools: new Map(),
+        requestContext: null,
+        errorRendered: false
+    };
 }
 
 function upsertAgentscopeToolItem(turn, toolCallId, name, state) {
@@ -142,9 +149,45 @@ function fillAgentscopeSample(n) {
     }
 }
 
+function renderAgentscopeError(turn, message) {
+    if (!turn || turn.errorRendered) return;
+    turn.errorRendered = true;
+    turn.content.textContent += (turn.content.textContent ? '\n' : '')
+        + '[ERROR] ' + (message || '出错');
+
+    const requestId = turn.requestContext?.requestId;
+    if (!requestId) return;
+
+    const row = document.createElement('div');
+    row.className = 'agentscope-error-request';
+    const label = document.createElement('span');
+    label.textContent = '请求编号：' + requestId;
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.textContent = '复制';
+    copy.onclick = async function () {
+        try {
+            await navigator.clipboard.writeText(requestId);
+            copy.textContent = '已复制';
+        } catch (e) {
+            copy.textContent = '复制失败';
+        }
+    };
+    row.appendChild(label);
+    row.appendChild(copy);
+    turn.col.appendChild(row);
+    scrollAgentscopeMessages();
+}
+
 function handleAgentscopeSsePayload(turn, payload, sessionId) {
     if (payload.type === 'SESSION') {
         setAgentscopeStatus('SESSION ' + (payload.sessionId || sessionId));
+    } else if (payload.type === 'REQUEST_CONTEXT') {
+        turn.requestContext = {
+            requestId: payload.requestId || '',
+            traceId: payload.traceId || '-',
+            spanId: payload.spanId || '-'
+        };
     } else if (payload.type === 'AGENT_START' || payload.type === 'MODEL_CALL_START' || payload.type === 'AGENT_END') {
         setAgentscopeStatus(payload.type);
     } else if (payload.type === 'TOOL_CALL_START') {
@@ -166,7 +209,7 @@ function handleAgentscopeSsePayload(turn, payload, sessionId) {
         setAgentscopeStatus('DONE');
     } else if (payload.type === 'ERROR') {
         setAgentscopeStatus('ERROR');
-        turn.content.textContent += (turn.content.textContent ? '\n' : '') + '[ERROR] ' + (payload.content || '出错');
+        renderAgentscopeError(turn, payload.content || '出错');
     } else if (payload.type === 'REQUIRE_USER_CONFIRM') {
         setAgentscopeStatus('REQUIRE_USER_CONFIRM');
         renderAgentscopeConfirmCard(turn, payload);
@@ -246,6 +289,8 @@ async function submitAgentscopeConfirm(turn, card, approved) {
     buttons.forEach(function (btn) { btn.disabled = true; });
     setAgentscopeInputEnabled(false);
     setAgentscopeStatus(approved ? '确认中（批准）…' : '确认中（拒绝）…');
+    turn.requestContext = null;
+    turn.errorRendered = false;
 
     try {
         const body = { sessionId: sessionId, approved: approved };
@@ -265,7 +310,7 @@ async function submitAgentscopeConfirm(turn, card, approved) {
         card.remove();
     } catch (e) {
         setAgentscopeStatus('确认失败');
-        turn.content.textContent += (turn.content.textContent ? '\n' : '') + '[ERROR] ' + (e.message || e);
+        renderAgentscopeError(turn, e.message || String(e));
         buttons.forEach(function (btn) { btn.disabled = false; });
     } finally {
         setAgentscopeInputEnabled(true);
@@ -305,7 +350,7 @@ async function sendAgentscopeMessage() {
         agentscopeAwaitingConfirm = result.awaitingConfirm;
     } catch (e) {
         setAgentscopeStatus('失败');
-        turn.content.textContent += (turn.content.textContent ? '\n' : '') + '[ERROR] ' + (e.message || e);
+        renderAgentscopeError(turn, e.message || String(e));
     } finally {
         if (!agentscopeAwaitingConfirm) {
             setAgentscopeInputEnabled(true);

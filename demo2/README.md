@@ -53,7 +53,7 @@
 | `LkCoffeeAgentController` | `controller` | `/agent/lkcoffee` | 瑞幸 MCP + My Coffee Skill SSE 点单 |
 | `VoiceApiController` | `controller` | `/api` | ElevenLabs TTS/STT + 语音对话 SSE |
 | `EmbabelAgentController` | `embabel.controller` | `/embabel/agent` | Embabel Autonomy 自动选路（SSE + 同步） |
-| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单 / 只读工具 / HITL / Workspace / PostgreSQL / **Compaction** |
+| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单 / 工具 / HITL / PostgreSQL / Compaction / **Middleware requestId** |
 | `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
 
 | 模块 | 能力 | 依赖外部服务 |
@@ -78,7 +78,7 @@
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
-| **AgentScope Harness** | Workspace + PostgreSQL 会话 + Permission HITL + **Compaction 长会话压缩** | DeepSeek + 可选 PostgreSQL |
+| **AgentScope Harness** | Workspace + PostgreSQL + Permission HITL + Compaction + **Middleware requestId 关联日志** | DeepSeek + 可选 PostgreSQL |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -1173,7 +1173,7 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END` / **`REQUIRE_USER_CONFIRM`** / **`REQUEST_STOP`**）→（可选 **`COMPACTION`**）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}` |
+| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` → **`REQUEST_CONTEXT`** →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END` / **`REQUIRE_USER_CONFIRM`** / **`REQUEST_STOP`**）→（可选 **`COMPACTION`**）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}` |
 | POST | `/agentscope/dev-agent/confirm` | 批准或拒绝待确认写文件。Body：`{"userId?":"...","sessionId":"...","approved":true\|false}`。返回 SSE 续流（批准后执行 `request_file_change`） |
 
 同 `userId` + `sessionId` 追问可跨重启恢复（PostgreSQL）；换 `sessionId` 应不串话，不同 `userId` 相同 `sessionId` 也不串话。`userId` 为空时内部使用占位 `_anonymous`（ask 与 confirm 须一致）。HITL 待确认工具从 `AgentStateStore` 读取 `ASKING` 状态，不再依赖进程内 Map。
@@ -1194,6 +1194,15 @@ docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
 
 配置见 `app.agentscope.datasource.*`。PG 可用时日志含 `stateStore=postgres`；连不上时应用仍启动并降级 `stateStore=memory`（WARN）。
 
+**Middleware 请求关联日志：**
+
+- 每次 `/ask`、`/confirm` 都生成独立 requestId；第二个 SSE 事件 `REQUEST_CONTEXT` 携带 requestId、traceId、spanId
+- 服务端使用同一 requestId 串联 Agent、reasoning、model、acting 和失败日志；前端仅在失败时显示并允许复制 requestId
+- 每条 Middleware 日志同时携带 traceId/spanId：先按 requestId 定位执行日志，再按 traceId 到 Tempo 查询现有 HTTP 链路
+- 本功能不创建额外 AgentScope Span；Compaction 耗时可能计入 reasoning，但摘要模型调用不保证进入 `onModelCall`
+- Middleware 不记录 Prompt、用户正文、工具参数或工具结果；现有 `LoggingAgentscopeModel` DEBUG 明细仅适合受控本地环境
+- 缺少 API Key 或 confirm 无待确认工具时，Service 仍返回 `SESSION → REQUEST_CONTEXT → ERROR` 并记录同一 requestId 的拒绝日志
+
 **Compaction（长会话上下文压缩）：**
 
 - PostgreSQL 负责**恢复**会话；Compaction 负责**缩短** `AgentState.context` 历史（与 Session Memory Tab 的 RecursiveSummarization **无关**）
@@ -1212,6 +1221,7 @@ curl -N -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -d "{\"userId\":\"dev-user-001\",\"sessionId\":\"dev-session-001\",\"message\":\"帮我整理一份今天排查订单接口超时的执行清单\"}"
 
 # 项目问答（应出现 TOOL_* 事件）
+# 响应第二个事件为 REQUEST_CONTEXT，可复制 requestId 检索服务端日志
 curl -N -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"dev-user-001\",\"sessionId\":\"toolkit-session-001\",\"message\":\"帮我看一下这个项目用了哪个 Java 版本、Spring Boot 版本，以及启动类在哪里\"}"
@@ -1256,7 +1266,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
 
 前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；示例「Compaction 四轮」固定 `context-user-009` / `context-session-009`。
 
-**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Toolkit / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
+**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 请求上下文 + 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Middleware / Toolkit / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
 ### MCP
 

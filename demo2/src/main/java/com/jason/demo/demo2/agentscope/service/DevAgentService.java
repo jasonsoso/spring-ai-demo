@@ -6,6 +6,7 @@ import com.jason.demo.demo2.agentscope.model.DevAgentEvent;
 import com.jason.demo.demo2.agentscope.model.DevAgentEventType;
 import com.jason.demo.demo2.agentscope.model.DevAgentRequest;
 import com.jason.demo.demo2.agentscope.model.PendingToolCall;
+import com.jason.demo.demo2.agentscope.observability.AgentExecutionContext;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentResultEvent;
@@ -22,6 +23,9 @@ import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.state.AgentState;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.micrometer.tracing.Tracer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -32,106 +36,170 @@ import java.util.Map;
 @Service
 public class DevAgentService {
 
+    private static final Logger log = LoggerFactory.getLogger(DevAgentService.class);
+
     private final HarnessAgent agentscopeDevAgent;
     private final DevAgentProperties properties;
     private final AgentStateStore agentStateStore;
+    private final Tracer tracer;
 
     public DevAgentService(
             HarnessAgent agentscopeDevAgent,
             DevAgentProperties properties,
-            AgentStateStore agentStateStore) {
+            AgentStateStore agentStateStore,
+            Tracer tracer) {
         this.agentscopeDevAgent = agentscopeDevAgent;
         this.properties = properties;
         this.agentStateStore = agentStateStore;
+        this.tracer = tracer;
     }
 
     public Flux<DevAgentEvent> ask(DevAgentRequest request) {
         String sessionId = request.sessionId();
+        String userId = normalizeUserId(request.userId());
+        Invocation invocation = newInvocation(userId, sessionId);
         String apiKey = properties.model().apiKey();
         if (apiKey == null || apiKey.isBlank()) {
-            return Flux.just(
-                    DevAgentEvent.session(sessionId),
-                    DevAgentEvent.error(sessionId, "DEEPSEEK_API_KEY is not configured"));
+            logRejected(invocation, "missing_api_key");
+            return withRequestContext(
+                    sessionId,
+                    invocation,
+                    Flux.just(DevAgentEvent.error(
+                            sessionId, "DEEPSEEK_API_KEY is not configured")));
         }
 
-        String userId = normalizeUserId(request.userId());
-        int beforeCount = contextMessageCount(userId, sessionId);
-        RuntimeContext context = RuntimeContext.builder()
-                .sessionId(sessionId)
-                .userId(userId)
-                .build();
-
-        Flux<DevAgentEvent> events = agentscopeDevAgent
-                .streamEvents(request.message(), context)
-                .handle((event, sink) -> {
-                    DevAgentEvent mapped = mapEvent(sessionId, event);
-                    if (mapped != null) {
-                        sink.next(mapped);
-                    }
-                });
-
-        return Flux.concat(
-                        Mono.just(DevAgentEvent.session(sessionId)),
-                        events,
-                        Mono.defer(() -> compactionEventIfNeeded(userId, sessionId, beforeCount)),
-                        Mono.just(DevAgentEvent.done(sessionId)))
-                .onErrorResume(ex -> Flux.just(DevAgentEvent.error(
-                        sessionId,
-                        ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage())));
+        return withRequestContext(
+                sessionId,
+                invocation,
+                Flux.defer(() -> askAfterContext(request, userId, invocation)));
     }
 
     public Flux<DevAgentEvent> confirm(DevAgentConfirmRequest request) {
         String sessionId = request.sessionId();
         String userId = normalizeUserId(request.userId());
+        Invocation invocation = newInvocation(userId, sessionId);
         String apiKey = properties.model().apiKey();
         if (apiKey == null || apiKey.isBlank()) {
-            return Flux.just(
-                    DevAgentEvent.session(sessionId),
-                    DevAgentEvent.error(sessionId, "DEEPSEEK_API_KEY is not configured"));
+            logRejected(invocation, "missing_api_key");
+            return withRequestContext(
+                    sessionId,
+                    invocation,
+                    Flux.just(DevAgentEvent.error(
+                            sessionId, "DEEPSEEK_API_KEY is not configured")));
         }
 
-        List<ToolUseBlock> pending = loadPendingToolCalls(userId, sessionId);
-        if (pending.isEmpty()) {
-            return Flux.just(
-                    DevAgentEvent.session(sessionId),
-                    DevAgentEvent.error(sessionId, "没有待确认的工具调用"));
+        return withRequestContext(
+                sessionId,
+                invocation,
+                Flux.defer(() -> confirmAfterContext(request, userId, invocation)));
+    }
+
+    private Flux<DevAgentEvent> askAfterContext(
+            DevAgentRequest request, String userId, Invocation invocation) {
+        String sessionId = request.sessionId();
+        try {
+            int beforeCount = contextMessageCount(userId, sessionId);
+            Flux<DevAgentEvent> events = mapAgentEvents(
+                    sessionId,
+                    agentscopeDevAgent.streamEvents(
+                            request.message(), invocation.runtimeContext()));
+            return Flux.concat(
+                    events,
+                    Mono.defer(() -> compactionEventIfNeeded(
+                            userId, sessionId, beforeCount)),
+                    Mono.just(DevAgentEvent.done(sessionId)));
+        } catch (RuntimeException ex) {
+            logRejected(invocation, "pre_agent_failure:" + ex.getClass().getSimpleName());
+            return Flux.error(ex);
         }
+    }
 
-        int beforeCount = contextMessageCount(userId, sessionId);
+    private Flux<DevAgentEvent> confirmAfterContext(
+            DevAgentConfirmRequest request, String userId, Invocation invocation) {
+        String sessionId = request.sessionId();
+        try {
+            List<ToolUseBlock> pending = loadPendingToolCalls(userId, sessionId);
+            if (pending.isEmpty()) {
+                logRejected(invocation, "no_pending_tool_call");
+                return Flux.just(DevAgentEvent.error(
+                        sessionId, "没有待确认的工具调用"));
+            }
 
-        List<ConfirmResult> confirmResults = pending.stream()
-                .map(toolCall -> new ConfirmResult(request.approved(), toolCall))
-                .toList();
+            int beforeCount = contextMessageCount(userId, sessionId);
+            List<ConfirmResult> confirmResults = pending.stream()
+                    .map(toolCall -> new ConfirmResult(request.approved(), toolCall))
+                    .toList();
+            Msg resumeMessage = Msg.builder()
+                    .name("user")
+                    .role(MsgRole.USER)
+                    .textContent(request.approved() ? "approved" : "denied")
+                    .metadata(Map.of(Msg.METADATA_CONFIRM_RESULTS, confirmResults))
+                    .build();
+            Flux<DevAgentEvent> events = mapAgentEvents(
+                    sessionId,
+                    agentscopeDevAgent.streamEvents(
+                            resumeMessage, invocation.runtimeContext()));
+            return Flux.concat(
+                    events,
+                    Mono.defer(() -> compactionEventIfNeeded(
+                            userId, sessionId, beforeCount)),
+                    Mono.just(DevAgentEvent.done(sessionId)));
+        } catch (RuntimeException ex) {
+            logRejected(invocation, "pre_agent_failure:" + ex.getClass().getSimpleName());
+            return Flux.error(ex);
+        }
+    }
 
-        Msg resumeMessage = Msg.builder()
-                .name("user")
-                .role(MsgRole.USER)
-                .textContent(request.approved() ? "approved" : "denied")
-                .metadata(Map.of(Msg.METADATA_CONFIRM_RESULTS, confirmResults))
-                .build();
+    private Flux<DevAgentEvent> mapAgentEvents(
+            String sessionId, Flux<AgentEvent> agentEvents) {
+        return agentEvents.handle((event, sink) -> {
+            DevAgentEvent mapped = mapEvent(sessionId, event);
+            if (mapped != null) {
+                sink.next(mapped);
+            }
+        });
+    }
 
-        RuntimeContext context = RuntimeContext.builder()
+    private Flux<DevAgentEvent> withRequestContext(
+            String sessionId, Invocation invocation, Flux<DevAgentEvent> body) {
+        return Flux.concat(
+                        Mono.just(DevAgentEvent.session(sessionId)),
+                        Mono.just(requestContextEvent(sessionId, invocation.ids())),
+                        body)
+                .onErrorResume(ex -> Flux.just(DevAgentEvent.error(
+                        sessionId,
+                        ex.getMessage() == null
+                                ? ex.getClass().getSimpleName()
+                                : ex.getMessage())));
+    }
+
+    private Invocation newInvocation(String userId, String sessionId) {
+        AgentExecutionContext ids = AgentExecutionContext.create(tracer);
+        RuntimeContext runtime = RuntimeContext.builder()
                 .sessionId(sessionId)
                 .userId(userId)
                 .build();
+        ids.writeTo(runtime);
+        return new Invocation(ids, runtime);
+    }
 
-        Flux<DevAgentEvent> events = agentscopeDevAgent
-                .streamEvents(resumeMessage, context)
-                .handle((event, sink) -> {
-                    DevAgentEvent mapped = mapEvent(sessionId, event);
-                    if (mapped != null) {
-                        sink.next(mapped);
-                    }
-                });
+    private DevAgentEvent requestContextEvent(
+            String sessionId, AgentExecutionContext ids) {
+        return DevAgentEvent.requestContext(
+                sessionId, ids.requestId(), ids.traceId(), ids.spanId());
+    }
 
-        return Flux.concat(
-                        Mono.just(DevAgentEvent.session(sessionId)),
-                        events,
-                        Mono.defer(() -> compactionEventIfNeeded(userId, sessionId, beforeCount)),
-                        Mono.just(DevAgentEvent.done(sessionId)))
-                .onErrorResume(ex -> Flux.just(DevAgentEvent.error(
-                        sessionId,
-                        ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage())));
+    private void logRejected(Invocation invocation, String reason) {
+        AgentExecutionContext ids = invocation.ids();
+        log.warn(
+                "Agent request rejected. requestId={}, traceId={}, spanId={}, "
+                        + "userId={}, sessionId={}, reason={}",
+                ids.requestId(),
+                ids.traceId(),
+                ids.spanId(),
+                invocation.runtimeContext().getUserId(),
+                invocation.runtimeContext().getSessionId(),
+                reason);
     }
 
     private int contextMessageCount(String userId, String sessionId) {
@@ -259,5 +327,9 @@ public class DevAgentService {
 
     private PendingToolCall toPendingToolCall(ToolUseBlock block) {
         return new PendingToolCall(block.getId(), block.getName(), block.getInput());
+    }
+
+    private record Invocation(
+            AgentExecutionContext ids, RuntimeContext runtimeContext) {
     }
 }

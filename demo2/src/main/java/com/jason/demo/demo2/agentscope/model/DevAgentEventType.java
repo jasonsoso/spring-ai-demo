@@ -6,6 +6,8 @@ package com.jason.demo.demo2.agentscope.model;
 public enum DevAgentEventType {
     /** 会话开始，携带 sessionId。 */
     SESSION,
+    /** 本次执行的 requestId、traceId 与 spanId。 */
+    REQUEST_CONTEXT,
     /** 流式文本增量（模型输出片段）。 */
     MESSAGE,
     /** 本次请求正常结束。 */

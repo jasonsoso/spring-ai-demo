@@ -217,3 +217,25 @@
     opacity: 0.55;
     cursor: not-allowed;
 }
+
+.agentscope-error-request {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #991b1b;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+    word-break: break-all;
+}
+.agentscope-error-request button {
+    flex: 0 0 auto;
+    border: 1px solid #fca5a5;
+    background: #fff;
+    color: #991b1b;
+    border-radius: 5px;
+    padding: 3px 8px;
+    cursor: pointer;
+}

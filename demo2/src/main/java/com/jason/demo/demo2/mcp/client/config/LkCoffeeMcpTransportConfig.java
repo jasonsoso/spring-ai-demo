@@ -112,7 +112,34 @@ public class LkCoffeeMcpTransportConfig {
         }
         StringBuilder headerDump = new StringBuilder();
         headers.map().forEach((name, values) ->
-                values.forEach(value -> headerDump.append(name).append(": ").append(value).append('\n')));
+                values.forEach(value -> headerDump
+                        .append(name)
+                        .append(": ")
+                        .append(formatHeaderValue(name, value))
+                        .append('\n')));
         return headerDump.toString();
+    }
+
+    private static String formatHeaderValue(String name, String value) {
+        if (!"Authorization".equalsIgnoreCase(name)) {
+            return value;
+        }
+        if (value == null) {
+            return maskKey(null);
+        }
+        int separator = value.indexOf(' ');
+        if (separator <= 0) {
+            return maskKey(value);
+        }
+        String scheme = value.substring(0, separator);
+        String key = value.substring(separator + 1).trim();
+        return scheme + " " + maskKey(key);
+    }
+
+    private static String maskKey(String key) {
+        if (key == null || key.length() <= 6) {
+            return "******";
+        }
+        return "******" + key.substring(key.length() - 6);
     }
 }

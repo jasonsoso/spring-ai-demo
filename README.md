@@ -28,7 +28,7 @@ Spring AI 学习与实验仓库，包含两个独立子项目：基于 **Spring 
 | MCP | `/mcp/client/*` | 同 JVM 内 MCP Server + Client |
 | 瑞幸 MCP 点单 | `/agent/lkcoffee/*` | 远程 MCP + My Coffee Skill SSE 点单（仅 demo2） |
 | Embabel 自动选路 | `/embabel/agent/*` | Autonomy 三 Agent + Quizzard 出题（仅 demo2） |
-| AgentScope Harness | `/agentscope/dev-agent/*` | 清单整理 + 只读工具 + `notes/` 写文件 HITL 确认 SSE（仅 demo2） |
+| AgentScope Harness | `/agentscope/dev-agent/*` | 清单整理 + 只读工具 + HITL + requestId Middleware 关联日志（复用现有 OpenTelemetry Trace，不新增 Span；仅 demo2） |
 
 启动后访问 `http://localhost:{port}/` 可使用内置 Web 测试页面。
 

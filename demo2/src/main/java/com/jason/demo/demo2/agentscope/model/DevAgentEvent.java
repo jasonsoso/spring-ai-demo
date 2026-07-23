@@ -13,30 +13,101 @@ public record DevAgentEvent(
         String toolCallId,
         String name,
         String state,
-        List<PendingToolCall> pendingToolCalls) {
+        List<PendingToolCall> pendingToolCalls,
+        String requestId,
+        String traceId,
+        String spanId) {
 
     public static DevAgentEvent session(String sessionId) {
-        return new DevAgentEvent(DevAgentEventType.SESSION, sessionId, "", null, null, null, null, null);
+        return new DevAgentEvent(
+                DevAgentEventType.SESSION,
+                sessionId,
+                "",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+    }
+
+    public static DevAgentEvent requestContext(
+            String sessionId, String requestId, String traceId, String spanId) {
+        return new DevAgentEvent(
+                DevAgentEventType.REQUEST_CONTEXT,
+                sessionId,
+                "",
+                null,
+                null,
+                null,
+                null,
+                null,
+                requestId,
+                traceId,
+                spanId);
     }
 
     public static DevAgentEvent message(String sessionId, String content) {
         return new DevAgentEvent(
-                DevAgentEventType.MESSAGE, sessionId, content == null ? "" : content, null, null, null, null, null);
+                DevAgentEventType.MESSAGE,
+                sessionId,
+                content == null ? "" : content,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     public static DevAgentEvent done(String sessionId) {
-        return new DevAgentEvent(DevAgentEventType.DONE, sessionId, "", null, null, null, null, null);
+        return new DevAgentEvent(
+                DevAgentEventType.DONE,
+                sessionId,
+                "",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     public static DevAgentEvent error(String sessionId, String content) {
         return new DevAgentEvent(
-                DevAgentEventType.ERROR, sessionId, content == null ? "" : content, null, null, null, null, null);
+                DevAgentEventType.ERROR,
+                sessionId,
+                content == null ? "" : content,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     public static DevAgentEvent lifecycle(
             DevAgentEventType type, String sessionId, String eventId, String content) {
         return new DevAgentEvent(
-                type, sessionId, content == null ? "" : content, eventId, null, null, null, null);
+                type,
+                sessionId,
+                content == null ? "" : content,
+                eventId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     public static DevAgentEvent toolCallStart(
@@ -53,6 +124,9 @@ public record DevAgentEvent(
                 toolCallId,
                 name,
                 null,
+                null,
+                null,
+                null,
                 null);
     }
 
@@ -63,7 +137,17 @@ public record DevAgentEvent(
             String name,
             String state) {
         return new DevAgentEvent(
-                DevAgentEventType.TOOL_RESULT_END, sessionId, "", eventId, toolCallId, name, state, null);
+                DevAgentEventType.TOOL_RESULT_END,
+                sessionId,
+                "",
+                eventId,
+                toolCallId,
+                name,
+                state,
+                null,
+                null,
+                null,
+                null);
     }
 
     public static DevAgentEvent agentResult(String sessionId, String eventId, String content) {
@@ -72,6 +156,9 @@ public record DevAgentEvent(
                 sessionId,
                 content == null ? "" : content,
                 eventId,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -88,7 +175,10 @@ public record DevAgentEvent(
                 null,
                 null,
                 null,
-                pendingToolCalls);
+                pendingToolCalls,
+                null,
+                null,
+                null);
     }
 
     public static DevAgentEvent requestStop(String sessionId, String eventId, String content) {
@@ -100,6 +190,9 @@ public record DevAgentEvent(
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 null);
     }
 
@@ -108,6 +201,9 @@ public record DevAgentEvent(
                 DevAgentEventType.COMPACTION,
                 sessionId,
                 content == null ? "" : content,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
