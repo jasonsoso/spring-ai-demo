@@ -53,7 +53,7 @@
 | `LkCoffeeAgentController` | `controller` | `/agent/lkcoffee` | 瑞幸 MCP + My Coffee Skill SSE 点单 |
 | `VoiceApiController` | `controller` | `/api` | ElevenLabs TTS/STT + 语音对话 SSE |
 | `EmbabelAgentController` | `embabel.controller` | `/embabel/agent` | Embabel Autonomy 自动选路（SSE + 同步） |
-| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单整理 + 项目只读工具 + `notes/` 写文件 HITL 确认 |
+| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单 / 只读工具 / HITL / Workspace / PostgreSQL / **Compaction** |
 | `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
 
 | 模块 | 能力 | 依赖外部服务 |
@@ -78,6 +78,7 @@
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
+| **AgentScope Harness** | Workspace + PostgreSQL 会话 + Permission HITL + **Compaction 长会话压缩** | DeepSeek + 可选 PostgreSQL |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -888,6 +889,12 @@ agent.session-memory.compaction.max-events-to-keep=10
 agent.session-memory.compaction.overlap-size=2
 agent.session-memory.chat.model=deepseek-v4-pro
 
+# ===== AgentScope Compaction（与上面 Session Memory 压缩无关）=====
+# Demo 默认偏低便于四轮触发；正式环境请上调，勿贴模型上限
+app.agentscope.dev-agent.compaction.trigger-messages=6
+app.agentscope.dev-agent.compaction.keep-messages=2
+# summary-prompt 见 application-agentscope-prompts.yml
+
 # ===== Milvus =====
 spring.ai.vectorstore.milvus.client.host=localhost
 spring.ai.vectorstore.milvus.client.port=19530
@@ -1214,11 +1221,26 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"workspace-user-008\",\"sessionId\":\"workspace-session-008\",\"message\":\"按项目规则回答：当前项目名称、项目理解任务编号和三步理解顺序。不要调用工具。\"}"
 
-# Compaction：同一 session 连发四轮（只确认、不调工具）；第四轮日志应出现 Compaction triggered/complete，SSE 含 COMPACTION
+# Compaction：同一 session 连发四轮（只确认、不调工具）
+# 第 1 轮：任务范围
 curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"context-user-009\",\"sessionId\":\"context-session-009\",\"message\":\"任务编号是 CTX-009。需要确认 Java 版本、Spring Boot 版本、启动类、源码目录、构建命令和测试命令。只确认收到，不要调用工具。\"}"
-# 第 2～3 轮补充已确认信息；第 4 轮：「汇总已经确认的信息，并列出还没有确认的事项。不要调用工具。」
+
+# 第 2 轮：已确认信息
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"context-user-009\",\"sessionId\":\"context-session-009\",\"message\":\"已确认 Java 版本是 17，Spring Boot 版本是 4.1.0。只确认收到，不要调用工具。\"}"
+
+# 第 3 轮：继续确认
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"context-user-009\",\"sessionId\":\"context-session-009\",\"message\":\"已确认启动类是 Demo2Application，源码目录是 src/main/java。只确认收到，不要调用工具。\"}"
+
+# 第 4 轮：触发压缩（前三轮共 6 条消息 + 本轮 User → 达阈值）；日志含 Compaction triggered/complete，SSE 含 COMPACTION
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"context-user-009\",\"sessionId\":\"context-session-009\",\"message\":\"汇总已经确认的信息，并列出还没有确认的事项。不要调用工具。\"}"
 
 # 写 notes/ 文件（HITL：先 ask 触发 REQUIRE_USER_CONFIRM，再 confirm 批准）
 curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
@@ -2394,13 +2416,13 @@ flowchart TD
 
 ### 25. AgentScope HarnessAgent — 三层架构
 
-与 API 节及 `docs/superpowers/specs/2026-07-22-agentscope-permission-hitl-design.md` 对齐：**展示层**（Tab / curl）→ **编排层**（`DevAgentController` + `DevAgentService`）→ **能力层**（`HarnessAgent` + 只读工具 + `FileChangeTool` + Permission）。
+与 API 节及 AgentScope 相关 design 对齐：**展示层**（Tab / curl）→ **编排层**（`DevAgentController` + `DevAgentService` 含 Compaction 探测）→ **能力层**（`HarnessAgent` + Toolkit / Permission / Workspace / Compaction / `AgentStateStore`）。
 
 ```mermaid
 flowchart TB
     subgraph 展示层["前端 Tab「🧭 AgentScope Harness」"]
         META[userId / sessionId]
-        SAMPLES[示例：清单 / 项目问答 / 写 notes HITL]
+        SAMPLES[示例：清单 / 项目问答 / Workspace / HITL / Compaction 四轮]
         MSG[消息区 + 工具条]
         CARD[确认卡片 批准 / 拒绝]
         META --> UI[agentscope.js]
@@ -2412,23 +2434,23 @@ flowchart TB
     subgraph 编排层["Spring Boot demo2 — AgentScope 编排"]
         CTRL[DevAgentController]
         SVC[DevAgentService]
-        PENDING["pendingConfirmations<br/>key = userId + sessionId → ToolUseBlock"]
-        EVT["AgentEvent → DevAgentEvent<br/>含 REQUIRE_USER_CONFIRM / REQUEST_STOP"]
+        STORE_SVC["AgentStateStore 读 ASKING / 压缩后条数"]
+        EVT["AgentEvent → DevAgentEvent<br/>含 REQUIRE_USER_CONFIRM / REQUEST_STOP / COMPACTION"]
         PROMPTS[application-agentscope-prompts.yml]
 
         UI -->|POST /agentscope/dev-agent/ask| CTRL
         UI -->|POST /agentscope/dev-agent/confirm| CTRL
         CTRL --> SVC
-        SVC --> PENDING
+        SVC --> STORE_SVC
         SVC --> EVT
-        PROMPTS -.->|systemPrompt| HA
+        PROMPTS -.->|systemPrompt / summaryPrompt| HA
     end
 
     subgraph 能力层["HarnessAgent + Toolkit"]
-        HA[HarnessAgent\nPermissionMode.DEFAULT]
+        HA[HarnessAgent\nPermission + Workspace + Compaction]
         READ[ProjectInfoTools\nread_pom / list_source_folders / find_main_class\nALLOW]
         WRITE[FileChangeTool\nrequest_file_change\nASK / DENY]
-        STORE[InMemoryAgentStateStore]
+        STORE[AgentStateStore\nPostgreSQL / memory 降级]
 
         HA --> READ
         HA --> WRITE
