@@ -19,7 +19,7 @@
 - **写死**：`keepTokens(0)`、`flushBeforeCompact(false)`、`offloadBeforeCompact(false)`
 - **不碰**：`ToolResultEvictionConfig`、Memory、自定义 Middleware、API 路径、HITL / Permission / Workspace 文件内容
 - **探测时机**：`streamEvents` **结束后**再读 store（非 `MODEL_CALL_START`）；`COMPACTION` 在 `DONE` 之前
-- **判定**：`afterCount > 0 && afterCount < beforeCount + 1`
+- **判定**：`afterCount > 0 && afterCount < beforeCount`（相对流开始前真正变少）
 - **文案**：`上下文已压缩：{beforeDisplay} 条 → 1 条摘要 + {keepMessages} 条原文（共 {afterCount} 条）`，其中 `beforeDisplay = beforeCount + 1`
 - **编译门禁**：`mvn -f demo2/pom.xml -DskipTests compile` 必须 SUCCESS
 - **单测门禁**：`mvn -f demo2/pom.xml -Dtest=DevAgentPropertiesBindingTest,AgentscopeCompactionConfigTest,DevAgentEventTest,DevAgentServiceTest test` 必须 SUCCESS

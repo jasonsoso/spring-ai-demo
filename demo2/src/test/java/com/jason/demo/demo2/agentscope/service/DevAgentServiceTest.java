@@ -40,6 +40,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,6 +67,63 @@ class DevAgentServiceTest {
                 new DevAgentProperties.Compaction(6, 2, "请整理会话：{messages}"),
                 new DevAgentProperties.Model("sk-test", "https://api.deepseek.com", "deepseek-v4-pro"));
         service = new DevAgentService(harnessAgent, properties, agentStateStore);
+        lenient()
+                .when(agentStateStore.get(any(), any(), eq("agent_state"), eq(AgentState.class)))
+                .thenReturn(Optional.empty());
+    }
+
+    private static AgentState stateWithMessageCount(int n) {
+        java.util.ArrayList<Msg> context = new java.util.ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            context.add(Msg.builder()
+                    .role(i % 2 == 0 ? MsgRole.USER : MsgRole.ASSISTANT)
+                    .textContent("m" + i)
+                    .build());
+        }
+        return AgentState.builder().userId("u1").sessionId("s1").context(context).build();
+    }
+
+    @Test
+    void ask_whenContextShrunk_emitsCompactionBeforeDone() {
+        when(agentStateStore.get(eq("u1"), eq("s1"), eq("agent_state"), eq(AgentState.class)))
+                .thenReturn(Optional.of(stateWithMessageCount(6)))
+                .thenReturn(Optional.of(stateWithMessageCount(4)));
+
+        TextBlockDeltaEvent d1 = mock(TextBlockDeltaEvent.class);
+        when(d1.getType()).thenReturn(AgentEventType.TEXT_BLOCK_DELTA);
+        when(d1.getDelta()).thenReturn("ok");
+        when(harnessAgent.streamEvents(eq("汇总"), any(RuntimeContext.class)))
+                .thenReturn(Flux.just(d1));
+
+        StepVerifier.create(service.ask(new DevAgentRequest("u1", "s1", "汇总")))
+                .expectNext(DevAgentEvent.session("s1"))
+                .expectNext(DevAgentEvent.message("s1", "ok"))
+                .expectNextMatches(e ->
+                        e.type() == DevAgentEventType.COMPACTION
+                                && e.content().contains("7 条")
+                                && e.content().contains("共 4 条")
+                                && e.content().contains("2 条原文"))
+                .expectNext(DevAgentEvent.done("s1"))
+                .verifyComplete();
+    }
+
+    @Test
+    void ask_whenContextGrew_doesNotEmitCompaction() {
+        when(agentStateStore.get(eq("u1"), eq("s1"), eq("agent_state"), eq(AgentState.class)))
+                .thenReturn(Optional.of(stateWithMessageCount(2)))
+                .thenReturn(Optional.of(stateWithMessageCount(4)));
+
+        TextBlockDeltaEvent d1 = mock(TextBlockDeltaEvent.class);
+        when(d1.getType()).thenReturn(AgentEventType.TEXT_BLOCK_DELTA);
+        when(d1.getDelta()).thenReturn("ack");
+        when(harnessAgent.streamEvents(eq("hi"), any(RuntimeContext.class)))
+                .thenReturn(Flux.just(d1));
+
+        StepVerifier.create(service.ask(new DevAgentRequest("u1", "s1", "hi")))
+                .expectNext(DevAgentEvent.session("s1"))
+                .expectNext(DevAgentEvent.message("s1", "ack"))
+                .expectNext(DevAgentEvent.done("s1"))
+                .verifyComplete();
     }
 
     @Test

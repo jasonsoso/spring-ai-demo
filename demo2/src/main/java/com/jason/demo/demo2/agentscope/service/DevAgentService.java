@@ -55,6 +55,7 @@ public class DevAgentService {
         }
 
         String userId = normalizeUserId(request.userId());
+        int beforeCount = contextMessageCount(userId, sessionId);
         RuntimeContext context = RuntimeContext.builder()
                 .sessionId(sessionId)
                 .userId(userId)
@@ -72,6 +73,7 @@ public class DevAgentService {
         return Flux.concat(
                         Mono.just(DevAgentEvent.session(sessionId)),
                         events,
+                        Mono.defer(() -> compactionEventIfNeeded(userId, sessionId, beforeCount)),
                         Mono.just(DevAgentEvent.done(sessionId)))
                 .onErrorResume(ex -> Flux.just(DevAgentEvent.error(
                         sessionId,
@@ -94,6 +96,8 @@ public class DevAgentService {
                     DevAgentEvent.session(sessionId),
                     DevAgentEvent.error(sessionId, "没有待确认的工具调用"));
         }
+
+        int beforeCount = contextMessageCount(userId, sessionId);
 
         List<ConfirmResult> confirmResults = pending.stream()
                 .map(toolCall -> new ConfirmResult(request.approved(), toolCall))
@@ -123,10 +127,46 @@ public class DevAgentService {
         return Flux.concat(
                         Mono.just(DevAgentEvent.session(sessionId)),
                         events,
+                        Mono.defer(() -> compactionEventIfNeeded(userId, sessionId, beforeCount)),
                         Mono.just(DevAgentEvent.done(sessionId)))
                 .onErrorResume(ex -> Flux.just(DevAgentEvent.error(
                         sessionId,
                         ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage())));
+    }
+
+    private int contextMessageCount(String userId, String sessionId) {
+        try {
+            return agentStateStore
+                    .get(userId, sessionId, "agent_state", AgentState.class)
+                    .map(state -> {
+                        List<Msg> context = state.getContext();
+                        return context == null ? 0 : context.size();
+                    })
+                    .orElse(0);
+        } catch (RuntimeException ex) {
+            return -1;
+        }
+    }
+
+    private Mono<DevAgentEvent> compactionEventIfNeeded(
+            String userId, String sessionId, int beforeCount) {
+        if (beforeCount < 0) {
+            return Mono.empty();
+        }
+        int afterCount = contextMessageCount(userId, sessionId);
+        if (afterCount <= 0 || afterCount >= beforeCount) {
+            return Mono.empty();
+        }
+        int beforeDisplay = beforeCount + 1;
+        int keep = properties.compaction().keepMessages();
+        String content = "上下文已压缩："
+                + beforeDisplay
+                + " 条 → 1 条摘要 + "
+                + keep
+                + " 条原文（共 "
+                + afterCount
+                + " 条）";
+        return Mono.just(DevAgentEvent.compaction(sessionId, content));
     }
 
     private List<ToolUseBlock> loadPendingToolCalls(String userId, String sessionId) {

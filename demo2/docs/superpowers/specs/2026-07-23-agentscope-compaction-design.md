@@ -210,8 +210,8 @@ DevAgentEventType.COMPACTION
 1. 流开始前：`agentStateStore.get(userId, sessionId, "agent_state", AgentState.class)` → `beforeCount = context.size()`（无状态则为 0）
 2. `streamEvents` 映射为既有 SSE 事件（逻辑不变）
 3. **流结束后**再读 store → `afterCount`（此时压缩结果应已落库）
-4. 判定：`afterCount > 0 && afterCount < beforeCount + 1`  
-   （未压缩时简单问答约 `before+2`；压缩后条数通常明显小于 `before+1`，例如文章场景 6→4）
+4. 判定：`afterCount > 0 && afterCount < beforeCount`  
+   （必须相对流开始前**真正变少**；未压缩时简单问答约 `before+2`，同条数不触发，避免误报）
 5. 若成立：在 `DONE` **之前**插入一条 `COMPACTION`（本轮至多一次）
 6. 读 store 异常：跳过探测，不阻断主 SSE；仍发 `DONE`（若主流程未已 ERROR）
 
