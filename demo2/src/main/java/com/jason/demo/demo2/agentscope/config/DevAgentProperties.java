@@ -1,6 +1,7 @@
 package com.jason.demo.demo2.agentscope.config;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -12,7 +13,14 @@ public record DevAgentProperties(
         @NotBlank String systemPrompt,
         @NotBlank String projectRoot,
         @NotBlank String workspaceRoot,
+        @Valid Compaction compaction,
         @Valid Model model) {
+
+    public record Compaction(
+            @Min(2) int triggerMessages,
+            @Min(1) int keepMessages,
+            @NotBlank String summaryPrompt) {
+    }
 
     /**
      * apiKey 允许为空：缺 DEEPSEEK_API_KEY 时不阻止应用启动，由 Service 在 ask 时返回 ERROR。

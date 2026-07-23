@@ -63,6 +63,7 @@ class DevAgentServiceTest {
                 "prompt",
                 ".",
                 "workspace",
+                new DevAgentProperties.Compaction(6, 2, "请整理会话：{messages}"),
                 new DevAgentProperties.Model("sk-test", "https://api.deepseek.com", "deepseek-v4-pro"));
         service = new DevAgentService(harnessAgent, properties, agentStateStore);
     }
@@ -100,6 +101,7 @@ class DevAgentServiceTest {
                         "prompt",
                         ".",
                         "workspace",
+                        new DevAgentProperties.Compaction(6, 2, "请整理会话：{messages}"),
                         new DevAgentProperties.Model("  ", "https://api.deepseek.com", "deepseek-v4-pro")),
                 agentStateStore);
 
