@@ -79,7 +79,8 @@ class DevAgentServiceTest {
                 ".",
                 "workspace",
                 new DevAgentProperties.Compaction(6, 2, "请整理会话：{messages}"),
-                new DevAgentProperties.Model("sk-test", "https://api.deepseek.com", "deepseek-v4-pro"));
+                new DevAgentProperties.Model("sk-test", "https://api.deepseek.com", "deepseek-v4-pro"),
+                new DevAgentProperties.McpSettings(false, java.util.List.of()));
         lenient().when(tracer.currentTraceContext()).thenReturn(currentTraceContext);
         lenient().when(currentTraceContext.context()).thenReturn(traceContext);
         lenient().when(traceContext.traceId()).thenReturn("trace-test");
@@ -212,7 +213,8 @@ class DevAgentServiceTest {
                         ".",
                         "workspace",
                         new DevAgentProperties.Compaction(6, 2, "请整理会话：{messages}"),
-                        new DevAgentProperties.Model("  ", "https://api.deepseek.com", "deepseek-v4-pro")),
+                        new DevAgentProperties.Model("  ", "https://api.deepseek.com", "deepseek-v4-pro"),
+                        new DevAgentProperties.McpSettings(false, java.util.List.of())),
                 agentStateStore,
                 tracer);
 

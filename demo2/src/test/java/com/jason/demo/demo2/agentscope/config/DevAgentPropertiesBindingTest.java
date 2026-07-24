@@ -41,6 +41,41 @@ class DevAgentPropertiesBindingTest {
         });
     }
 
+    @Test
+    void bindsMcpClientsList() {
+        runner.withPropertyValues(
+                "app.agentscope.dev-agent.mcp.enabled=true",
+                "app.agentscope.dev-agent.mcp.clients[0].name=project-files",
+                "app.agentscope.dev-agent.mcp.clients[0].command=npx",
+                "app.agentscope.dev-agent.mcp.clients[0].arguments[0]=-y",
+                "app.agentscope.dev-agent.mcp.clients[0].arguments[1]=@modelcontextprotocol/server-filesystem@2026.7.10",
+                "app.agentscope.dev-agent.mcp.clients[0].root=mcp-files",
+                "app.agentscope.dev-agent.mcp.clients[0].enabled-tools[0]=list_directory",
+                "app.agentscope.dev-agent.mcp.clients[0].enabled-tools[1]=read_text_file"
+        ).run(ctx -> {
+            DevAgentProperties.McpSettings mcp = ctx.getBean(DevAgentProperties.class).mcp();
+            assertThat(mcp.enabled()).isTrue();
+            assertThat(mcp.clients()).hasSize(1);
+            DevAgentProperties.McpClientConfig c0 = mcp.clients().getFirst();
+            assertThat(c0.name()).isEqualTo("project-files");
+            assertThat(c0.enabled()).isTrue();
+            assertThat(c0.command()).isEqualTo("npx");
+            assertThat(c0.arguments()).containsExactly(
+                    "-y", "@modelcontextprotocol/server-filesystem@2026.7.10");
+            assertThat(c0.root()).isEqualTo("mcp-files");
+            assertThat(c0.enabledTools()).containsExactly("list_directory", "read_text_file");
+        });
+    }
+
+    @Test
+    void mcpDefaultsToDisabledWhenAbsent() {
+        runner.run(ctx -> {
+            DevAgentProperties.McpSettings mcp = ctx.getBean(DevAgentProperties.class).mcp();
+            assertThat(mcp.enabled()).isFalse();
+            assertThat(mcp.clients()).isEmpty();
+        });
+    }
+
     @EnableConfigurationProperties(DevAgentProperties.class)
     static class TestConfig {
     }
