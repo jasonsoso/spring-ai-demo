@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.agentscope.config;
 
+import com.jason.demo.demo2.agentscope.mcp.AgentscopeMcpClientRegistry;
 import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
 import com.jason.demo.demo2.agentscope.tool.FileChangeTool;
 import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
@@ -48,11 +49,14 @@ class AgentScopeMiddlewareConfigTest {
                 new ProjectInfoTools(tempDir),
                 new FileChangeTool(tempDir),
                 store,
-                middleware)) {
+                middleware,
+                AgentscopeMcpClientRegistry.create(properties))) {
             assertThat(agent.getDelegate().getMiddlewares())
                     .contains(middleware)
                     .noneMatch(item -> item.getClass().getSimpleName()
                             .equals("AgentTraceMiddleware"));
+            assertThat(agent.getToolkit().getToolNames())
+                    .doesNotContain("list_directory", "read_text_file", "list_allowed_directories");
         }
     }
 }

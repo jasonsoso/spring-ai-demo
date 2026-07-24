@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.agentscope.config;
 
+import com.jason.demo.demo2.agentscope.mcp.AgentscopeMcpClientRegistry;
 import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
 import com.jason.demo.demo2.agentscope.tool.FileChangeTool;
 import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
@@ -78,6 +79,11 @@ public class AgentScopeConfig {
         return new AgentExecutionLoggingMiddleware();
     }
 
+    @Bean(destroyMethod = "close")
+    AgentscopeMcpClientRegistry agentscopeMcpClientRegistry(DevAgentProperties properties) {
+        return AgentscopeMcpClientRegistry.create(properties);
+    }
+
     @Bean
     HarnessAgent agentscopeDevAgent(
             @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
@@ -86,10 +92,13 @@ public class AgentScopeConfig {
             ProjectInfoTools projectInfoTools,
             FileChangeTool fileChangeTool,
             AgentStateStore agentscopeAgentStateStore,
-            AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware) throws IOException {
+            AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
+            AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) throws IOException {
+        String systemPrompt = properties.systemPrompt()
+                .replace("{mcpRoot}", AgentscopeMcpClientRegistry.primaryMcpRootDisplay(properties));
         HarnessAgent agent = HarnessAgent.builder()
                 .name(properties.name())
-                .sysPrompt(properties.systemPrompt())
+                .sysPrompt(systemPrompt)
                 .model(agentscopeDeepSeekModel)
                 .workspace(Path.of(properties.workspaceRoot()))
                 .stateStore(agentscopeAgentStateStore)
@@ -110,6 +119,13 @@ public class AgentScopeConfig {
         agent.getToolkit().removeTool("wait_async_results");
         agent.getToolkit().registerTool(projectInfoTools);
         agent.getToolkit().registerAgentTool(fileChangeTool);
+        for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
+            agent.getToolkit()
+                    .registration()
+                    .mcpClient(entry.client())
+                    .enableTools(entry.enabledTools())
+                    .apply();
+        }
         return agent;
     }
 
