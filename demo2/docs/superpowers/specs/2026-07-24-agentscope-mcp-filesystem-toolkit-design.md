@@ -2,7 +2,7 @@
 
 **日期**：2026-07-24  
 **项目**：spring-ai-demo / demo2  
-**状态**：待用户审阅  
+**状态**：已确认，待实现  
 **前置能力**：AgentScope Toolkit、AgentEvent SSE、Permission HITL、PostgreSQL AgentStateStore、Workspace、Compaction、Middleware  
 **参考文章**：[11. AgentScope Java 2.0 MCP 实战：把外部文件工具接进 Toolkit](https://mp.weixin.qq.com/s/3r6RS9z37fMJpG5EXJ3wqg)
 
