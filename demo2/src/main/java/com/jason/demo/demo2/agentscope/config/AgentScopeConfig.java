@@ -102,7 +102,7 @@ public class AgentScopeConfig {
                 .model(agentscopeDeepSeekModel)
                 .workspace(Path.of(properties.workspaceRoot()))
                 .stateStore(agentscopeAgentStateStore)
-                .permissionContext(permissionContext())
+                .permissionContext(permissionContext(agentscopeMcpClientRegistry))
                 .middleware(agentExecutionLoggingMiddleware)
                 .enableAgentTracingLog(false)
                 .disableFilesystemTools()
@@ -120,20 +120,23 @@ public class AgentScopeConfig {
         agent.getToolkit().registerTool(projectInfoTools);
         agent.getToolkit().registerAgentTool(fileChangeTool);
         for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
-            agent.getToolkit()
-                    .registration()
-                    .mcpClient(entry.client())
-                    .enableTools(entry.enabledTools())
-                    .apply();
+            agent.getToolkit().registerTool(entry.tools());
         }
         return agent;
     }
 
-    private static PermissionContextState permissionContext() {
+    private static PermissionContextState permissionContext(
+            AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) {
         PermissionContextState.Builder builder =
                 PermissionContextState.builder().mode(PermissionMode.DEFAULT);
         READ_ONLY_TOOL_NAMES.forEach(
                 toolName -> builder.addAllowRule(toolName, allowRule(toolName)));
+        // MCP @Tool 只读白名单直接 ALLOW
+        for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
+            for (String toolName : entry.enabledTools()) {
+                builder.addAllowRule(toolName, allowRule(toolName));
+            }
+        }
         return builder.build();
     }
 

@@ -1177,7 +1177,9 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 - 默认 Client：`project-files` → `npx -y @modelcontextprotocol/server-filesystem@2026.7.10`，白名单仅 `list_allowed_directories` / `list_directory` / `read_text_file`
 - 资料目录：`demo2/mcp-files/`（`root=mcp-files`，相对 `project-root`）；档案文件 `project-profile.md`
 - 依赖本机 **Node.js / npx**；测试环境 `app.agentscope.dev-agent.mcp.enabled=false`（见 `application-test.properties`）
-- 走 AgentScope `McpClientBuilder` + Toolkit 注册，**不是** Spring AI MCP Client
+- 走 **MCP Java SDK 2.0** stdio Client + `McpFilesystemTools`（`@Tool`）注册进 Toolkit（**不用** AgentScope `McpClientBuilder`，以便与 Spring AI MCP 共用 SDK 2.x）
+- Windows 下 Registry 会把 `command=npx` 自动改成 `cmd.exe /c npx ...`（Java `CreateProcess` 无法直接启动无扩展名的 npx）
+- `pom.xml` 在 AgentScope BOM 之后强制 `io.modelcontextprotocol.sdk:mcp:2.0.0`（覆盖 AgentScope 仍声明的 0.17）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -1282,13 +1284,13 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -d "{\"userId\":\"mcp-user-011\",\"sessionId\":\"mcp-outside-011\",\"message\":\"请必须调用 read_text_file 读取 C:\\\\Windows\\\\System32\\\\drivers\\\\etc\\\\hosts，并告诉我工具返回了什么。不要只根据规则直接回答。\"}"
 ```
 
-前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；示例「Compaction 四轮」固定 `context-user-009` / `context-session-009`。
+前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；示例「Compaction 四轮」固定 `context-user-009` / `context-session-009`；示例「MCP 读档案 / MCP 越界拒绝」固定 `mcp-user-011` 与对应 sessionId。
 
 **三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 请求上下文 + 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Middleware / Toolkit（含 MCP） / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
 ### MCP
 
-> 下表为 **Spring AI MCP Client**（本地天气/景点 Tab）。AgentScope Dev Agent 的 filesystem MCP 见上一节 **Toolkit MCP**，两套互不影响。
+> 下表为 **Spring AI MCP Client**（本地天气/景点 Tab）。AgentScope Dev Agent 的 filesystem MCP 见上一节 **Toolkit MCP**；两者现共用 **MCP Java SDK 2.0**，可同时启用。
 
 | Method | Path | 说明 |
 |--------|------|------|

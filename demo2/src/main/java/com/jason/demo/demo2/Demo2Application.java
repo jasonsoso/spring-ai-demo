@@ -5,7 +5,9 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
-@SpringBootApplication(exclude = MilvusVectorStoreAutoConfiguration.class)
+@SpringBootApplication(exclude = {
+        MilvusVectorStoreAutoConfiguration.class
+})
 @ConfigurationPropertiesScan
 public class Demo2Application {
 

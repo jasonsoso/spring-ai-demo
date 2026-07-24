@@ -93,6 +93,31 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!--
+              统一 MCP Java SDK 2.0（与 Spring AI 2.0 一致）。
+              AgentScope 2.0.0 BOM 仍声明 0.17，故在其后强制覆盖。
+              AgentScope Toolkit MCP 走自建 SDK 2.0 stdio Client + AgentTool，不用 McpClientBuilder。
+            -->
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp</artifactId>
+                <version>2.0.0</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-core</artifactId>
+                <version>2.0.0</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-json</artifactId>
+                <version>2.0.0</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-json-jackson3</artifactId>
+                <version>2.0.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -280,6 +305,11 @@
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-postgresql</artifactId>
+        </dependency>
+        <!-- 显式声明 MCP SDK 2.0，供 AgentScope Toolkit 自建 stdio Client 与 Spring AI MCP 共用 -->
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp</artifactId>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>

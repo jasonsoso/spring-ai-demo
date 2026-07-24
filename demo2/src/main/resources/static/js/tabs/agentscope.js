@@ -130,7 +130,9 @@ function fillAgentscopeSample(n) {
         3: '帮我看一下这个项目用了哪个 Java 版本、Spring Boot 版本，以及启动类在哪里',
         4: '请创建 notes/permission-demo.txt，内容是：AgentScope Permission HITL 已通过。',
         5: '按项目规则回答：当前项目名称、项目理解任务编号和三步理解顺序。不要调用工具。',
-        6: '任务编号是 CTX-009。需要确认 Java 版本、Spring Boot 版本、启动类、源码目录、构建命令和测试命令。只确认收到，不要调用工具。'
+        6: '任务编号是 CTX-009。需要确认 Java 版本、Spring Boot 版本、启动类、源码目录、构建命令和测试命令。只确认收到，不要调用工具。',
+        7: '请先列出 MCP 资料目录，再读取 project-profile.md，告诉我项目编号、Java 版本、Spring Boot 版本和维护团队。',
+        8: '请必须调用 read_text_file 读取 C:\\Windows\\System32\\drivers\\etc\\hosts，并告诉我工具返回了什么。不要只根据规则直接回答。'
     };
     const input = document.getElementById('agentscopeMessageInput');
     if (input) {
@@ -146,6 +148,14 @@ function fillAgentscopeSample(n) {
         const sessionId = document.getElementById('agentscopeSessionId');
         if (userId) userId.value = 'context-user-009';
         if (sessionId) sessionId.value = 'context-session-009';
+    }
+    if (n === 7 || n === 8) {
+        const userId = document.getElementById('agentscopeUserId');
+        const sessionId = document.getElementById('agentscopeSessionId');
+        if (userId) userId.value = 'mcp-user-011';
+        if (sessionId) {
+            sessionId.value = n === 7 ? 'mcp-session-011' : 'mcp-outside-011';
+        }
     }
 }
 
