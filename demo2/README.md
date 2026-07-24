@@ -53,7 +53,7 @@
 | `LkCoffeeAgentController` | `controller` | `/agent/lkcoffee` | 瑞幸 MCP + My Coffee Skill SSE 点单 |
 | `VoiceApiController` | `controller` | `/api` | ElevenLabs TTS/STT + 语音对话 SSE |
 | `EmbabelAgentController` | `embabel.controller` | `/embabel/agent` | Embabel Autonomy 自动选路（SSE + 同步） |
-| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单 / 工具 / HITL / PostgreSQL / Compaction / **Middleware requestId** |
+| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单 / 工具 / HITL / PostgreSQL / Compaction / Middleware requestId / **Toolkit MCP** |
 | `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
 
 | 模块 | 能力 | 依赖外部服务 |
@@ -78,7 +78,7 @@
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
-| **AgentScope Harness** | Workspace + PostgreSQL + Permission HITL + Compaction + **Middleware requestId 关联日志** | DeepSeek + 可选 PostgreSQL |
+| **AgentScope Harness** | Workspace + PostgreSQL + Permission HITL + Compaction + Middleware requestId + **stdio MCP filesystem（可扩展 clients[]）** | DeepSeek + 可选 PostgreSQL；MCP 需 Node/npx |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -1169,7 +1169,15 @@ flowchart LR
 
 ### AgentScope HarnessAgent（`/agentscope/dev-agent`）
 
-HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL**。只读工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
+HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
+
+**Toolkit MCP（与「🔌 MCP Client 聊天 / 瑞幸 MCP」无关）：**
+
+- 配置前缀：`app.agentscope.dev-agent.mcp`；`enabled` 总开关 + `clients[]` 列表（可挂多个 stdio Server）
+- 默认 Client：`project-files` → `npx -y @modelcontextprotocol/server-filesystem@2026.7.10`，白名单仅 `list_allowed_directories` / `list_directory` / `read_text_file`
+- 资料目录：`demo2/mcp-files/`（`root=mcp-files`，相对 `project-root`）；档案文件 `project-profile.md`
+- 依赖本机 **Node.js / npx**；测试环境 `app.agentscope.dev-agent.mcp.enabled=false`（见 `application-test.properties`）
+- 走 AgentScope `McpClientBuilder` + Toolkit 注册，**不是** Spring AI MCP Client
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -1262,18 +1270,30 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
   -d "{\"userId\":\"dev-user-001\",\"sessionId\":\"permission-write-001\",\"approved\":true}"
 
 # 检查 {projectRoot}/notes/permission-demo.txt
+
+# Toolkit MCP：列出资料目录并读取 project-profile.md（需 mcp.enabled=true + Node/npx）
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"mcp-user-011\",\"sessionId\":\"mcp-session-011\",\"message\":\"请先列出 MCP 资料目录，再读取 project-profile.md，告诉我项目编号、Java 版本、Spring Boot 版本和维护团队。\"}"
+
+# Toolkit MCP：越界路径应被 filesystem Server 拒绝（Access denied）
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"mcp-user-011\",\"sessionId\":\"mcp-outside-011\",\"message\":\"请必须调用 read_text_file 读取 C:\\\\Windows\\\\System32\\\\drivers\\\\etc\\\\hosts，并告诉我工具返回了什么。不要只根据规则直接回答。\"}"
 ```
 
 前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；示例「Compaction 四轮」固定 `context-user-009` / `context-session-009`。
 
-**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 请求上下文 + 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Middleware / Toolkit / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
+**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 请求上下文 + 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Middleware / Toolkit（含 MCP） / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
 ### MCP
+
+> 下表为 **Spring AI MCP Client**（本地天气/景点 Tab）。AgentScope Dev Agent 的 filesystem MCP 见上一节 **Toolkit MCP**，两套互不影响。
 
 | Method | Path | 说明 |
 |--------|------|------|
 | GET | `/mcp/client/chat` | MCP 工具调用聊天，参数：`message` |
-| GET | `/mcp/client/tools` | 列出已注册 MCP 工具 |
+| GET | `/mcp/client/tools` | 列出已注册的 MCP 工具 |
 
 ### Actuator（可观测性）
 
