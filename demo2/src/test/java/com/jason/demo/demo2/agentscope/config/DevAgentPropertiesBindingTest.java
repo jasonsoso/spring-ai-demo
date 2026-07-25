@@ -76,6 +76,41 @@ class DevAgentPropertiesBindingTest {
         });
     }
 
+    @Test
+    void bindsMemorySettings() {
+        runner.withPropertyValues(
+                "app.agentscope.dev-agent.memory.enabled=true",
+                "app.agentscope.dev-agent.memory.save-requires-confirm=false",
+                "app.agentscope.dev-agent.memory.flush-min-gap=5m",
+                "app.agentscope.dev-agent.memory.consolidation-min-gap=15m",
+                "app.agentscope.dev-agent.memory.consolidation-max-tokens=2000",
+                "app.agentscope.dev-agent.memory.flush-prompt=flush-me",
+                "app.agentscope.dev-agent.memory.consolidation-prompt=consol %d %d"
+        ).run(ctx -> {
+            DevAgentProperties.Memory memory = ctx.getBean(DevAgentProperties.class).memory();
+            assertThat(memory.enabled()).isTrue();
+            assertThat(memory.saveRequiresConfirm()).isFalse();
+            assertThat(memory.flushMinGap()).isEqualTo(java.time.Duration.ofMinutes(5));
+            assertThat(memory.consolidationMinGap()).isEqualTo(java.time.Duration.ofMinutes(15));
+            assertThat(memory.consolidationMaxTokens()).isEqualTo(2000);
+            assertThat(memory.flushPrompt()).isEqualTo("flush-me");
+            assertThat(memory.consolidationPrompt()).isEqualTo("consol %d %d");
+        });
+    }
+
+    @Test
+    void memoryDefaultsToDisabledWhenAbsent() {
+        runner.run(ctx -> {
+            DevAgentProperties.Memory memory = ctx.getBean(DevAgentProperties.class).memory();
+            assertThat(memory.enabled()).isFalse();
+            assertThat(memory.saveRequiresConfirm()).isTrue();
+            assertThat(memory.flushMinGap()).isEqualTo(java.time.Duration.ofMinutes(10));
+            assertThat(memory.consolidationMinGap()).isEqualTo(java.time.Duration.ofMinutes(30));
+            assertThat(memory.consolidationMaxTokens()).isEqualTo(4000);
+            assertThat(memory.consolidationPrompt()).contains("%d");
+        });
+    }
+
     @EnableConfigurationProperties(DevAgentProperties.class)
     static class TestConfig {
     }

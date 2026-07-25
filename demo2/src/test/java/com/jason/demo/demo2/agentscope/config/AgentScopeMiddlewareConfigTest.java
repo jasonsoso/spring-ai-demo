@@ -38,7 +38,8 @@ class AgentScopeMiddlewareConfigTest {
                         "sk-test",
                         "https://api.deepseek.com",
                         "deepseek-v4-pro"),
-                new DevAgentProperties.McpSettings(false, java.util.List.of()));
+                new DevAgentProperties.McpSettings(false, java.util.List.of()),
+                null);
         AgentExecutionLoggingMiddleware middleware =
                 new AgentExecutionLoggingMiddleware();
 
