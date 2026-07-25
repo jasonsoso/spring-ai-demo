@@ -39,3 +39,10 @@ docker/milvus/volumes/
 ### AgentScope permission demo writes ###
 notes/*
 !notes/.gitkeep
+
+### AgentScope Workspace：只保留骨架，忽略运行时按 userId 落盘的记忆/会话 ###
+workspace/**
+!workspace/AGENTS.md
+!workspace/MEMORY.md
+!workspace/knowledge/
+!workspace/knowledge/KNOWLEDGE.md
