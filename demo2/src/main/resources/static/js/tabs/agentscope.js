@@ -18,7 +18,8 @@ function resetAgentscopeConversation() {
         + '输入排查问题获取检查清单，或询问 Java / Spring Boot 版本、源码结构、启动类。'
         + '可用「Workspace / AGENTS.md」示例验证项目规则注入。'
         + '可用「Compaction 四轮」示例，同一 session 连发四轮观察压缩提示。'
-        + '写 notes/ 下文件会弹出确认卡片，可选择批准或拒绝。可点「换会话」验证 session 隔离。'
+        + '可用「Memory 记住约定」后点「新开会话（保留 userId）」再用「跨会话提问」验证长期记忆。'
+        + '写 notes/ 下文件会弹出确认卡片；memory_save 在默认配置下也会确认。'
         + '</div></div>';
     document.getElementById('agentscopeSessionId').value = newAgentscopeSessionId();
     agentscopeAwaitingConfirm = false;
@@ -132,7 +133,9 @@ function fillAgentscopeSample(n) {
         5: '按项目规则回答：当前项目名称、项目理解任务编号和三步理解顺序。不要调用工具。',
         6: '任务编号是 CTX-009。需要确认 Java 版本、Spring Boot 版本、启动类、源码目录、构建命令和测试命令。只确认收到，不要调用工具。',
         7: '请先列出 MCP 资料目录，再读取 project-profile.md，告诉我项目编号、Java 版本、Spring Boot 版本和维护团队。',
-        8: '请必须调用 read_text_file 读取 C:\\Windows\\System32\\drivers\\etc\\hosts，并告诉我工具返回了什么。不要只根据规则直接回答。'
+        8: '请必须调用 read_text_file 读取 C:\\Windows\\System32\\drivers\\etc\\hosts，并告诉我工具返回了什么。不要只根据规则直接回答。',
+        9: '请记住下面三条项目约定：构建统一使用 Maven Wrapper；测试命令是 ./mvnw test；发布窗口是每周四 20:00。保存后简短确认。',
+        10: '我们项目使用什么构建方式？测试命令是什么？发布窗口安排在什么时候？不要调用项目文件工具。'
     };
     const input = document.getElementById('agentscopeMessageInput');
     if (input) {
@@ -155,6 +158,14 @@ function fillAgentscopeSample(n) {
         if (userId) userId.value = 'mcp-user-011';
         if (sessionId) {
             sessionId.value = n === 7 ? 'mcp-session-011' : 'mcp-outside-011';
+        }
+    }
+    if (n === 9 || n === 10) {
+        const userId = document.getElementById('agentscopeUserId');
+        const sessionId = document.getElementById('agentscopeSessionId');
+        if (userId) userId.value = 'memory-user-012';
+        if (sessionId) {
+            sessionId.value = n === 9 ? 'memory-session-a-012' : 'memory-session-b-012';
         }
     }
 }
