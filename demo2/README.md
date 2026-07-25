@@ -78,7 +78,7 @@
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
-| **AgentScope Harness** | Workspace + PostgreSQL + Permission HITL + Compaction + Middleware requestId + **stdio MCP filesystem（可扩展 clients[]）** | DeepSeek + 可选 PostgreSQL；MCP 需 Node/npx |
+| **AgentScope Harness** | Workspace + PostgreSQL + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory 跨会话** | DeepSeek + 可选 PostgreSQL；MCP 需 Node/npx |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -1169,7 +1169,7 @@ flowchart LR
 
 ### AgentScope HarnessAgent（`/agentscope/dev-agent`）
 
-HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
+HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
 
 **Toolkit MCP（与「🔌 MCP Client 聊天 / 瑞幸 MCP」无关）：**
 
@@ -1191,7 +1191,7 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 **Workspace（`AGENTS.md`）：**
 
 - 配置：`app.agentscope.dev-agent.workspace-root`（默认 `workspace`）
-- 目录：`demo2/workspace/AGENTS.md`（项目规则）；`MEMORY.md` / `knowledge/KNOWLEDGE.md` 本版为空骨架
+- 目录：`demo2/workspace/AGENTS.md`（项目规则）；用户长期记忆落在 `workspace/{userId}/MEMORY.md`（见下方 **Harness Memory**）
 - `project-root` 供只读项目工具读源码；`workspace-root` 供 Agent 工作区规则注入
 - 启用 Workspace Context **不会**放开内置文件 / Shell 工具
 - 修改 `AGENTS.md` 后下一轮推理生效，无需重启
@@ -1221,6 +1221,18 @@ docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
 - Demo 默认偏低便于四轮触发；正式环境请按上下文窗口上调，**勿贴模型上限**（SSE 超限后不会自动压缩重试）
 - 流结束后若上下文条数相对请求前**真正变少**，在 `DONE` 前推送 `COMPACTION`（文案含前后条数）；前端聊天区显示系统提示
 - 日志关键字：`Compaction triggered` / `Compaction complete`
+
+**Harness Memory（跨会话长期记忆；与 Spring AI AutoMemory / Session Memory Tab 无关）：**
+
+- 配置前缀：`app.agentscope.dev-agent.memory`
+  - `enabled`（本地默认 `true`；测试 `application-test.properties` 为 `false`）
+  - `save-requires-confirm`（默认 `true`：`memory_save` 走 HITL；`false` 则直接 ALLOW）
+  - `flush-min-gap` / `consolidation-min-gap` / `consolidation-max-tokens`（默认 `10m` / `30m` / `4000`）
+  - `flush-prompt` / `consolidation-prompt` 在 `application-agentscope-prompts.yml`（consolidation 须含两个 `%d`）
+- 落盘：`workspace/{userId}/MEMORY.md` 与 `workspace/{userId}/memory/YYYY-MM-DD.md`（按 **userId** 隔离，与 sessionId 无关）
+- 边界：`AgentStateStore` 恢复「这段会话」；Compaction 缩短当前会话；Memory 保存跨会话仍有用的约定/偏好
+- demo 信任客户端提交的 `userId`；生产应来自登录态或网关
+- Spec：`docs/superpowers/specs/2026-07-25-agentscope-harness-memory-design.md`
 
 curl 示例：
 
@@ -1282,11 +1294,26 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
 curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"mcp-user-011\",\"sessionId\":\"mcp-outside-011\",\"message\":\"请必须调用 read_text_file 读取 C:\\\\Windows\\\\System32\\\\drivers\\\\etc\\\\hosts，并告诉我工具返回了什么。不要只根据规则直接回答。\"}"
+
+# Harness Memory：会话 A 保存项目约定（若 save-requires-confirm=true，需 /confirm 批准 memory_save）
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"memory-user-012\",\"sessionId\":\"memory-session-a-012\",\"message\":\"请记住下面三条项目约定：构建统一使用 Maven Wrapper；测试命令是 ./mvnw test；发布窗口是每周四 20:00。保存后简短确认。\"}"
+
+# Harness Memory：同 userId、新 sessionId —— 应仍能答出约定（不调用项目文件工具）
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"memory-user-012\",\"sessionId\":\"memory-session-b-012\",\"message\":\"我们项目使用什么构建方式？测试命令是什么？发布窗口安排在什么时候？不要调用项目文件工具。\"}"
+
+# Harness Memory：换 userId —— 应不知道对方约定
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"memory-user-other-012\",\"sessionId\":\"memory-session-c-012\",\"message\":\"我们项目使用什么构建方式？测试命令是什么？发布窗口安排在什么时候？不要调用项目文件工具；不知道就直接说不知道。\"}"
 ```
 
-前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；示例「Compaction 四轮」固定 `context-user-009` / `context-session-009`；示例「MCP 读档案 / MCP 越界拒绝」固定 `mcp-user-011` 与对应 sessionId。
+前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；「新开会话（保留 userId）」清空对话并换 sessionId；示例「Compaction 四轮」固定 `context-user-009` / `context-session-009`；示例「MCP 读档案 / MCP 越界拒绝」固定 `mcp-user-011`；示例「Memory 记住约定 / 跨会话提问」固定 `memory-user-012` 与对应 sessionId。
 
-**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 请求上下文 + 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Middleware / Toolkit（含 MCP） / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
+**三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 请求上下文 + 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Middleware / Toolkit（含 MCP / Memory） / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
 ### MCP
 
