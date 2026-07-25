@@ -14,6 +14,7 @@ import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.extensions.model.openai.formatter.DeepSeekFormatter;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.memory.MemoryConfig;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -40,9 +41,24 @@ public class AgentScopeConfig {
                 .build();
     }
 
+    static MemoryConfig toMemoryConfig(DevAgentProperties.Memory config) {
+        return MemoryConfig.builder()
+                .flushTrigger(MemoryConfig.FlushTrigger.throttled(config.flushMinGap()))
+                .consolidationMinGap(config.consolidationMinGap())
+                .consolidationMaxTokens(config.consolidationMaxTokens())
+                .flushPrompt(config.flushPrompt())
+                .consolidationPrompt(config.consolidationPrompt())
+                .build();
+    }
+
     @Bean
     CompactionConfig agentscopeCompactionConfig(DevAgentProperties properties) {
         return toCompactionConfig(properties.compaction());
+    }
+
+    @Bean
+    MemoryConfig agentscopeMemoryConfig(DevAgentProperties properties) {
+        return toMemoryConfig(properties.memory());
     }
 
     @Bean
@@ -89,6 +105,7 @@ public class AgentScopeConfig {
             @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
             DevAgentProperties properties,
             CompactionConfig agentscopeCompactionConfig,
+            MemoryConfig agentscopeMemoryConfig,
             ProjectInfoTools projectInfoTools,
             FileChangeTool fileChangeTool,
             AgentStateStore agentscopeAgentStateStore,
@@ -96,26 +113,29 @@ public class AgentScopeConfig {
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) throws IOException {
         String systemPrompt = properties.systemPrompt()
                 .replace("{mcpRoot}", AgentscopeMcpClientRegistry.primaryMcpRootDisplay(properties));
-        HarnessAgent agent = HarnessAgent.builder()
+        HarnessAgent.Builder builder = HarnessAgent.builder()
                 .name(properties.name())
                 .sysPrompt(systemPrompt)
                 .model(agentscopeDeepSeekModel)
                 .workspace(Path.of(properties.workspaceRoot()))
                 .stateStore(agentscopeAgentStateStore)
-                .permissionContext(permissionContext(agentscopeMcpClientRegistry))
+                .permissionContext(permissionContext(properties, agentscopeMcpClientRegistry))
                 .middleware(agentExecutionLoggingMiddleware)
                 .enableAgentTracingLog(false)
                 .disableFilesystemTools()
                 .disableShellTool()
-                .disableMemoryTools()
-                .disableMemoryHooks()
                 .compaction(agentscopeCompactionConfig)
                 .disableSubagents()
                 .disableAtPathExpansion()
                 .disableDynamicSkills()
                 .disableDefaultWorkspaceSkills()
-                .disableToolsConfig()
-                .build();
+                .disableToolsConfig();
+        if (properties.memory().enabled()) {
+            builder.memory(agentscopeMemoryConfig);
+        } else {
+            builder.disableMemoryTools().disableMemoryHooks();
+        }
+        HarnessAgent agent = builder.build();
         agent.getToolkit().removeTool("wait_async_results");
         agent.getToolkit().registerTool(projectInfoTools);
         agent.getToolkit().registerAgentTool(fileChangeTool);
@@ -126,18 +146,32 @@ public class AgentScopeConfig {
     }
 
     private static PermissionContextState permissionContext(
+            DevAgentProperties properties,
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) {
         PermissionContextState.Builder builder =
                 PermissionContextState.builder().mode(PermissionMode.DEFAULT);
         READ_ONLY_TOOL_NAMES.forEach(
                 toolName -> builder.addAllowRule(toolName, allowRule(toolName)));
-        // MCP @Tool 只读白名单直接 ALLOW
         for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
             for (String toolName : entry.enabledTools()) {
                 builder.addAllowRule(toolName, allowRule(toolName));
             }
         }
+        applyMemoryAllowRules(builder, properties.memory());
         return builder.build();
+    }
+
+    /** package-visible for tests */
+    static void applyMemoryAllowRules(
+            PermissionContextState.Builder builder, DevAgentProperties.Memory memory) {
+        if (!memory.enabled()) {
+            return;
+        }
+        builder.addAllowRule("memory_search", allowRule("memory_search"));
+        builder.addAllowRule("memory_get", allowRule("memory_get"));
+        if (!memory.saveRequiresConfirm()) {
+            builder.addAllowRule("memory_save", allowRule("memory_save"));
+        }
     }
 
     private static PermissionRule allowRule(String toolName) {
