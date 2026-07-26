@@ -10,6 +10,7 @@ import io.agentscope.harness.agent.HarnessAgent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -26,6 +27,15 @@ class AgentScopeMiddlewareConfigTest {
     @Test
     void agentscopeDevAgent_registersCustomLoggingAndDisablesDefaultTrace()
             throws Exception {
+        Path skillMd = tempDir.resolve("skills/code-reviewer/SKILL.md");
+        Files.createDirectories(skillMd.getParent());
+        Files.writeString(skillMd, """
+                ---
+                name: code-reviewer
+                description: test skill for harness middleware
+                ---
+                # test
+                """);
         AgentScopeConfig config = new AgentScopeConfig();
         Model model = mock(Model.class);
         when(model.getModelName()).thenReturn("test-model");
@@ -49,6 +59,9 @@ class AgentScopeMiddlewareConfigTest {
                             .equals("AgentTraceMiddleware"));
             assertThat(agent.getToolkit().getToolNames())
                     .doesNotContain("list_directory", "read_text_file", "list_allowed_directories");
+            assertThat(agent.getDelegate().getMiddlewares())
+                    .anyMatch(item -> item.getClass().getSimpleName()
+                            .equals("HarnessSkillMiddleware"));
         }
     }
 

@@ -135,7 +135,6 @@ public class AgentScopeConfig {
                 .compaction(agentscopeCompactionConfig)
                 .disableSubagents()
                 .disableAtPathExpansion()
-                .disableDynamicSkills()
                 .disableDefaultWorkspaceSkills()
                 .disableToolsConfig();
         if (agentscopeDistributedBackend instanceof AgentscopeDistributedBackend.Remote remote) {
