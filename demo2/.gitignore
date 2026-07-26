@@ -45,3 +45,5 @@ workspace/**
 !workspace/AGENTS.md
 !workspace/MEMORY.md
 !workspace/knowledge/
+!workspace/skills/
+!workspace/skills/**/
