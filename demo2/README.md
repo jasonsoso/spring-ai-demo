@@ -1214,6 +1214,7 @@ docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
 - 本版**不**接 Sandbox，**不**演示 Snapshot / advisory Lock
 - 启用远程 Workspace **不会**放开内置 filesystem / shell 工具
 - 本地已有 `workspace/{userId}/MEMORY.md` 切到远程后不会自动迁移（远程优先；需人工拷贝或接受空起点）
+- AgentScope **2.0.0** 的 `PostgresBaseStore` UPSERT 有笔误（`version + 1,,`）；Factory 启动时反射修正，升级 BOM 后可删补丁
 - Spec：`docs/superpowers/specs/2026-07-25-agentscope-postgres-distributed-workspace-design.md`
 
 **Middleware 请求关联日志：**

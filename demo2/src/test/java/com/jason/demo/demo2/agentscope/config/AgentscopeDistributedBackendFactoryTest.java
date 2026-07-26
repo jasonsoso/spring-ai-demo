@@ -52,4 +52,26 @@ class AgentscopeDistributedBackendFactoryTest {
         assertThat(remote.stateStore()).isSameAs(store.agentStateStore());
         assertThat(remote.stateStore()).isSameAs(state);
     }
+
+    @Test
+    void fixUpsertTypo_removesDoubleCommaFromAgentscope200Sql() {
+        String broken = """
+                INSERT INTO agentscope_store (...)
+                ON CONFLICT DO UPDATE SET
+                    version    = agentscope_store.version + 1,,
+                    updated_at = EXCLUDED.updated_at
+                """;
+
+        String fixed = AgentscopeDistributedBackendFactory.fixUpsertTypo(broken);
+
+        assertThat(fixed).doesNotContain(AgentscopeDistributedBackendFactory.BROKEN_UPSERT_FRAGMENT);
+        assertThat(fixed).contains("version    = agentscope_store.version + 1,");
+    }
+
+    @Test
+    void fixUpsertTypo_leavesAlreadyFixedSqlUnchanged() {
+        String ok = "version = agentscope_store.version + 1,\nupdated_at = EXCLUDED.updated_at";
+
+        assertThat(AgentscopeDistributedBackendFactory.fixUpsertTypo(ok)).isEqualTo(ok);
+    }
 }

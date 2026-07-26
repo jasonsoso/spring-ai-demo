@@ -4,16 +4,23 @@ import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.extensions.postgresql.PostgresDistributedStore;
+import io.agentscope.extensions.postgresql.store.PostgresBaseStore;
 import io.agentscope.harness.agent.DistributedStore;
 import io.agentscope.harness.agent.filesystem.remote.store.BaseStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
 
 public final class AgentscopeDistributedBackendFactory {
 
     private static final Logger log = LoggerFactory.getLogger(AgentscopeDistributedBackendFactory.class);
+
+    /** AgentScope 2.0.0 typo in PostgresBaseStore.UPSERT_SQL: {@code version + 1,,} */
+    static final String BROKEN_UPSERT_FRAGMENT = "+ 1,,";
+
+    static final String FIXED_UPSERT_FRAGMENT = "+ 1,";
 
     private AgentscopeDistributedBackendFactory() {
     }
@@ -41,7 +48,7 @@ public final class AgentscopeDistributedBackendFactory {
             PostgresDistributedStore created = PostgresDistributedStore.create(dataSource);
             // Pin instances: PostgresDistributedStore.agentStateStore()/baseStore() create new objects each call.
             var stateStore = created.agentStateStore();
-            BaseStore baseStore = created.baseStore();
+            BaseStore baseStore = patchPostgresBaseStoreUpsertSql(created.baseStore());
             DistributedStore pinned = DistributedStore.builder()
                     .agentStateStore(stateStore)
                     .baseStore(baseStore)
@@ -59,5 +66,40 @@ public final class AgentscopeDistributedBackendFactory {
             }
             return new AgentscopeDistributedBackend.Local(new InMemoryAgentStateStore());
         }
+    }
+
+    /**
+     * AgentScope Java 2.0.0 ships a broken UPSERT:
+     * {@code version = table.version + 1,,} → PostgreSQL {@code syntax error at or near ","}.
+     * Upstream main already has a single comma; until we upgrade the BOM, rewrite the private field.
+     */
+    static BaseStore patchPostgresBaseStoreUpsertSql(BaseStore store) {
+        if (!(store instanceof PostgresBaseStore)) {
+            return store;
+        }
+        try {
+            Field field = PostgresBaseStore.class.getDeclaredField("upsertSql");
+            field.setAccessible(true);
+            String sql = (String) field.get(store);
+            String fixed = fixUpsertTypo(sql);
+            if (fixed != null && !fixed.equals(sql)) {
+                field.set(store, fixed);
+                log.warn(
+                        "Patched AgentScope 2.0.0 PostgresBaseStore UPSERT_SQL typo ({} → {}); remove after upgrading agentscope",
+                        BROKEN_UPSERT_FRAGMENT,
+                        FIXED_UPSERT_FRAGMENT);
+            }
+            return store;
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Failed to patch PostgresBaseStore upsertSql", ex);
+        }
+    }
+
+    /** package-visible for tests */
+    static String fixUpsertTypo(String sql) {
+        if (sql == null || !sql.contains(BROKEN_UPSERT_FRAGMENT)) {
+            return sql;
+        }
+        return sql.replace(BROKEN_UPSERT_FRAGMENT, FIXED_UPSERT_FRAGMENT);
     }
 }
