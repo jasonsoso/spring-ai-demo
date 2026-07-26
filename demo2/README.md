@@ -890,8 +890,8 @@ agent.session-memory.compaction.overlap-size=2
 agent.session-memory.chat.model=deepseek-v4-pro
 
 # ===== AgentScope Compaction（与上面 Session Memory 压缩无关）=====
-# Demo 默认偏低便于四轮触发；正式环境请上调，勿贴模型上限
-app.agentscope.dev-agent.compaction.trigger-messages=6
+# Skills 审查会连续加载 Skill + 读文件；12 降低刚加载规则被压缩的概率。Compaction Demo 需约七轮才易触发。
+app.agentscope.dev-agent.compaction.trigger-messages=12
 app.agentscope.dev-agent.compaction.keep-messages=2
 # summary-prompt 见 application-agentscope-prompts.yml
 
@@ -1231,7 +1231,7 @@ docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
 - PostgreSQL 负责**恢复**会话；Compaction 负责**缩短** `AgentState.context` 历史（与 Session Memory Tab 的 RecursiveSummarization **无关**）
 - 可配置：`app.agentscope.dev-agent.compaction.trigger-messages`（默认 `6`）、`keep-messages`（默认 `2`）；`summary-prompt` 在 `application-agentscope-prompts.yml`
 - 写死：`keepTokens=0`、`flushBeforeCompact=false`、`offloadBeforeCompact=false`；不单独配置 ToolResultEviction
-- Demo 默认偏低便于四轮触发；正式环境请按上下文窗口上调，**勿贴模型上限**（SSE 超限后不会自动压缩重试）
+- Skills 审查默认 `trigger-messages=12`，降低刚加载规则被压缩的概率；Compaction Demo 需约七轮（user+assistant）才易触发。正式环境请按上下文窗口上调，**勿贴模型上限**（SSE 超限后不会自动压缩重试）
 - 流结束后若上下文条数相对请求前**真正变少**，在 `DONE` 前推送 `COMPACTION`（文案含前后条数）；前端聊天区显示系统提示
 - 日志关键字：`Compaction triggered` / `Compaction complete`
 
@@ -1268,7 +1268,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"workspace-user-008\",\"sessionId\":\"workspace-session-008\",\"message\":\"按项目规则回答：当前项目名称、项目理解任务编号和三步理解顺序。不要调用工具。\"}"
 
-# Compaction：同一 session 连发四轮（只确认、不调工具）
+# Compaction：同一 session 连发七轮（只确认、不调工具）
 # 第 1 轮：任务范围
 curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
@@ -1284,7 +1284,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"context-user-009\",\"sessionId\":\"context-session-009\",\"message\":\"已确认启动类是 Demo2Application，源码目录是 src/main/java。只确认收到，不要调用工具。\"}"
 
-# 第 4 轮：触发压缩（前三轮共 6 条消息 + 本轮 User → 达阈值）；日志含 Compaction triggered/complete，SSE 含 COMPACTION
+# 第 7 轮：触发压缩（前六轮共 12 条消息 + 本轮 User → 达阈值）；日志含 Compaction triggered/complete，SSE 含 COMPACTION
 curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"context-user-009\",\"sessionId\":\"context-session-009\",\"message\":\"汇总已经确认的信息，并列出还没有确认的事项。不要调用工具。\"}"
@@ -1326,7 +1326,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -d "{\"userId\":\"memory-user-other-012\",\"sessionId\":\"memory-session-c-012\",\"message\":\"我们项目使用什么构建方式？测试命令是什么？发布窗口安排在什么时候？不要调用项目文件工具；不知道就直接说不知道。\"}"
 ```
 
-前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；「新开会话（保留 userId）」清空对话并换 sessionId；示例「Compaction 四轮」固定 `context-user-009` / `context-session-009`；示例「MCP 读档案 / MCP 越界拒绝」固定 `mcp-user-011`；示例「Memory 记住约定 / 跨会话提问」固定 `memory-user-012` 与对应 sessionId。
+前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；「新开会话（保留 userId）」清空对话并换 sessionId；示例「Compaction 七轮」固定 `context-user-009` / `context-session-009`；示例「MCP 读档案 / MCP 越界拒绝」固定 `mcp-user-011`；示例「Memory 记住约定 / 跨会话提问」固定 `memory-user-012` 与对应 sessionId。
 
 **三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 请求上下文 + 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Middleware / Toolkit（含 MCP / Memory） / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
@@ -2496,7 +2496,7 @@ flowchart TD
 flowchart TB
     subgraph 展示层["前端 Tab「🧭 AgentScope Harness」"]
         META[userId / sessionId]
-        SAMPLES[示例：清单 / 项目问答 / Workspace / HITL / Compaction 四轮]
+        SAMPLES[示例：清单 / 项目问答 / Workspace / HITL / Compaction 七轮]
         MSG[消息区 + 工具条]
         CARD[确认卡片 批准 / 拒绝]
         META --> UI[agentscope.js]

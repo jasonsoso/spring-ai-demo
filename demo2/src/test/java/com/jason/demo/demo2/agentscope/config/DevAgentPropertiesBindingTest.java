@@ -15,7 +15,7 @@ class DevAgentPropertiesBindingTest {
                     "app.agentscope.dev-agent.system-prompt=short",
                     "app.agentscope.dev-agent.project-root=.",
                     "app.agentscope.dev-agent.workspace-root=workspace",
-                    "app.agentscope.dev-agent.compaction.trigger-messages=6",
+                    "app.agentscope.dev-agent.compaction.trigger-messages=12",
                     "app.agentscope.dev-agent.compaction.keep-messages=2",
                     "app.agentscope.dev-agent.compaction.summary-prompt=请整理会话：{messages}",
                     "app.agentscope.dev-agent.model.api-key=",
@@ -35,7 +35,7 @@ class DevAgentPropertiesBindingTest {
     void bindsCompaction() {
         runner.run(ctx -> {
             DevAgentProperties.Compaction c = ctx.getBean(DevAgentProperties.class).compaction();
-            assertThat(c.triggerMessages()).isEqualTo(6);
+            assertThat(c.triggerMessages()).isEqualTo(12);
             assertThat(c.keepMessages()).isEqualTo(2);
             assertThat(c.summaryPrompt()).contains("{messages}");
         });

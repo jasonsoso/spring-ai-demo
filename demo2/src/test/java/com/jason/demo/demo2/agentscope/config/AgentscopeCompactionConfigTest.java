@@ -10,11 +10,11 @@ class AgentscopeCompactionConfigTest {
     @Test
     void toCompactionConfig_mapsThreeKnobs_andHardcodesFlags() {
         DevAgentProperties.Compaction input = new DevAgentProperties.Compaction(
-                6, 2, "请整理：{messages}");
+                12, 2, "请整理：{messages}");
 
         CompactionConfig config = AgentScopeConfig.toCompactionConfig(input);
 
-        assertThat(config.getTriggerMessages()).isEqualTo(6);
+        assertThat(config.getTriggerMessages()).isEqualTo(12);
         assertThat(config.getKeepMessages()).isEqualTo(2);
         assertThat(config.getSummaryPrompt()).isEqualTo("请整理：{messages}");
         assertThat(config.getKeepTokens()).isEqualTo(0);

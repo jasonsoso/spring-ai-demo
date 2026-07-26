@@ -17,7 +17,7 @@ function resetAgentscopeConversation() {
     box.innerHTML = '<div id="agentscopeWelcome" class="message assistant"><div class="message-content">'
         + '输入排查问题获取检查清单，或询问 Java / Spring Boot 版本、源码结构、启动类。'
         + '可用「Workspace / AGENTS.md」示例验证项目规则注入。'
-        + '可用「Compaction 四轮」示例，同一 session 连发四轮观察压缩提示。'
+        + '可用「Compaction 七轮」示例，同一 session 连发观察压缩提示。'
         + '可用「Memory 记住约定」后点「新开会话（保留 userId）」再用「跨会话提问」验证长期记忆。'
         + '写 notes/ 下文件会弹出确认卡片；memory_save 在默认配置下也会确认。'
         + '</div></div>';
