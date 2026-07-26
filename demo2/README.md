@@ -78,7 +78,7 @@
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
-| **AgentScope Harness** | Workspace + PostgreSQL + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory 跨会话** | DeepSeek + 可选 PostgreSQL；MCP 需 Node/npx |
+| **AgentScope Harness** | Workspace + **PostgresDistributedStore（会话 + 共享 Workspace）** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory 跨会话** | DeepSeek + 可选 PostgreSQL；MCP 需 Node/npx |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -1191,7 +1191,7 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 **Workspace（`AGENTS.md`）：**
 
 - 配置：`app.agentscope.dev-agent.workspace-root`（默认 `workspace`）
-- 目录：`demo2/workspace/AGENTS.md`（项目规则）；用户长期记忆落在 `workspace/{userId}/MEMORY.md`（见下方 **Harness Memory**）
+- 目录：`demo2/workspace/AGENTS.md`（项目规则模板，随仓库/镜像部署）；用户运行时文件见下方 Memory / Distributed
 - `project-root` 供只读项目工具读源码；`workspace-root` 供 Agent 工作区规则注入
 - 启用 Workspace Context **不会**放开内置文件 / Shell 工具
 - 修改 `AGENTS.md` 后下一轮推理生效，无需重启
@@ -1202,7 +1202,19 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
 ```
 
-配置见 `app.agentscope.datasource.*`。PG 可用时日志含 `stateStore=postgres`；连不上时应用仍启动并降级 `stateStore=memory`（WARN）。
+配置见 `app.agentscope.datasource.*`。与下方 **分布式后端** 共用同一 PG；单独看会话时，`distributed.enabled=true` 且 PG 可达时日志含 `distributed=postgres`。
+
+**分布式后端（`PostgresDistributedStore` / 共享 Workspace）：**
+
+- 开关：`app.agentscope.distributed.enabled`（本地默认 `true`；测试 `false`）
+  - `true`：探测 `app.agentscope.datasource.*`；成功则 `PostgresDistributedStore` + `RemoteFilesystemSpec`（`IsolationScope.USER`）；失败 WARN 并降级
+  - `false`：不探测；内存 `AgentStateStore` + 本地 `workspace-root`
+- 成功路径用 `.distributedStore(...)`，不再单独装配 `PostgresAgentStateStore`
+- `DevAgentService` 与 `HarnessAgent` 共用同一 `AgentStateStore` 实例（HITL confirm 仍可用）
+- 本版**不**接 Sandbox，**不**演示 Snapshot / advisory Lock
+- 启用远程 Workspace **不会**放开内置 filesystem / shell 工具
+- 本地已有 `workspace/{userId}/MEMORY.md` 切到远程后不会自动迁移（远程优先；需人工拷贝或接受空起点）
+- Spec：`docs/superpowers/specs/2026-07-25-agentscope-postgres-distributed-workspace-design.md`
 
 **Middleware 请求关联日志：**
 
@@ -1229,7 +1241,9 @@ docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
   - `save-requires-confirm`（默认 `true`：`memory_save` 走 HITL；`false` 则直接 ALLOW）
   - `flush-min-gap` / `consolidation-min-gap` / `consolidation-max-tokens`（默认 `10m` / `30m` / `4000`）
   - `flush-prompt` / `consolidation-prompt` 在 `application-agentscope-prompts.yml`（consolidation 须含两个 `%d`）
-- 落盘：`workspace/{userId}/MEMORY.md` 与 `workspace/{userId}/memory/YYYY-MM-DD.md`（按 **userId** 隔离，与 sessionId 无关）
+- 逻辑路径：`workspace/{userId}/MEMORY.md` 与 `memory/YYYY-MM-DD.md`（按 **userId** 隔离，与 sessionId 无关）
+- 物理后端：`distributed.enabled=true` 且 PG 可达时写入 PostgreSQL KV；否则写本地盘
+- 多机部署必须开 distributed 并共用同一 PG；单机本地盘即可演示
 - 边界：`AgentStateStore` 恢复「这段会话」；Compaction 缩短当前会话；Memory 保存跨会话仍有用的约定/偏好
 - demo 信任客户端提交的 `userId`；生产应来自登录态或网关
 - Spec：`docs/superpowers/specs/2026-07-25-agentscope-harness-memory-design.md`
