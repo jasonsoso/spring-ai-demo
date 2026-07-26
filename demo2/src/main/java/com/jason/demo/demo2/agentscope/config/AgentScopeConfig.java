@@ -14,6 +14,8 @@ import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.extensions.model.openai.formatter.DeepSeekFormatter;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.IsolationScope;
+import io.agentscope.harness.agent.filesystem.spec.RemoteFilesystemSpec;
 import io.agentscope.harness.agent.memory.MemoryConfig;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -86,8 +88,15 @@ public class AgentScopeConfig {
     }
 
     @Bean
-    AgentStateStore agentscopeAgentStateStore(AgentScopeDataSourceProperties dataSourceProperties) {
-        return AgentStateStoreFactory.create(dataSourceProperties);
+    AgentscopeDistributedBackend agentscopeDistributedBackend(
+            AgentscopeDistributedProperties distributedProperties,
+            AgentScopeDataSourceProperties dataSourceProperties) {
+        return AgentscopeDistributedBackendFactory.create(distributedProperties, dataSourceProperties);
+    }
+
+    @Bean
+    AgentStateStore agentscopeAgentStateStore(AgentscopeDistributedBackend backend) {
+        return backend.stateStore();
     }
 
     @Bean
@@ -108,7 +117,7 @@ public class AgentScopeConfig {
             MemoryConfig agentscopeMemoryConfig,
             ProjectInfoTools projectInfoTools,
             FileChangeTool fileChangeTool,
-            AgentStateStore agentscopeAgentStateStore,
+            AgentscopeDistributedBackend agentscopeDistributedBackend,
             AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) throws IOException {
         String systemPrompt = properties.systemPrompt()
@@ -118,7 +127,6 @@ public class AgentScopeConfig {
                 .sysPrompt(systemPrompt)
                 .model(agentscopeDeepSeekModel)
                 .workspace(Path.of(properties.workspaceRoot()))
-                .stateStore(agentscopeAgentStateStore)
                 .permissionContext(permissionContext(properties, agentscopeMcpClientRegistry))
                 .middleware(agentExecutionLoggingMiddleware)
                 .enableAgentTracingLog(false)
@@ -130,6 +138,12 @@ public class AgentScopeConfig {
                 .disableDynamicSkills()
                 .disableDefaultWorkspaceSkills()
                 .disableToolsConfig();
+        if (agentscopeDistributedBackend instanceof AgentscopeDistributedBackend.Remote remote) {
+            builder.distributedStore(remote.distributedStore())
+                    .filesystem(new RemoteFilesystemSpec().isolationScope(IsolationScope.USER));
+        } else {
+            builder.stateStore(agentscopeDistributedBackend.stateStore());
+        }
         if (properties.memory().enabled()) {
             builder.memory(agentscopeMemoryConfig);
         } else {

@@ -40,7 +40,7 @@ class AgentScopeMiddlewareConfigTest {
                 AgentScopeConfig.toMemoryConfig(properties.memory()),
                 new ProjectInfoTools(tempDir),
                 new FileChangeTool(tempDir),
-                store,
+                new AgentscopeDistributedBackend.Local(store),
                 middleware,
                 AgentscopeMcpClientRegistry.create(properties))) {
             assertThat(agent.getDelegate().getMiddlewares())
@@ -116,7 +116,7 @@ class AgentScopeMiddlewareConfigTest {
                 AgentScopeConfig.toMemoryConfig(properties.memory()),
                 new ProjectInfoTools(tempDir),
                 new FileChangeTool(tempDir),
-                store,
+                new AgentscopeDistributedBackend.Local(store),
                 middleware,
                 AgentscopeMcpClientRegistry.create(properties));
     }
