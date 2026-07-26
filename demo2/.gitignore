@@ -46,4 +46,4 @@ workspace/**
 !workspace/MEMORY.md
 !workspace/knowledge/
 !workspace/skills/
-!workspace/skills/**/
+!workspace/skills/**
