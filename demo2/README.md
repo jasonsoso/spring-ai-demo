@@ -53,7 +53,7 @@
 | `LkCoffeeAgentController` | `controller` | `/agent/lkcoffee` | 瑞幸 MCP + My Coffee Skill SSE 点单 |
 | `VoiceApiController` | `controller` | `/api` | ElevenLabs TTS/STT + 语音对话 SSE |
 | `EmbabelAgentController` | `embabel.controller` | `/embabel/agent` | Embabel Autonomy 自动选路（SSE + 同步） |
-| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单 / 工具 / HITL / PostgreSQL / Compaction / Middleware / **Toolkit MCP** / Memory / **Dynamic Skills** |
+| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单 / 工具 / HITL / PostgreSQL / Compaction / Middleware / **Toolkit MCP** / Memory / **Dynamic Skills** / **SubAgent 三角色审查** |
 | `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
 
 | 模块 | 能力 | 依赖外部服务 |
@@ -78,7 +78,7 @@
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
-| **AgentScope Harness** | Workspace + **PostgresDistributedStore** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory** + **Dynamic Skills（code-reviewer）** | DeepSeek + 可选 PostgreSQL；MCP 需 Node/npx |
+| **AgentScope Harness** | Workspace + **PostgresDistributedStore** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** | DeepSeek + 可选 PostgreSQL；MCP 需 Node/npx |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -1169,7 +1169,7 @@ flowchart LR
 
 ### AgentScope HarnessAgent（`/agentscope/dev-agent`）
 
-HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆** + **Dynamic Skills（code-reviewer）**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
+HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
 
 **Toolkit MCP（与「🔌 MCP Client 聊天 / 瑞幸 MCP」无关）：**
 
@@ -1209,6 +1209,28 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"skill-user-013\",\"sessionId\":\"skill-session-013\",\"message\":\"请审查 MCP 资料目录里的 UserProfileFormatter.java，并给出是否适合合并的结论。\"}"
+```
+
+**SubAgent（code-reader / risk-reviewer / test-advisor；与 Spring AI `/agent/subagent` Tab 无关）：**
+
+- 角色目录：`demo2/workspace/subagents/`（`code-reader.md` / `risk-reviewer.md` / `test-advisor.md`）
+- 引导写在 `AGENTS.md`「代码审查」：默认走 Skill；用户明确要求「多角色 / SubAgent / 三角色」才委派三个角色
+- **不**改 `system-prompt`；已去掉 `.disableSubagents()`；Permission 自动放行 `agent_spawn` / `agent_send` / `agent_list`
+- Toolkit 在 `build()` 前注册 MCP，主 Agent **保留**读文件工具（Skill 路径需要）；子 Agent 仅继承角色 `tools` 白名单
+- 样例源码：`demo2/mcp-files/TravelBudgetService.java`（故意含除零、VIP 与 perPerson 不一致、敏感日志）
+- SSE：`DevAgentEvent.source` 区分主/子事件（子事件如 `{sessionId}/risk-reviewer`）
+- 成功标准：约 3 次 `agent_spawn`；读文件事件 `source` 落在子 Agent；汇总含严重/一般/建议测试/合并结论
+
+```bash
+# SubAgent 三角色审查（需 mcp.enabled=true + Node/npx）
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"subagent-user-014\",\"sessionId\":\"subagent-session-014\",\"message\":\"请用 SubAgent 多角色审查 MCP 资料目录里的 TravelBudgetService.java，并给出是否适合合并的结论。\"}"
+
+# 同会话追问（优先 agent_send）
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"subagent-user-014\",\"sessionId\":\"subagent-session-014\",\"message\":\"再确认一下：VIP 折扣和 perPerson 的计算顺序是什么？优先复用刚才的 code-reader，不要新建子 Agent。\"}"
 ```
 
 **会话持久化（PostgreSQL，独立于 MySQL）：**

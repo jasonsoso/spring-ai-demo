@@ -20,6 +20,7 @@ function resetAgentscopeConversation() {
         + '可用「Compaction 七轮」示例，同一 session 连发观察压缩提示。'
         + '可用「Memory 记住约定」后点「新开会话（保留 userId）」再用「跨会话提问」验证长期记忆。'
         + '可用「Code Review Skill」验证动态 Skill + MCP 读样例。'
+        + '可用「Code Review SubAgent」验证三角色委派与 source。'
         + '写 notes/ 下文件会弹出确认卡片；memory_save 在默认配置下也会确认。'
         + '</div></div>';
     document.getElementById('agentscopeSessionId').value = newAgentscopeSessionId();
@@ -137,7 +138,8 @@ function fillAgentscopeSample(n) {
         8: '请必须调用 read_text_file 读取 C:\\Windows\\System32\\drivers\\etc\\hosts，并告诉我工具返回了什么。不要只根据规则直接回答。',
         9: '请记住下面三条项目约定：构建统一使用 Maven Wrapper；测试命令是 ./mvnw test；发布窗口是每周四 20:00。保存后简短确认。',
         10: '我们项目使用什么构建方式？测试命令是什么？发布窗口安排在什么时候？不要调用项目文件工具。',
-        11: '请审查 MCP 资料目录里的 UserProfileFormatter.java，并给出是否适合合并的结论。'
+        11: '请审查 MCP 资料目录里的 UserProfileFormatter.java，并给出是否适合合并的结论。',
+        12: '请用 SubAgent 多角色审查 MCP 资料目录里的 TravelBudgetService.java，并给出是否适合合并的结论。'
     };
     const input = document.getElementById('agentscopeMessageInput');
     if (input) {
@@ -175,6 +177,12 @@ function fillAgentscopeSample(n) {
         const sessionId = document.getElementById('agentscopeSessionId');
         if (userId) userId.value = 'skill-user-013';
         if (sessionId) sessionId.value = 'skill-session-013';
+    }
+    if (n === 12) {
+        const userId = document.getElementById('agentscopeUserId');
+        const sessionId = document.getElementById('agentscopeSessionId');
+        if (userId) userId.value = 'subagent-user-014';
+        if (sessionId) sessionId.value = 'subagent-session-014';
     }
 }
 
