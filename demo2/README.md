@@ -53,7 +53,7 @@
 | `LkCoffeeAgentController` | `controller` | `/agent/lkcoffee` | 瑞幸 MCP + My Coffee Skill SSE 点单 |
 | `VoiceApiController` | `controller` | `/api` | ElevenLabs TTS/STT + 语音对话 SSE |
 | `EmbabelAgentController` | `embabel.controller` | `/embabel/agent` | Embabel Autonomy 自动选路（SSE + 同步） |
-| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单 / 工具 / HITL / PostgreSQL / Compaction / Middleware requestId / **Toolkit MCP** |
+| `DevAgentController` | `agentscope.controller` | `/agentscope/dev-agent` | HarnessAgent SSE：清单 / 工具 / HITL / PostgreSQL / Compaction / Middleware / **Toolkit MCP** / Memory / **Dynamic Skills** |
 | `McpChatController` | `mcp.client.controller` | `/mcp/client` | MCP Client 工具聊天 |
 
 | 模块 | 能力 | 依赖外部服务 |
@@ -78,7 +78,7 @@
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
-| **AgentScope Harness** | Workspace + **PostgresDistributedStore（会话 + 共享 Workspace）** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory 跨会话** | DeepSeek + 可选 PostgreSQL；MCP 需 Node/npx |
+| **AgentScope Harness** | Workspace + **PostgresDistributedStore** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory** + **Dynamic Skills（code-reviewer）** | DeepSeek + 可选 PostgreSQL；MCP 需 Node/npx |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -1169,7 +1169,7 @@ flowchart LR
 
 ### AgentScope HarnessAgent（`/agentscope/dev-agent`）
 
-HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
+HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆** + **Dynamic Skills（code-reviewer）**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
 
 **Toolkit MCP（与「🔌 MCP Client 聊天 / 瑞幸 MCP」无关）：**
 
@@ -1195,6 +1195,21 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 - `project-root` 供只读项目工具读源码；`workspace-root` 供 Agent 工作区规则注入
 - 启用 Workspace Context **不会**放开内置文件 / Shell 工具
 - 修改 `AGENTS.md` 后下一轮推理生效，无需重启
+
+**Dynamic Skills（code-reviewer；与 Spring AI `/agent/skills` 无关）：**
+
+- 共享目录：`demo2/workspace/skills/code-reviewer/`（`SKILL.md` + `references/java-style-guide.md`）
+- 引导写在 `AGENTS.md`「代码审查」小节；**不**写入 `system-prompt`
+- 已去掉 `.disableDynamicSkills()`；继续 `.disableDefaultWorkspaceSkills()`（关闭按用户隔离的默认 Skill 来源）
+- 样例源码：`demo2/mcp-files/UserProfileFormatter.java`（故意含空值与敏感日志问题）
+- 成功标准：SSE 出现 `load_skill_through_path`、对样例的 `list_directory` / `read_text_file`；最终回答含「严重问题 / 一般问题 / 建议测试 / 结论」
+
+```bash
+# Dynamic Skills：审查 MCP 资料目录中的样例 Java（需 mcp.enabled=true + Node/npx）
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"skill-user-013\",\"sessionId\":\"skill-session-013\",\"message\":\"请审查 MCP 资料目录里的 UserProfileFormatter.java，并给出是否适合合并的结论。\"}"
+```
 
 **会话持久化（PostgreSQL，独立于 MySQL）：**
 
@@ -1326,7 +1341,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -d "{\"userId\":\"memory-user-other-012\",\"sessionId\":\"memory-session-c-012\",\"message\":\"我们项目使用什么构建方式？测试命令是什么？发布窗口安排在什么时候？不要调用项目文件工具；不知道就直接说不知道。\"}"
 ```
 
-前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；「新开会话（保留 userId）」清空对话并换 sessionId；示例「Compaction 七轮」固定 `context-user-009` / `context-session-009`；示例「MCP 读档案 / MCP 越界拒绝」固定 `mcp-user-011`；示例「Memory 记住约定 / 跨会话提问」固定 `memory-user-012` 与对应 sessionId。
+前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；「新开会话（保留 userId）」清空对话并换 sessionId；示例「Compaction 七轮」固定 `context-user-009` / `context-session-009`；示例「MCP 读档案 / MCP 越界拒绝」固定 `mcp-user-011`；示例「Memory 记住约定 / 跨会话提问」固定 `memory-user-012` 与对应 sessionId；示例「Code Review Skill」固定 `skill-user-013` / `skill-session-013`。
 
 **三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 请求上下文 + 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Middleware / Toolkit（含 MCP / Memory） / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
