@@ -1,0 +1,10 @@
+#!/bin/sh
+# AgentScope edit_file 兼容：把 -c 代码里的字面量 \n 转成真正换行后再交给系统 python3。
+
+if [ "$1" = "-c" ] && [ "$#" -ge 2 ]; then
+    code=$(printf '%b' "$2")
+    shift 2
+    exec /usr/bin/python3 -c "$code" "$@"
+fi
+
+exec /usr/bin/python3 "$@"

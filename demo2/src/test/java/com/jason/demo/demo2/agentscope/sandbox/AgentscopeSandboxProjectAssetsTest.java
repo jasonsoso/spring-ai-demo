@@ -32,4 +32,26 @@ class AgentscopeSandboxProjectAssetsTest {
         assertThat(testSrc).contains("assertEquals(2000");
         assertThat(testSrc).contains("assertEquals(4000");
     }
+
+    @Test
+    void sandboxDockerAssetsExistWithUsageComments() throws Exception {
+        Path dockerfile = MODULE.resolve("docker/sandbox/Dockerfile");
+        Path wrapper = MODULE.resolve("docker/sandbox/python3-wrapper");
+        Path compose = MODULE.resolve("docker/sandbox/docker-compose.yml");
+
+        assertThat(dockerfile).exists();
+        assertThat(wrapper).exists();
+        assertThat(compose).exists();
+
+        String composeText = Files.readString(compose);
+        assertThat(composeText).contains("agentscope-java-sandbox:17");
+        assertThat(composeText).contains("docker compose -f demo2/docker/sandbox/docker-compose.yml build");
+        assertThat(composeText).contains("不要对本文件 up -d");
+        assertThat(composeText).contains("sandbox.enabled=true");
+        assertThat(composeText).contains("agentscope-postgres");
+
+        String dockerfileText = Files.readString(dockerfile);
+        assertThat(dockerfileText).contains("python3-wrapper");
+        assertThat(dockerfileText).contains("maven.test.failure.ignore");
+    }
 }

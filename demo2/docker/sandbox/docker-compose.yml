@@ -1,0 +1,28 @@
+# =============================================================================
+# AgentScope Dev Agent — Docker Sandbox 镜像（非常驻服务）
+# =============================================================================
+# 用途：
+#   只负责构建镜像 agentscope-java-sandbox:17，供 Harness 在工具调用时
+#   按 sessionId 拉起【临时】容器。这和 agentscope-postgres 的「常驻 up -d」不同。
+#
+# 怎么用（在仓库根目录 spring-ai-demo 执行）：
+#   1) 构建镜像（首次或 Dockerfile/样例变更后）：
+#        docker compose -f demo2/docker/sandbox/docker-compose.yml build
+#   2) 确认镜像：
+#        docker images agentscope-java-sandbox:17
+#   3)（可选）会话 PG，与沙箱无关、可并存：
+#        docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
+#   4) 打开应用开关后启动 demo2：
+#        app.agentscope.dev-agent.sandbox.enabled=true
+#   5) 演示：同一 userId+sessionId，ask → confirm（execute / edit_file / execute）
+#
+# 不要对本文件 up -d 当「沙箱服务」用；容器生命周期由 AgentScope Harness 管理。
+# 等价备选（一般不必）：
+#   docker build -f demo2/docker/sandbox/Dockerfile -t agentscope-java-sandbox:17 demo2
+# =============================================================================
+services:
+  agentscope-sandbox-image:
+    image: agentscope-java-sandbox:17
+    build:
+      context: ../..
+      dockerfile: docker/sandbox/Dockerfile
