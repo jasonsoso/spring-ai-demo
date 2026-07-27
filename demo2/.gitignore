@@ -49,3 +49,8 @@ workspace/**
 !workspace/skills/**
 !workspace/subagents/
 !workspace/subagents/**
+!workspace/project/
+!workspace/project/**
+
+### AgentScope Sandbox snapshots ###
+.agentscope/sandbox-snapshots/
