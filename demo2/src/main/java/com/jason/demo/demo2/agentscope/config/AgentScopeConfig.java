@@ -11,6 +11,7 @@ import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionMode;
 import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.state.AgentStateStore;
+import io.agentscope.core.tool.Toolkit;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.extensions.model.openai.formatter.DeepSeekFormatter;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -31,6 +32,9 @@ public class AgentScopeConfig {
 
     private static final List<String> READ_ONLY_TOOL_NAMES =
             List.of("read_pom", "list_source_folders", "find_main_class");
+
+    private static final List<String> SUBAGENT_COLLAB_TOOL_NAMES =
+            List.of("agent_spawn", "agent_send", "agent_list");
 
     static CompactionConfig toCompactionConfig(DevAgentProperties.Compaction c) {
         return CompactionConfig.builder()
@@ -122,10 +126,17 @@ public class AgentScopeConfig {
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) throws IOException {
         String systemPrompt = properties.systemPrompt()
                 .replace("{mcpRoot}", AgentscopeMcpClientRegistry.primaryMcpRootDisplay(properties));
+        Toolkit toolkit = new Toolkit();
+        toolkit.registerTool(projectInfoTools);
+        toolkit.registerAgentTool(fileChangeTool);
+        for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
+            toolkit.registerTool(entry.tools());
+        }
         HarnessAgent.Builder builder = HarnessAgent.builder()
                 .name(properties.name())
                 .sysPrompt(systemPrompt)
                 .model(agentscopeDeepSeekModel)
+                .toolkit(toolkit)
                 .workspace(Path.of(properties.workspaceRoot()))
                 .permissionContext(permissionContext(properties, agentscopeMcpClientRegistry))
                 .middleware(agentExecutionLoggingMiddleware)
@@ -133,7 +144,6 @@ public class AgentScopeConfig {
                 .disableFilesystemTools()
                 .disableShellTool()
                 .compaction(agentscopeCompactionConfig)
-                .disableSubagents()
                 .disableAtPathExpansion()
                 .disableDefaultWorkspaceSkills()
                 .disableToolsConfig();
@@ -150,11 +160,6 @@ public class AgentScopeConfig {
         }
         HarnessAgent agent = builder.build();
         agent.getToolkit().removeTool("wait_async_results");
-        agent.getToolkit().registerTool(projectInfoTools);
-        agent.getToolkit().registerAgentTool(fileChangeTool);
-        for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
-            agent.getToolkit().registerTool(entry.tools());
-        }
         return agent;
     }
 
@@ -164,6 +169,8 @@ public class AgentScopeConfig {
         PermissionContextState.Builder builder =
                 PermissionContextState.builder().mode(PermissionMode.DEFAULT);
         READ_ONLY_TOOL_NAMES.forEach(
+                toolName -> builder.addAllowRule(toolName, allowRule(toolName)));
+        SUBAGENT_COLLAB_TOOL_NAMES.forEach(
                 toolName -> builder.addAllowRule(toolName, allowRule(toolName)));
         for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
             for (String toolName : entry.enabledTools()) {

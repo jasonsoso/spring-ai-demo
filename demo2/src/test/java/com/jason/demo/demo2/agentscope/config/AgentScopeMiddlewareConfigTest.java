@@ -59,6 +59,8 @@ class AgentScopeMiddlewareConfigTest {
                             .equals("AgentTraceMiddleware"));
             assertThat(agent.getToolkit().getToolNames())
                     .doesNotContain("list_directory", "read_text_file", "list_allowed_directories");
+            assertThat(agent.getToolkit().getToolNames())
+                    .contains("agent_spawn", "agent_send", "agent_list");
             assertThat(agent.getDelegate().getMiddlewares())
                     .anyMatch(item -> item.getClass().getSimpleName()
                             .equals("HarnessSkillMiddleware"));
