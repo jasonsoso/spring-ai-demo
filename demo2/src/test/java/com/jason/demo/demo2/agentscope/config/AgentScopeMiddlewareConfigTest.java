@@ -95,7 +95,8 @@ class AgentScopeMiddlewareConfigTest {
                         Duration.ofMinutes(30),
                         4000,
                         "flush",
-                        "consol %d %d"));
+                        "consol %d %d"),
+                null);
         try (HarnessAgent agent = buildAgent(properties)) {
             assertThat(agent.getToolkit().getToolNames())
                     .contains("memory_save", "memory_search", "memory_get");
@@ -114,6 +115,7 @@ class AgentScopeMiddlewareConfigTest {
                         "https://api.deepseek.com",
                         "deepseek-v4-pro"),
                 new DevAgentProperties.McpSettings(false, List.of()),
+                null,
                 null);
     }
 

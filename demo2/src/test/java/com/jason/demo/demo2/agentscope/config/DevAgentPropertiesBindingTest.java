@@ -111,6 +111,50 @@ class DevAgentPropertiesBindingTest {
         });
     }
 
+    @Test
+    void sandboxDefaultsToDisabledWhenAbsent() {
+        runner.run(ctx -> {
+            DevAgentProperties.Sandbox sandbox = ctx.getBean(DevAgentProperties.class).sandbox();
+            assertThat(sandbox.enabled()).isFalse();
+            assertThat(sandbox.image()).isEqualTo("agentscope-java-sandbox:17");
+            assertThat(sandbox.network()).isEqualTo("none");
+            assertThat(sandbox.workspaceRoot()).isEqualTo("/workspace");
+            assertThat(sandbox.snapshotRoot()).isEqualTo(".agentscope/sandbox-snapshots");
+            assertThat(sandbox.memorySizeBytes()).isEqualTo(536870912L);
+            assertThat(sandbox.cpuCount()).isEqualTo(1L);
+        });
+    }
+
+    @Test
+    void bindsSandboxSettings() {
+        runner.withPropertyValues(
+                "app.agentscope.dev-agent.sandbox.enabled=true",
+                "app.agentscope.dev-agent.sandbox.image=custom-sandbox:1",
+                "app.agentscope.dev-agent.sandbox.network=bridge",
+                "app.agentscope.dev-agent.sandbox.workspace-root=/work",
+                "app.agentscope.dev-agent.sandbox.snapshot-root=.agentscope/snaps",
+                "app.agentscope.dev-agent.sandbox.memory-size-bytes=268435456",
+                "app.agentscope.dev-agent.sandbox.cpu-count=2"
+        ).run(ctx -> {
+            DevAgentProperties.Sandbox sandbox = ctx.getBean(DevAgentProperties.class).sandbox();
+            assertThat(sandbox.enabled()).isTrue();
+            assertThat(sandbox.image()).isEqualTo("custom-sandbox:1");
+            assertThat(sandbox.network()).isEqualTo("bridge");
+            assertThat(sandbox.workspaceRoot()).isEqualTo("/work");
+            assertThat(sandbox.snapshotRoot()).isEqualTo(".agentscope/snaps");
+            assertThat(sandbox.memorySizeBytes()).isEqualTo(268435456L);
+            assertThat(sandbox.cpuCount()).isEqualTo(2L);
+        });
+    }
+
+    @Test
+    void sandboxEnabledWithBlankImageFails() {
+        runner.withPropertyValues(
+                "app.agentscope.dev-agent.sandbox.enabled=true",
+                "app.agentscope.dev-agent.sandbox.image= "
+        ).run(ctx -> assertThat(ctx).hasFailed());
+    }
+
     @EnableConfigurationProperties(DevAgentProperties.class)
     static class TestConfig {
     }

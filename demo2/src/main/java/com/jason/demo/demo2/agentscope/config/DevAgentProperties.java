@@ -21,7 +21,8 @@ public record DevAgentProperties(
         @Valid Compaction compaction,
         @Valid Model model,
         @Valid McpSettings mcp,
-        @Valid Memory memory) {
+        @Valid Memory memory,
+        @Valid Sandbox sandbox) {
 
     static final String DEFAULT_FLUSH_PROMPT = """
             从对话中提取以后仍然有用的项目约定、用户偏好、技术决定和待办事项。
@@ -50,6 +51,9 @@ public record DevAgentProperties(
                     4000,
                     DEFAULT_FLUSH_PROMPT,
                     DEFAULT_CONSOLIDATION_PROMPT);
+        }
+        if (sandbox == null) {
+            sandbox = Sandbox.disabledDefaults();
         }
     }
 
@@ -113,6 +117,53 @@ public record DevAgentProperties(
             if (consolidationPrompt == null || consolidationPrompt.isBlank()) {
                 consolidationPrompt = DEFAULT_CONSOLIDATION_PROMPT;
             }
+        }
+    }
+
+    public record Sandbox(
+            @DefaultValue("false") boolean enabled,
+            @DefaultValue("agentscope-java-sandbox:17") String image,
+            @DefaultValue("none") String network,
+            @DefaultValue("/workspace") String workspaceRoot,
+            @DefaultValue(".agentscope/sandbox-snapshots") String snapshotRoot,
+            @DefaultValue("536870912") long memorySizeBytes,
+            @DefaultValue("1") long cpuCount) {
+
+        public Sandbox {
+            if (enabled) {
+                if (image == null || image.isBlank()) {
+                    throw new IllegalArgumentException("sandbox.image must not be blank when enabled");
+                }
+                if (network == null || network.isBlank()) {
+                    throw new IllegalArgumentException("sandbox.network must not be blank when enabled");
+                }
+                if (workspaceRoot == null || workspaceRoot.isBlank()) {
+                    throw new IllegalArgumentException(
+                            "sandbox.workspace-root must not be blank when enabled");
+                }
+                if (snapshotRoot == null || snapshotRoot.isBlank()) {
+                    throw new IllegalArgumentException(
+                            "sandbox.snapshot-root must not be blank when enabled");
+                }
+                if (memorySizeBytes <= 0) {
+                    throw new IllegalArgumentException(
+                            "sandbox.memory-size-bytes must be > 0 when enabled");
+                }
+                if (cpuCount <= 0) {
+                    throw new IllegalArgumentException("sandbox.cpu-count must be > 0 when enabled");
+                }
+            }
+        }
+
+        static Sandbox disabledDefaults() {
+            return new Sandbox(
+                    false,
+                    "agentscope-java-sandbox:17",
+                    "none",
+                    "/workspace",
+                    ".agentscope/sandbox-snapshots",
+                    536870912L,
+                    1L);
         }
     }
 }
