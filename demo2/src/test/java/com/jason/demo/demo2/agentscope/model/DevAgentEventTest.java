@@ -16,6 +16,7 @@ class DevAgentEventTest {
                 .isEqualTo(new DevAgentEvent(
                         DevAgentEventType.SESSION,
                         "s1",
+                        null,
                         "",
                         null,
                         null,
@@ -30,6 +31,7 @@ class DevAgentEventTest {
         assertThat(DevAgentEvent.error("s1", "boom").content()).isEqualTo("boom");
         assertThat(DevAgentEvent.message("s1", null).content()).isEqualTo("");
         assertThat(DevAgentEvent.session("s1").pendingToolCalls()).isNull();
+        assertThat(DevAgentEvent.session("s1").source()).isNull();
     }
 
     @Test
@@ -89,6 +91,26 @@ class DevAgentEventTest {
         assertThat(event.sessionId()).isEqualTo("s1");
         assertThat(event.content()).contains("7 条").contains("共 3 条");
         assertThat(event.pendingToolCalls()).isNull();
+    }
+
+    @Test
+    void toolCallStart_withSource_preservesSource() {
+        DevAgentEvent start = DevAgentEvent.toolCallStart(
+                "s1",
+                "s1/risk-reviewer",
+                "e1",
+                "call-1",
+                "read_text_file",
+                "准备调用工具：read_text_file");
+        assertThat(start.source()).isEqualTo("s1/risk-reviewer");
+        assertThat(start.name()).isEqualTo("read_text_file");
+    }
+
+    @Test
+    void json_omitsNullSource() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        String session = objectMapper.writeValueAsString(DevAgentEvent.session("s1"));
+        assertThat(session).doesNotContain("source");
     }
 
     @Test

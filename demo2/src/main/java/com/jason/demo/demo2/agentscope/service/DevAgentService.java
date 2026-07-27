@@ -261,28 +261,33 @@ public class DevAgentService {
     }
 
     private DevAgentEvent mapEvent(String sessionId, AgentEvent event) {
+        String source = event.getSource();
         return switch (event.getType()) {
             case AGENT_START -> DevAgentEvent.lifecycle(
                     DevAgentEventType.AGENT_START,
                     sessionId,
+                    source,
                     event.getId(),
                     "Agent 开始");
             case MODEL_CALL_START -> DevAgentEvent.lifecycle(
                     DevAgentEventType.MODEL_CALL_START,
                     sessionId,
+                    source,
                     event.getId(),
                     "模型调用开始");
             case AGENT_END -> DevAgentEvent.lifecycle(
                     DevAgentEventType.AGENT_END,
                     sessionId,
+                    source,
                     event.getId(),
                     "Agent 结束");
             case TEXT_BLOCK_DELTA -> DevAgentEvent.message(
-                    sessionId, ((TextBlockDeltaEvent) event).getDelta());
+                    sessionId, source, ((TextBlockDeltaEvent) event).getDelta());
             case TOOL_CALL_START -> {
                 ToolCallStartEvent e = (ToolCallStartEvent) event;
                 yield DevAgentEvent.toolCallStart(
                         sessionId,
+                        source,
                         e.getId(),
                         e.getToolCallId(),
                         e.getToolCallName(),
@@ -292,6 +297,7 @@ public class DevAgentService {
                 ToolResultEndEvent e = (ToolResultEndEvent) event;
                 yield DevAgentEvent.toolResultEnd(
                         sessionId,
+                        source,
                         e.getId(),
                         e.getToolCallId(),
                         e.getToolCallName(),
@@ -300,13 +306,14 @@ public class DevAgentService {
             case AGENT_RESULT -> {
                 AgentResultEvent e = (AgentResultEvent) event;
                 String text = e.getResult() == null ? "" : e.getResult().getTextContent();
-                yield DevAgentEvent.agentResult(sessionId, e.getId(), text);
+                yield DevAgentEvent.agentResult(sessionId, source, e.getId(), text);
             }
             case REQUIRE_USER_CONFIRM -> {
                 RequireUserConfirmEvent e = (RequireUserConfirmEvent) event;
                 List<ToolUseBlock> toolCalls = e.getToolCalls() == null ? List.of() : e.getToolCalls();
                 yield DevAgentEvent.confirmation(
                         sessionId,
+                        source,
                         e.getId(),
                         toolCalls.stream().map(this::toPendingToolCall).toList());
             }
@@ -315,7 +322,7 @@ public class DevAgentService {
                 String content = e.getGenerateReason() == null
                         ? e.getReason()
                         : e.getGenerateReason().name();
-                yield DevAgentEvent.requestStop(sessionId, e.getId(), content);
+                yield DevAgentEvent.requestStop(sessionId, source, e.getId(), content);
             }
             default -> null;
         };
