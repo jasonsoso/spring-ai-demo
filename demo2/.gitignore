@@ -51,6 +51,7 @@ workspace/**
 !workspace/subagents/**
 !workspace/project/
 !workspace/project/**
+workspace/project/target/
 
 ### AgentScope Sandbox snapshots ###
 .agentscope/sandbox-snapshots/
