@@ -139,7 +139,8 @@ function fillAgentscopeSample(n) {
         9: '请记住下面三条项目约定：构建统一使用 Maven Wrapper；测试命令是 ./mvnw test；发布窗口是每周四 20:00。保存后简短确认。',
         10: '我们项目使用什么构建方式？测试命令是什么？发布窗口安排在什么时候？不要调用项目文件工具。',
         11: '请审查 MCP 资料目录里的 UserProfileFormatter.java，并给出是否适合合并的结论。',
-        12: '请用 SubAgent 多角色审查 MCP 资料目录里的 TravelBudgetService.java，并给出是否适合合并的结论。'
+        12: '请用 SubAgent 多角色审查 MCP 资料目录里的 TravelBudgetService.java，并给出是否适合合并的结论。',
+        13: '请在沙箱中运行测试，修复 RetryPolicy 首次重试延迟翻倍的问题，并重新运行测试。'
     };
     const input = document.getElementById('agentscopeMessageInput');
     if (input) {
@@ -183,6 +184,12 @@ function fillAgentscopeSample(n) {
         const sessionId = document.getElementById('agentscopeSessionId');
         if (userId) userId.value = 'subagent-user-014';
         if (sessionId) sessionId.value = 'subagent-session-014';
+    }
+    if (n === 13) {
+        const userId = document.getElementById('agentscopeUserId');
+        const sessionId = document.getElementById('agentscopeSessionId');
+        if (userId) userId.value = 'sandbox-user-015';
+        if (sessionId) sessionId.value = 'sandbox-session-015';
     }
 }
 
@@ -283,6 +290,49 @@ async function consumeAgentscopeSse(res, turn, sessionId) {
     return { awaitingConfirm: awaitingConfirm };
 }
 
+function clipAgentscopeConfirmValue(value, maxLen) {
+    const text = value == null ? '' : String(value);
+    const limit = maxLen == null ? 200 : maxLen;
+    return text.length > limit ? text.slice(0, limit) + '…' : text;
+}
+
+/** 按工具名展示 HITL 确认参数（execute / edit_file / 写文件类）。 */
+function formatAgentscopeConfirmInput(name, input) {
+    const tool = String(name || '');
+    const src = input || {};
+    const lines = [];
+    function add(key, val, maxLen) {
+        if (val == null || val === '') return;
+        lines.push('   ' + key + ': ' + clipAgentscopeConfirmValue(val, maxLen));
+    }
+    if (tool === 'execute') {
+        add('command', src.command, 400);
+        add('working_directory', src.working_directory || src.workingDirectory);
+        add('timeout', src.timeout);
+        return lines;
+    }
+    if (tool === 'edit_file') {
+        add('path', src.path || src.file_path || src.filePath);
+        add('old_string', src.old_string || src.oldString, 300);
+        add('new_string', src.new_string || src.newString, 300);
+        return lines;
+    }
+    // request_file_change / write_file 等写文件类，以及未知工具兜底
+    add('operation', src.operation);
+    add('path', src.path || src.file_path || src.filePath);
+    add('content', src.content, 200);
+    add('command', src.command, 400);
+    add('working_directory', src.working_directory || src.workingDirectory);
+    add('old_string', src.old_string || src.oldString, 300);
+    add('new_string', src.new_string || src.newString, 300);
+    if (lines.length === 0) {
+        Object.keys(src).forEach(function (key) {
+            add(key, src[key], 200);
+        });
+    }
+    return lines;
+}
+
 function renderAgentscopeConfirmCard(turn, payload) {
     setAgentscopeInputEnabled(false);
     const card = document.createElement('div');
@@ -291,12 +341,9 @@ function renderAgentscopeConfirmCard(turn, payload) {
     let body = '需要确认以下工具调用：\n';
     calls.forEach(function (c, i) {
         const input = c.input || {};
-        const content = String(input.content || '');
-        const clipped = content.length > 200 ? content.slice(0, 200) + '…' : content;
-        body += (i + 1) + '. ' + (c.name || '') + '\n'
-            + '   operation: ' + (input.operation || '') + '\n'
-            + '   path: ' + (input.path || '') + '\n'
-            + '   content: ' + clipped + '\n';
+        body += (i + 1) + '. ' + (c.name || '') + '\n';
+        const detailLines = formatAgentscopeConfirmInput(c.name, input);
+        body += detailLines.length ? detailLines.join('\n') + '\n' : '   (无参数)\n';
     });
     const pre = document.createElement('pre');
     pre.textContent = body;
