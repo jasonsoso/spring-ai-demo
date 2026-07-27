@@ -2,6 +2,7 @@ package com.jason.demo.demo2.agentscope.config;
 
 import com.jason.demo.demo2.agentscope.mcp.AgentscopeMcpClientRegistry;
 import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
+import com.jason.demo.demo2.agentscope.state.PathSafeAgentStateStore;
 import com.jason.demo.demo2.agentscope.tool.FileChangeTool;
 import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
 import com.jason.demo.demo2.config.LoggingAgentscopeModel;
@@ -19,6 +20,9 @@ import io.agentscope.harness.agent.IsolationScope;
 import io.agentscope.harness.agent.filesystem.spec.RemoteFilesystemSpec;
 import io.agentscope.harness.agent.memory.MemoryConfig;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
+import io.agentscope.harness.agent.sandbox.WorkspaceSpec;
+import io.agentscope.harness.agent.sandbox.impl.docker.DockerFilesystemSpec;
+import io.agentscope.harness.agent.sandbox.snapshot.LocalSnapshotSpec;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -62,6 +66,34 @@ public class AgentScopeConfig {
                 .flushPrompt(config.flushPrompt())
                 .consolidationPrompt(config.consolidationPrompt())
                 .build();
+    }
+
+    /** 组装 Docker 沙箱文件系统规格（SESSION 隔离 + 本地快照）。 */
+    static DockerFilesystemSpec dockerFilesystemSpec(DevAgentProperties properties) {
+        DevAgentProperties.Sandbox config = properties.sandbox();
+        WorkspaceSpec workspace = new WorkspaceSpec();
+        workspace.setRoot(config.workspaceRoot());
+
+        Path snapshotPath = Path.of(properties.projectRoot()).resolve(config.snapshotRoot()).normalize();
+
+        DockerFilesystemSpec filesystem = new DockerFilesystemSpec()
+                .image(config.image())
+                .network(config.network())
+                .workspaceRoot(config.workspaceRoot())
+                .memorySizeBytes(config.memorySizeBytes())
+                .cpuCount(config.cpuCount())
+                .snapshotSpec(new LocalSnapshotSpec(snapshotPath))
+                .workspaceSpec(workspace);
+
+        filesystem.isolationScope(IsolationScope.SESSION);
+        filesystem.workspaceProjectionRoots(List.of(
+                "AGENTS.md",
+                "skills",
+                "subagents",
+                "knowledge",
+                ".skills-cache",
+                "project"));
+        return filesystem;
     }
 
     @Bean
@@ -109,9 +141,19 @@ public class AgentScopeConfig {
         return AgentscopeDistributedBackendFactory.create(distributedProperties, dataSourceProperties);
     }
 
+    /**
+     * 会话状态存储。沙箱开启时包一层 PathSafe，与 HarnessAgent 使用同一实例，
+     * 以便 HITL confirm 能读写含 {@code /} 的 sandbox sessionId。
+     */
     @Bean
-    AgentStateStore agentscopeAgentStateStore(AgentscopeDistributedBackend backend) {
-        return backend.stateStore();
+    AgentStateStore agentscopeAgentStateStore(
+            AgentscopeDistributedBackend backend,
+            DevAgentProperties properties) {
+        AgentStateStore base = backend.stateStore();
+        if (properties.sandbox().enabled()) {
+            return new PathSafeAgentStateStore(base);
+        }
+        return base;
     }
 
     /** Agent 执行过程日志中间件 */
@@ -128,7 +170,7 @@ public class AgentScopeConfig {
 
     /**
      * 主开发 Agent：组装模型、工具箱、工作区、权限与记忆。
-     * 远程模式下走 distributedStore；本地模式只用 stateStore。
+     * 沙箱开：DockerFilesystemSpec + PathSafe stateStore；关：现状（可选 RemoteFilesystem）。
      */
     @Bean
     HarnessAgent agentscopeDevAgent(
@@ -139,6 +181,7 @@ public class AgentScopeConfig {
             ProjectInfoTools projectInfoTools,
             FileChangeTool fileChangeTool,
             AgentscopeDistributedBackend agentscopeDistributedBackend,
+            AgentStateStore agentscopeAgentStateStore,
             AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) throws IOException {
         String systemPrompt = properties.systemPrompt()
@@ -149,6 +192,8 @@ public class AgentScopeConfig {
         for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
             toolkit.registerTool(entry.tools());
         }
+
+        DevAgentProperties.Sandbox sandbox = properties.sandbox();
         HarnessAgent.Builder builder = HarnessAgent.builder()
                 .name(properties.name())
                 .sysPrompt(systemPrompt)
@@ -158,33 +203,38 @@ public class AgentScopeConfig {
                 .permissionContext(permissionContext(properties, agentscopeMcpClientRegistry))
                 .middleware(agentExecutionLoggingMiddleware)
                 .enableAgentTracingLog(false)
-                // 禁用内置文件系统 / Shell，改用自定义工具与 MCP
-                .disableFilesystemTools()
-                .disableShellTool()
                 .compaction(agentscopeCompactionConfig)
                 .disableAtPathExpansion()
                 .disableDefaultWorkspaceSkills()
                 .disableToolsConfig();
-        if (agentscopeDistributedBackend instanceof AgentscopeDistributedBackend.Remote remote) {
-            // 远程：分布式状态 + 按用户隔离的远程文件系统
-            builder.distributedStore(remote.distributedStore())
-                    .filesystem(new RemoteFilesystemSpec().isolationScope(IsolationScope.USER));
+
+        if (sandbox.enabled()) {
+            builder.stateStore(agentscopeAgentStateStore)
+                    .filesystem(dockerFilesystemSpec(properties));
         } else {
-            // 本地：仅挂载状态存储
-            builder.stateStore(agentscopeDistributedBackend.stateStore());
+            builder.disableFilesystemTools().disableShellTool();
+            if (agentscopeDistributedBackend instanceof AgentscopeDistributedBackend.Remote remote) {
+                builder.distributedStore(remote.distributedStore())
+                        .filesystem(new RemoteFilesystemSpec().isolationScope(IsolationScope.USER));
+            } else {
+                builder.stateStore(agentscopeAgentStateStore);
+            }
         }
+
         if (properties.memory().enabled()) {
             builder.memory(agentscopeMemoryConfig);
         } else {
             builder.disableMemoryTools().disableMemoryHooks();
         }
         HarnessAgent agent = builder.build();
-        // 移除不需要的异步等待工具
         agent.getToolkit().removeTool("wait_async_results");
+        if (sandbox.enabled()) {
+            agent.getToolkit().removeTool("write_file");
+        }
         return agent;
     }
 
-    /** 组装工具权限：只读 / 子 Agent / MCP / 记忆工具的允许规则 */
+    /** 组装工具权限：只读 / 子 Agent / MCP / 记忆 / 沙箱 read_file 的允许规则 */
     private static PermissionContextState permissionContext(
             DevAgentProperties properties,
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) {
@@ -200,6 +250,9 @@ public class AgentScopeConfig {
             }
         }
         applyMemoryAllowRules(builder, properties.memory());
+        if (properties.sandbox().enabled()) {
+            builder.addAllowRule("read_file", allowRule("read_file"));
+        }
         return builder.build();
     }
 

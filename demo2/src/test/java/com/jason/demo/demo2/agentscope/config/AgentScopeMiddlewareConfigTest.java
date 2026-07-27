@@ -2,6 +2,7 @@ package com.jason.demo.demo2.agentscope.config;
 
 import com.jason.demo.demo2.agentscope.mcp.AgentscopeMcpClientRegistry;
 import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
+import com.jason.demo.demo2.agentscope.state.PathSafeAgentStateStore;
 import com.jason.demo.demo2.agentscope.tool.FileChangeTool;
 import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
 import io.agentscope.core.model.Model;
@@ -51,6 +52,7 @@ class AgentScopeMiddlewareConfigTest {
                 new ProjectInfoTools(tempDir),
                 new FileChangeTool(tempDir),
                 new AgentscopeDistributedBackend.Local(store),
+                store,
                 middleware,
                 AgentscopeMcpClientRegistry.create(properties))) {
             assertThat(agent.getDelegate().getMiddlewares())
@@ -103,7 +105,28 @@ class AgentScopeMiddlewareConfigTest {
         }
     }
 
+    @Test
+    void agentscopeDevAgent_sandboxDisabled_keepsFilesystemToolsOff() throws Exception {
+        try (HarnessAgent agent = buildAgent(propertiesWithSandbox(false))) {
+            assertThat(agent.getToolkit().getToolNames())
+                    .doesNotContain("read_file", "edit_file", "execute", "write_file");
+        }
+    }
+
+    @Test
+    void agentscopeDevAgent_sandboxEnabled_exposesSandboxToolsWithoutWriteFile() throws Exception {
+        try (HarnessAgent agent = buildAgent(propertiesWithSandbox(true))) {
+            assertThat(agent.getToolkit().getToolNames())
+                    .contains("read_file", "edit_file", "execute")
+                    .doesNotContain("write_file");
+        }
+    }
+
     private DevAgentProperties disabledMemoryProperties() {
+        return propertiesWithSandbox(false);
+    }
+
+    private DevAgentProperties propertiesWithSandbox(boolean enabled) {
         return new DevAgentProperties(
                 "dev-task-agent",
                 "prompt",
@@ -116,14 +139,24 @@ class AgentScopeMiddlewareConfigTest {
                         "deepseek-v4-pro"),
                 new DevAgentProperties.McpSettings(false, List.of()),
                 null,
-                null);
+                new DevAgentProperties.Sandbox(
+                        enabled,
+                        "agentscope-java-sandbox:17",
+                        "none",
+                        "/workspace",
+                        tempDir.resolve("snaps").toString(),
+                        536870912L,
+                        1L));
     }
 
     private HarnessAgent buildAgent(DevAgentProperties properties) throws Exception {
         AgentScopeConfig config = new AgentScopeConfig();
         Model model = mock(Model.class);
         when(model.getModelName()).thenReturn("test-model");
-        AgentStateStore store = mock(AgentStateStore.class);
+        AgentStateStore baseStore = mock(AgentStateStore.class);
+        AgentStateStore harnessStore = properties.sandbox().enabled()
+                ? new PathSafeAgentStateStore(baseStore)
+                : baseStore;
         AgentExecutionLoggingMiddleware middleware =
                 new AgentExecutionLoggingMiddleware();
         return config.agentscopeDevAgent(
@@ -133,7 +166,8 @@ class AgentScopeMiddlewareConfigTest {
                 AgentScopeConfig.toMemoryConfig(properties.memory()),
                 new ProjectInfoTools(tempDir),
                 new FileChangeTool(tempDir),
-                new AgentscopeDistributedBackend.Local(store),
+                new AgentscopeDistributedBackend.Local(baseStore),
+                harnessStore,
                 middleware,
                 AgentscopeMcpClientRegistry.create(properties));
     }
