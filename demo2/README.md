@@ -1169,7 +1169,7 @@ flowchart LR
 
 ### AgentScope HarnessAgent（`/agentscope/dev-agent`）
 
-HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
+HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** + **可选 Docker Sandbox（默认关）**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
 
 **Toolkit MCP（与「🔌 MCP Client 聊天 / 瑞幸 MCP」无关）：**
 
@@ -1248,11 +1248,56 @@ docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
   - `false`：不探测；内存 `AgentStateStore` + 本地 `workspace-root`
 - 成功路径用 `.distributedStore(...)`，不再单独装配 `PostgresAgentStateStore`
 - `DevAgentService` 与 `HarnessAgent` 共用同一 `AgentStateStore` 实例（HITL confirm 仍可用）
-- 本版**不**接 Sandbox，**不**演示 Snapshot / advisory Lock
-- 启用远程 Workspace **不会**放开内置 filesystem / shell 工具
+- 启用远程 Workspace **不会**放开内置 filesystem / shell 工具（**除非**另开 `sandbox.enabled=true`，见下方 Docker Sandbox）
 - 本地已有 `workspace/{userId}/MEMORY.md` 切到远程后不会自动迁移（远程优先；需人工拷贝或接受空起点）
 - AgentScope **2.0.0** 的 `PostgresBaseStore` UPSERT 有笔误（`version + 1,,`）；Factory 启动时反射修正，升级 BOM 后可删补丁
 - Spec：`docs/superpowers/specs/2026-07-25-agentscope-postgres-distributed-workspace-design.md`
+
+**Docker Sandbox（可选，默认关）：**
+
+Permission 管「能不能做」；Sandbox 管「批准后在哪里做」。开启后，内置 `read_file` / `edit_file` / `execute` 在 Docker 容器内操作投影后的 `/workspace/project`，宿主机样例不被直接改写。
+
+| | `docker/agentscope-postgres` | `docker/sandbox` |
+|--|------------------------------|------------------|
+| 目的 | **常驻服务**：应用连接 PG | **构建镜像**：Harness 按 session 拉临时容器 |
+| 常用命令 | `docker compose ... up -d` | `docker compose ... build` |
+| 谁管生命周期 | 你 `up`/`down` | AgentScope Harness |
+
+```bash
+# 1) 构建沙箱镜像（首次或 Dockerfile/样例变更后；需本机 Docker Desktop 运行中）
+docker compose -f demo2/docker/sandbox/docker-compose.yml build
+
+# 2) 确认镜像
+docker images agentscope-java-sandbox:17
+
+# 3)（可选）会话 PG，与沙箱可并存
+docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
+```
+
+开关（`application.properties`，默认 `false`）：
+
+```properties
+app.agentscope.dev-agent.sandbox.enabled=true
+```
+
+与 `distributed`：沙箱开启时 **不** 使用 `RemoteFilesystemSpec`（Workspace 走 Docker 投影）；会话状态仍可用 PG，经 `PathSafeAgentStateStore` 编码含 `/` 的 sandbox sessionId。
+
+演示（同一 `userId` + `sessionId`；端口以本机为准，下例 `8081`）：
+
+```bash
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"sandbox-user-015\",\"sessionId\":\"sandbox-session-015\",\"message\":\"请在沙箱中运行测试，修复 RetryPolicy 首次重试延迟翻倍的问题，并重新运行测试。\"}"
+
+# 每次 REQUIRE_USER_CONFIRM 后（execute → edit_file → execute）：
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"sandbox-user-015\",\"sessionId\":\"sandbox-session-015\",\"approved\":true}"
+```
+
+成功标准：测试在容器内通过后，宿主 `workspace/project/.../RetryPolicy.java` **仍是**错误实现（`1L << attempt`）。不要对 `docker/sandbox/docker-compose.yml` 执行 `up -d` 当常驻沙箱。
+
+Spec / Plan：`docs/superpowers/specs/2026-07-27-agentscope-sandbox-design.md`、`docs/superpowers/plans/2026-07-27-agentscope-sandbox.md`
 
 **Middleware 请求关联日志：**
 

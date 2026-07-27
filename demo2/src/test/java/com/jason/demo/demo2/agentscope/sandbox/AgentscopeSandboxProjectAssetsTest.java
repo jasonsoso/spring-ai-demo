@@ -54,4 +54,14 @@ class AgentscopeSandboxProjectAssetsTest {
         assertThat(dockerfileText).contains("python3-wrapper");
         assertThat(dockerfileText).contains("maven.test.failure.ignore");
     }
+
+    @Test
+    void agentsMdContainsSandboxRouting() throws Exception {
+        String agents = Files.readString(MODULE.resolve("workspace/AGENTS.md"));
+        assertThat(agents).contains("RetryPolicy");
+        assertThat(agents).contains("read_file");
+        assertThat(agents).contains("edit_file");
+        assertThat(agents).contains("execute");
+        assertThat(agents).contains("/workspace/project");
+    }
 }
