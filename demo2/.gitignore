@@ -47,3 +47,5 @@ workspace/**
 !workspace/knowledge/
 !workspace/skills/
 !workspace/skills/**
+!workspace/subagents/
+!workspace/subagents/**
