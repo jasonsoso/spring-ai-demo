@@ -186,14 +186,26 @@ public class AgentScopeConfig {
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) throws IOException {
         String systemPrompt = properties.systemPrompt()
                 .replace("{mcpRoot}", AgentscopeMcpClientRegistry.primaryMcpRootDisplay(properties));
+        DevAgentProperties.Sandbox sandbox = properties.sandbox();
+        if (sandbox.enabled()) {
+            systemPrompt += """
+
+                    【沙箱硬约束】
+                    当前处于 Docker Sandbox 模式。代码和测试只能在沙箱项目目录执行：
+                    - execute 的 working_directory 必须严格填写 `project`，禁止填写宿主机绝对路径。
+                    - read_file/edit_file 的 path 必须是相对于 `project` 的路径。
+                    - 只允许使用 execute、read_file、edit_file；不要调用其他文件工具。
+                    """;
+        }
         Toolkit toolkit = new Toolkit();
-        toolkit.registerTool(projectInfoTools);
-        toolkit.registerAgentTool(fileChangeTool);
-        for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
-            toolkit.registerTool(entry.tools());
+        if (!sandbox.enabled()) {
+            toolkit.registerTool(projectInfoTools);
+            toolkit.registerAgentTool(fileChangeTool);
+            for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
+                toolkit.registerTool(entry.tools());
+            }
         }
 
-        DevAgentProperties.Sandbox sandbox = properties.sandbox();
         HarnessAgent.Builder builder = HarnessAgent.builder()
                 .name(properties.name())
                 .sysPrompt(systemPrompt)
@@ -203,16 +215,27 @@ public class AgentScopeConfig {
                 .permissionContext(permissionContext(properties, agentscopeMcpClientRegistry))
                 .middleware(agentExecutionLoggingMiddleware)
                 .enableAgentTracingLog(false)
-                .compaction(agentscopeCompactionConfig)
                 .disableAtPathExpansion()
                 .disableDefaultWorkspaceSkills()
                 .disableToolsConfig();
 
         if (sandbox.enabled()) {
+            // Compaction 会在工具轮次之间读 workspace，但此时 Docker sandbox 已释放 call context，
+            // 会抛 SandboxConfigurationException 并打断后续推理；沙箱演示先关 compaction。
             builder.stateStore(agentscopeAgentStateStore)
-                    .filesystem(dockerFilesystemSpec(properties));
+                    .filesystem(dockerFilesystemSpec(properties))
+                    .disableCompaction()
+                    // Memory flush/maintenance 会在工具调用结束后异步访问 workspace，
+                    // 此时 SandboxLifecycleMiddleware 已释放容器，导致 No active sandbox。
+                    .disableMemoryTools()
+                    .disableMemoryHooks()
+                    // WorkspaceContextMiddleware 同样会在每轮推理重读 workspace；
+                    // 沙箱生命周期只覆盖工具调用，避免在容器释放后访问文件系统。
+                    .disableWorkspaceContext();
         } else {
-            builder.disableFilesystemTools().disableShellTool();
+            builder.compaction(agentscopeCompactionConfig)
+                    .disableFilesystemTools()
+                    .disableShellTool();
             if (agentscopeDistributedBackend instanceof AgentscopeDistributedBackend.Remote remote) {
                 builder.distributedStore(remote.distributedStore())
                         .filesystem(new RemoteFilesystemSpec().isolationScope(IsolationScope.USER));
@@ -221,7 +244,7 @@ public class AgentScopeConfig {
             }
         }
 
-        if (properties.memory().enabled()) {
+        if (properties.memory().enabled() && !sandbox.enabled()) {
             builder.memory(agentscopeMemoryConfig);
         } else {
             builder.disableMemoryTools().disableMemoryHooks();
@@ -229,7 +252,8 @@ public class AgentScopeConfig {
         HarnessAgent agent = builder.build();
         agent.getToolkit().removeTool("wait_async_results");
         if (sandbox.enabled()) {
-            agent.getToolkit().removeTool("write_file");
+            List.of("list_files", "glob_files", "grep_files", "write_file")
+                    .forEach(agent.getToolkit()::removeTool);
         }
         return agent;
     }

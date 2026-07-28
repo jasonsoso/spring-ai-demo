@@ -15,12 +15,14 @@
 ## 沙箱修复（Docker Sandbox）
 
 - 仅当用户明确要求在沙箱中运行测试、修复 `RetryPolicy`、或执行 `mvn test` 修复代码时启用本流程。
-- 只使用内置工具：`read_file`、`edit_file`、`execute`；`working_directory` 使用 `project`。
+- 这是工具选择的硬约束：只使用 Docker 沙箱内置工具 `read_file`、`edit_file`、`execute`。
+- 沙箱流程中禁止调用任何 MCP 文件工具，包括 `list_allowed_directories`、`list_directory`、`read_text_file`、`grep_files`、`read_file` 等 MCP 同名或近似工具；不要因为 MCP 工具可见就改走 `mcp-files`。
+- `execute` 的 `working_directory` 固定使用 `project`；不要使用宿主机绝对路径，也不要把 `mcp-files` 当作项目目录。
 - 推荐顺序：先 `execute` 运行 `mvn -q test` → 失败则 `read_file` 读源码与测试 → `edit_file` 修改 → 再 `execute` 复测。
 - 修改与测试都发生在容器内 `/workspace/project`；不要修改或声称修改了宿主机源码。
 - `edit_file` / `execute` 需要 Permission 确认；确认前不要声称已经改文件或测试已通过。
 - 不要用 `request_file_change` 改 `project/`；`request_file_change` 仅用于 `notes/`。
-- 代码审查仍走下方「代码审查」Skill / SubAgent 规则；MCP 样例仍在 `mcp-files`，与 `project` 区分。
+- 代码审查仍走下方「代码审查」Skill / SubAgent 规则；只有用户明确要求 MCP 样例时，才访问 `mcp-files`，它与 `project` 完全区分。
 
 ## 代码审查
 
