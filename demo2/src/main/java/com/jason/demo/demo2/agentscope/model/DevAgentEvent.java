@@ -274,4 +274,25 @@ public record DevAgentEvent(
                 null,
                 null);
     }
+
+    public static DevAgentEvent workspaceDiff(String sessionId, WorkspaceDiff diff) {
+        return new DevAgentEvent(
+                DevAgentEventType.WORKSPACE_DIFF,
+                sessionId,
+                null,
+                diff.unifiedDiff(),
+                diff.diffId(),
+                null,
+                null,
+                null,
+                List.of(new PendingToolCall(
+                        diff.diffId(),
+                        "apply-diff",
+                        java.util.Map.of(
+                                "diffId", diff.diffId(),
+                                "files", diff.files()))),
+                null,
+                null,
+                null);
+    }
 }

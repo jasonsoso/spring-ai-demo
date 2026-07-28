@@ -6,6 +6,8 @@ import com.jason.demo.demo2.agentscope.model.DevAgentEvent;
 import com.jason.demo.demo2.agentscope.model.DevAgentEventType;
 import com.jason.demo.demo2.agentscope.model.DevAgentRequest;
 import com.jason.demo.demo2.agentscope.model.PendingToolCall;
+import com.jason.demo.demo2.agentscope.model.WorkspaceDiff;
+import com.jason.demo.demo2.agentscope.diff.WorkspaceDiffService;
 import com.jason.demo.demo2.agentscope.observability.AgentExecutionContext;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
@@ -26,12 +28,14 @@ import io.agentscope.harness.agent.HarnessAgent;
 import io.micrometer.tracing.Tracer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 
 @Service
 public class DevAgentService {
@@ -42,16 +46,33 @@ public class DevAgentService {
     private final DevAgentProperties properties;
     private final AgentStateStore agentStateStore;
     private final Tracer tracer;
+    private final WorkspaceDiffService workspaceDiffService;
+    /**
+     * HarnessAgent 的 SandboxLifecycleMiddleware 持有共享的 currentAcquireResult，
+     * 因此同一个 HarnessAgent 不能并发执行多个沙箱请求。
+     */
+    private final Semaphore sandboxRequestLock = new Semaphore(1);
+
+    @Autowired
+    public DevAgentService(
+            HarnessAgent agentscopeDevAgent,
+            DevAgentProperties properties,
+            AgentStateStore agentStateStore,
+            Tracer tracer,
+            WorkspaceDiffService workspaceDiffService) {
+        this.agentscopeDevAgent = agentscopeDevAgent;
+        this.properties = properties;
+        this.agentStateStore = agentStateStore;
+        this.tracer = tracer;
+        this.workspaceDiffService = workspaceDiffService;
+    }
 
     public DevAgentService(
             HarnessAgent agentscopeDevAgent,
             DevAgentProperties properties,
             AgentStateStore agentStateStore,
             Tracer tracer) {
-        this.agentscopeDevAgent = agentscopeDevAgent;
-        this.properties = properties;
-        this.agentStateStore = agentStateStore;
-        this.tracer = tracer;
+        this(agentscopeDevAgent, properties, agentStateStore, tracer, null);
     }
 
     public Flux<DevAgentEvent> ask(DevAgentRequest request) {
@@ -98,6 +119,7 @@ public class DevAgentService {
             DevAgentRequest request, String userId, Invocation invocation) {
         String sessionId = request.sessionId();
         try {
+            captureBaseline(userId, sessionId);
             int beforeCount = contextMessageCount(userId, sessionId);
             Flux<DevAgentEvent> events = mapAgentEvents(
                     sessionId,
@@ -105,6 +127,7 @@ public class DevAgentService {
                             request.message(), invocation.runtimeContext()));
             return Flux.concat(
                     events,
+                    workspaceDiffEvent(userId, sessionId),
                     Mono.defer(() -> compactionEventIfNeeded(
                             userId, sessionId, beforeCount)),
                     Mono.just(DevAgentEvent.done(sessionId)));
@@ -141,6 +164,7 @@ public class DevAgentService {
                             resumeMessage, invocation.runtimeContext()));
             return Flux.concat(
                     events,
+                    workspaceDiffEvent(userId, sessionId),
                     Mono.defer(() -> compactionEventIfNeeded(
                             userId, sessionId, beforeCount)),
                     Mono.just(DevAgentEvent.done(sessionId)));
@@ -148,6 +172,24 @@ public class DevAgentService {
             logRejected(invocation, "pre_agent_failure:" + ex.getClass().getSimpleName());
             return Flux.error(ex);
         }
+    }
+
+    private void captureBaseline(String userId, String sessionId) {
+        if (workspaceDiffService != null && properties.sandbox().enabled()) {
+            workspaceDiffService.captureBaseline(userId, sessionId);
+        }
+    }
+
+    private Mono<DevAgentEvent> workspaceDiffEvent(String userId, String sessionId) {
+        if (workspaceDiffService == null || !properties.sandbox().enabled()) {
+            return Mono.empty();
+        }
+        return Mono.defer(() -> {
+            WorkspaceDiff diff = workspaceDiffService.createDiff(userId, sessionId);
+            return diff == null
+                    ? Mono.empty()
+                    : Mono.just(DevAgentEvent.workspaceDiff(sessionId, diff));
+        });
     }
 
     private Flux<DevAgentEvent> mapAgentEvents(
@@ -162,15 +204,26 @@ public class DevAgentService {
 
     private Flux<DevAgentEvent> withRequestContext(
             String sessionId, Invocation invocation, Flux<DevAgentEvent> body) {
-        return Flux.concat(
-                        Mono.just(DevAgentEvent.session(sessionId)),
-                        Mono.just(requestContextEvent(sessionId, invocation.ids())),
-                        body)
-                .onErrorResume(ex -> Flux.just(DevAgentEvent.error(
-                        sessionId,
-                        ex.getMessage() == null
-                                ? ex.getClass().getSimpleName()
-                                : ex.getMessage())));
+        return Flux.defer(() -> {
+            boolean sandbox = properties.sandbox().enabled();
+            if (sandbox) {
+                sandboxRequestLock.acquireUninterruptibly();
+            }
+            return Flux.concat(
+                            Mono.just(DevAgentEvent.session(sessionId)),
+                            Mono.just(requestContextEvent(sessionId, invocation.ids())),
+                            body)
+                    .onErrorResume(ex -> Flux.just(DevAgentEvent.error(
+                            sessionId,
+                            ex.getMessage() == null
+                                    ? ex.getClass().getSimpleName()
+                                    : ex.getMessage())))
+                    .doFinally(signal -> {
+                        if (sandbox) {
+                            sandboxRequestLock.release();
+                        }
+                    });
+        });
     }
 
     private Invocation newInvocation(String userId, String sessionId) {

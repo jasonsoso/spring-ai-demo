@@ -1,5 +1,8 @@
 // ========== AgentScope HarnessAgent ==========
 let agentscopeAwaitingConfirm = false;
+let agentscopeConfirmInFlight = false;
+let agentscopeRequestInFlight = false;
+const AGENTSCOPE_REQUEST_TIMEOUT_MS = 120000;
 
 function newAgentscopeSessionId() {
     if (crypto.randomUUID) return crypto.randomUUID();
@@ -25,6 +28,8 @@ function resetAgentscopeConversation() {
         + '</div></div>';
     document.getElementById('agentscopeSessionId').value = newAgentscopeSessionId();
     agentscopeAwaitingConfirm = false;
+    agentscopeConfirmInFlight = false;
+    agentscopeRequestInFlight = false;
     setAgentscopeInputEnabled(true);
     setAgentscopeStatus('就绪');
 }
@@ -246,6 +251,9 @@ function handleAgentscopeSsePayload(turn, payload, sessionId) {
         scrollAgentscopeMessages();
     } else if (payload.type === 'AGENT_RESULT') {
         setAgentscopeStatus('AGENT_RESULT');
+    } else if (payload.type === 'WORKSPACE_DIFF') {
+        setAgentscopeStatus('WORKSPACE_DIFF');
+        renderAgentscopeDiffCard(turn, payload);
     } else if (payload.type === 'COMPACTION') {
         setAgentscopeStatus('COMPACTION');
         appendAgentscopeSystemMessage(payload.content || '上下文已压缩');
@@ -262,6 +270,59 @@ function handleAgentscopeSsePayload(turn, payload, sessionId) {
         setAgentscopeStatus('REQUEST_STOP ' + (payload.content || ''));
     }
     return false;
+}
+
+function renderAgentscopeDiffCard(turn, payload) {
+    const card = document.createElement('div');
+    card.className = 'agentscope-confirm-card';
+    const pre = document.createElement('pre');
+    pre.textContent = payload.content || '没有检测到文件变更。';
+    card.appendChild(pre);
+    const actions = document.createElement('div');
+    actions.className = 'agentscope-confirm-actions';
+    ['批准回写', '拒绝回写'].forEach(function (label, index) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = index === 0 ? 'approve' : '';
+        button.textContent = label;
+        button.onclick = function () {
+            submitAgentscopeDiff(turn, card, payload.eventId, index === 0);
+        };
+        actions.appendChild(button);
+    });
+    card.appendChild(actions);
+    turn.col.appendChild(card);
+    setAgentscopeInputEnabled(false);
+    scrollAgentscopeMessages();
+}
+
+async function submitAgentscopeDiff(turn, card, diffId, approved) {
+    card.querySelectorAll('button').forEach(function (button) { button.disabled = true; });
+    const userId = document.getElementById('agentscopeUserId').value.trim();
+    const sessionId = document.getElementById('agentscopeSessionId').value.trim();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function () {
+        controller.abort('Diff 回写请求超时');
+    }, AGENTSCOPE_REQUEST_TIMEOUT_MS);
+    try {
+        const response = await fetch('/agentscope/dev-agent/apply-diff', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({ userId, sessionId, diffId, approved })
+        });
+        const result = await response.json();
+        appendAgentscopeSystemMessage(result.message || 'Diff 操作完成');
+    } catch (error) {
+        renderAgentscopeError(
+            turn,
+            error.name === 'AbortError'
+                ? 'Diff 回写超过 120 秒，已取消等待。'
+                : 'Diff 回写失败：' + error.message);
+    } finally {
+        clearTimeout(timeoutId);
+        setAgentscopeInputEnabled(true);
+    }
 }
 
 async function consumeAgentscopeSse(res, turn, sessionId) {
@@ -367,6 +428,8 @@ function renderAgentscopeConfirmCard(turn, payload) {
 }
 
 async function submitAgentscopeConfirm(turn, card, approved) {
+    if (agentscopeConfirmInFlight) return;
+    agentscopeConfirmInFlight = true;
     const sessionId = document.getElementById('agentscopeSessionId').value.trim();
     const userId = document.getElementById('agentscopeUserId').value.trim();
     const buttons = card.querySelectorAll('button');
@@ -375,6 +438,10 @@ async function submitAgentscopeConfirm(turn, card, approved) {
     setAgentscopeStatus(approved ? '确认中（批准）…' : '确认中（拒绝）…');
     turn.requestContext = null;
     turn.errorRendered = false;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function () {
+        controller.abort('确认请求超时');
+    }, AGENTSCOPE_REQUEST_TIMEOUT_MS);
 
     try {
         const body = { sessionId: sessionId, approved: approved };
@@ -385,6 +452,7 @@ async function submitAgentscopeConfirm(turn, card, approved) {
                 'Content-Type': 'application/json',
                 'Accept': 'text/event-stream'
             },
+            signal: controller.signal,
             body: JSON.stringify(body)
         });
         if (!res.ok) {
@@ -393,15 +461,22 @@ async function submitAgentscopeConfirm(turn, card, approved) {
         await consumeAgentscopeSse(res, turn, sessionId);
         card.remove();
     } catch (e) {
-        setAgentscopeStatus('确认失败');
-        renderAgentscopeError(turn, e.message || String(e));
+        const timedOut = e.name === 'AbortError';
+        setAgentscopeStatus(timedOut ? '确认超时' : '确认失败');
+        renderAgentscopeError(
+            turn,
+            timedOut ? '确认请求超过 120 秒，已取消本次等待，请检查服务端日志后重试。'
+                : (e.message || String(e)));
         buttons.forEach(function (btn) { btn.disabled = false; });
     } finally {
+        clearTimeout(timeoutId);
+        agentscopeConfirmInFlight = false;
         setAgentscopeInputEnabled(true);
     }
 }
 
 async function sendAgentscopeMessage() {
+    if (agentscopeRequestInFlight || agentscopeConfirmInFlight) return;
     ensureAgentscopeSessionId();
     const message = document.getElementById('agentscopeMessageInput').value.trim();
     const sessionId = document.getElementById('agentscopeSessionId').value.trim();
@@ -415,6 +490,7 @@ async function sendAgentscopeMessage() {
     setAgentscopeStatus('连接中…');
 
     agentscopeAwaitingConfirm = false;
+    agentscopeRequestInFlight = true;
     try {
         const body = { sessionId: sessionId, message: message };
         if (userId) body.userId = userId;
@@ -436,6 +512,7 @@ async function sendAgentscopeMessage() {
         setAgentscopeStatus('失败');
         renderAgentscopeError(turn, e.message || String(e));
     } finally {
+        agentscopeRequestInFlight = false;
         if (!agentscopeAwaitingConfirm) {
             setAgentscopeInputEnabled(true);
         }

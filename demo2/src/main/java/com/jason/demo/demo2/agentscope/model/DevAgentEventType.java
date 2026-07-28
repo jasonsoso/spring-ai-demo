@@ -31,5 +31,7 @@ public enum DevAgentEventType {
     /** 本轮请求停止（如权限询问）。 */
     REQUEST_STOP,
     /** 本轮会话上下文已压缩（摘要替换较早消息）。 */
-    COMPACTION
+    COMPACTION,
+    /** 沙箱变更的 unified diff，等待宿主回写确认。 */
+    WORKSPACE_DIFF
 }

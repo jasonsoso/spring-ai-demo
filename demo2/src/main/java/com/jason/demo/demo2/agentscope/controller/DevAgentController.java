@@ -3,6 +3,9 @@ package com.jason.demo.demo2.agentscope.controller;
 import com.jason.demo.demo2.agentscope.model.DevAgentConfirmRequest;
 import com.jason.demo.demo2.agentscope.model.DevAgentEvent;
 import com.jason.demo.demo2.agentscope.model.DevAgentRequest;
+import com.jason.demo.demo2.agentscope.model.ApplyDiffRequest;
+import com.jason.demo.demo2.agentscope.model.ApplyDiffResponse;
+import com.jason.demo.demo2.agentscope.diff.WorkspaceDiffService;
 import com.jason.demo.demo2.agentscope.service.DevAgentService;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
@@ -17,9 +20,13 @@ import reactor.core.publisher.Flux;
 public class DevAgentController {
 
     private final DevAgentService devAgentService;
+    private final WorkspaceDiffService workspaceDiffService;
 
-    public DevAgentController(DevAgentService devAgentService) {
+    public DevAgentController(
+            DevAgentService devAgentService,
+            WorkspaceDiffService workspaceDiffService) {
         this.devAgentService = devAgentService;
+        this.workspaceDiffService = workspaceDiffService;
     }
 
     @PostMapping(path = "/ask", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -30,5 +37,15 @@ public class DevAgentController {
     @PostMapping(path = "/confirm", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<DevAgentEvent> confirm(@Valid @RequestBody DevAgentConfirmRequest request) {
         return devAgentService.confirm(request);
+    }
+
+    @PostMapping(path = "/apply-diff", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ApplyDiffResponse applyDiff(@Valid @RequestBody ApplyDiffRequest request) {
+        if (!request.approved()) {
+            workspaceDiffService.discard(request.diffId());
+            return new ApplyDiffResponse(request.diffId(), false, "已拒绝回写");
+        }
+        workspaceDiffService.apply(request.userId(), request.sessionId(), request.diffId());
+        return new ApplyDiffResponse(request.diffId(), true, "已回写 workspace/project");
     }
 }

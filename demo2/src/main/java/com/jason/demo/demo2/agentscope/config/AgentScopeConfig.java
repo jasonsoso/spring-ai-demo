@@ -195,6 +195,7 @@ public class AgentScopeConfig {
                     - execute 的 working_directory 必须严格填写 `project`，禁止填写宿主机绝对路径。
                     - read_file/edit_file 的 path 必须是相对于 `project` 的路径。
                     - 只允许使用 execute、read_file、edit_file；不要调用其他文件工具。
+                    - 每次回复最多调用一个沙箱工具；必须等待工具结果后再调用下一个工具，禁止并行调用多个沙箱工具。
                     """;
         }
         Toolkit toolkit = new Toolkit();
@@ -276,6 +277,8 @@ public class AgentScopeConfig {
         applyMemoryAllowRules(builder, properties.memory());
         if (properties.sandbox().enabled()) {
             builder.addAllowRule("read_file", allowRule("read_file"));
+            // execute 只在隔离 Docker Sandbox 内自动放行；宿主项目回写仍走独立 Diff 确认。
+            builder.addAllowRule("execute", allowRule("execute"));
         }
         return builder.build();
     }
