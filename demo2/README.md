@@ -1299,6 +1299,29 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
 
 Spec / Plan：`docs/superpowers/specs/2026-07-27-agentscope-sandbox-design.md`、`docs/superpowers/plans/2026-07-27-agentscope-sandbox.md`
 
+**Plan Mode（改代码前先确认方案）：**
+
+Plan Mode 管「只调查 vs 可执行」；Permission 管单次危险操作。`enablePlanMode()` + `enableTaskList()` 始终开启；完整流程提示仅在 `sandbox.enabled=true` 时注入。计划写入工作区 `plans/PLAN.md`；`plan_exit` / `edit_file` / `execute` 均走 `/confirm` HITL。批准方案不等于放行后续写文件或跑命令。
+
+> **行为变化**：沙箱下 `execute` 不再自动 ALLOW。Tab 示例 13（Sandbox 修 RetryPolicy）也会对 `edit_file` / `execute` 弹确认卡片。
+
+演示前置：`sandbox.enabled=true`、PostgreSQL、沙箱镜像已 build。Tab 点「示例：Plan Mode 先确认方案」（预填 `plan-user-017` / `plan-session-017`），或：
+
+```bash
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"plan-user-017\",\"sessionId\":\"plan-session-017\",\"message\":\"请先调查 workspace/project 里 RetryPolicy 第一次重试延迟错误，整理修复方案。方案确认前不要改代码，等我确认后再执行。\"}"
+
+# 确认① plan_exit → 确认② edit_file → 确认③ execute（命令相同，同一 userId/sessionId）：
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"plan-user-017\",\"sessionId\":\"plan-session-017\",\"approved\":true}"
+```
+
+成功标准：第一次确认前源码未改；三次确认后 `mvn test` 在容器内通过。
+
+Spec / Plan：`docs/superpowers/specs/2026-07-29-agentscope-plan-mode-design.md`、`docs/superpowers/plans/2026-07-29-agentscope-plan-mode.md`
+
 **Middleware 请求关联日志：**
 
 - 每次 `/ask`、`/confirm` 都生成独立 requestId；第二个 SSE 事件 `REQUEST_CONTEXT` 携带 requestId、traceId、spanId

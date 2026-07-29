@@ -146,7 +146,8 @@ function fillAgentscopeSample(n) {
         11: '请审查 MCP 资料目录里的 UserProfileFormatter.java，并给出是否适合合并的结论。',
         12: '请用 SubAgent 多角色审查 MCP 资料目录里的 TravelBudgetService.java，并给出是否适合合并的结论。',
         13: '请在沙箱中运行测试，修复 RetryPolicy 首次重试延迟翻倍的问题，并重新运行测试。',
-        14: '请审查 RetryPolicy.delayMillis 的改动：原实现第一次重试使用第二档延迟，修改后第一次应为 1000ms，第二次 2000ms，第三次 4000ms。请给出结论、风险和建议。'
+        14: '请审查 RetryPolicy.delayMillis 的改动：原实现第一次重试使用第二档延迟，修改后第一次应为 1000ms，第二次 2000ms，第三次 4000ms。请给出结论、风险和建议。',
+        15: '请先调查 workspace/project 里 RetryPolicy 第一次重试延迟错误，整理修复方案。方案确认前不要改代码，等我确认后再执行。'
     };
     const input = document.getElementById('agentscopeMessageInput');
     if (input) {
@@ -202,6 +203,12 @@ function fillAgentscopeSample(n) {
         const sessionId = document.getElementById('agentscopeSessionId');
         if (userId) userId.value = 'risk-user-016';
         if (sessionId) sessionId.value = 'risk-session-016';
+    }
+    if (n === 15) {
+        const userId = document.getElementById('agentscopeUserId');
+        const sessionId = document.getElementById('agentscopeSessionId');
+        if (userId) userId.value = 'plan-user-017';
+        if (sessionId) sessionId.value = 'plan-session-017';
     }
 }
 

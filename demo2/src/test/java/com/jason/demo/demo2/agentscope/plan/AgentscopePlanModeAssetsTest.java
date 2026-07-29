@@ -28,4 +28,14 @@ class AgentscopePlanModeAssetsTest {
         assertThat(agents).contains("list_files");
         assertThat(agents).doesNotContain("禁止调用任何 MCP 文件工具，包括");
     }
+
+    @Test
+    void frontendExposesPlanModeSample() throws Exception {
+        String js = Files.readString(MODULE.resolve("src/main/resources/static/js/tabs/agentscope.js"));
+        String html = Files.readString(MODULE.resolve("src/main/resources/static/index.html"));
+        assertThat(js).contains("plan-user-017");
+        assertThat(js).contains("plan-session-017");
+        assertThat(js).contains("方案确认前不要改代码");
+        assertThat(html).contains("fillAgentscopeSample(15)");
+    }
 }
