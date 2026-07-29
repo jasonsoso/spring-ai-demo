@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.agentscope.config;
 
+import com.jason.demo.demo2.agentscopea2a.client.RiskReviewTool;
 import com.jason.demo.demo2.agentscope.mcp.AgentscopeMcpClientRegistry;
 import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
 import com.jason.demo.demo2.agentscope.state.PathSafeAgentStateStore;
@@ -23,6 +24,7 @@ import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import io.agentscope.harness.agent.sandbox.WorkspaceSpec;
 import io.agentscope.harness.agent.sandbox.impl.docker.DockerFilesystemSpec;
 import io.agentscope.harness.agent.sandbox.snapshot.LocalSnapshotSpec;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -183,7 +185,85 @@ public class AgentScopeConfig {
             AgentscopeDistributedBackend agentscopeDistributedBackend,
             AgentStateStore agentscopeAgentStateStore,
             AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
+            AgentscopeMcpClientRegistry agentscopeMcpClientRegistry,
+            ObjectProvider<RiskReviewTool> riskReviewTools) throws IOException {
+        return buildAgentscopeDevAgent(
+                agentscopeDeepSeekModel,
+                properties,
+                agentscopeCompactionConfig,
+                agentscopeMemoryConfig,
+                projectInfoTools,
+                fileChangeTool,
+                agentscopeDistributedBackend,
+                agentscopeAgentStateStore,
+                agentExecutionLoggingMiddleware,
+                agentscopeMcpClientRegistry,
+                riskReviewTools.getIfAvailable());
+    }
+
+    HarnessAgent agentscopeDevAgent(
+            @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
+            DevAgentProperties properties,
+            CompactionConfig agentscopeCompactionConfig,
+            MemoryConfig agentscopeMemoryConfig,
+            ProjectInfoTools projectInfoTools,
+            FileChangeTool fileChangeTool,
+            AgentscopeDistributedBackend agentscopeDistributedBackend,
+            AgentStateStore agentscopeAgentStateStore,
+            AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) throws IOException {
+        return buildAgentscopeDevAgent(
+                agentscopeDeepSeekModel,
+                properties,
+                agentscopeCompactionConfig,
+                agentscopeMemoryConfig,
+                projectInfoTools,
+                fileChangeTool,
+                agentscopeDistributedBackend,
+                agentscopeAgentStateStore,
+                agentExecutionLoggingMiddleware,
+                agentscopeMcpClientRegistry,
+                null);
+    }
+
+    HarnessAgent agentscopeDevAgent(
+            @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
+            DevAgentProperties properties,
+            CompactionConfig agentscopeCompactionConfig,
+            MemoryConfig agentscopeMemoryConfig,
+            ProjectInfoTools projectInfoTools,
+            FileChangeTool fileChangeTool,
+            AgentscopeDistributedBackend agentscopeDistributedBackend,
+            AgentStateStore agentscopeAgentStateStore,
+            AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
+            AgentscopeMcpClientRegistry agentscopeMcpClientRegistry,
+            RiskReviewTool riskReviewTool) throws IOException {
+        return buildAgentscopeDevAgent(
+                agentscopeDeepSeekModel,
+                properties,
+                agentscopeCompactionConfig,
+                agentscopeMemoryConfig,
+                projectInfoTools,
+                fileChangeTool,
+                agentscopeDistributedBackend,
+                agentscopeAgentStateStore,
+                agentExecutionLoggingMiddleware,
+                agentscopeMcpClientRegistry,
+                riskReviewTool);
+    }
+
+    private HarnessAgent buildAgentscopeDevAgent(
+            Model agentscopeDeepSeekModel,
+            DevAgentProperties properties,
+            CompactionConfig agentscopeCompactionConfig,
+            MemoryConfig agentscopeMemoryConfig,
+            ProjectInfoTools projectInfoTools,
+            FileChangeTool fileChangeTool,
+            AgentscopeDistributedBackend agentscopeDistributedBackend,
+            AgentStateStore agentscopeAgentStateStore,
+            AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
+            AgentscopeMcpClientRegistry agentscopeMcpClientRegistry,
+            RiskReviewTool riskReviewTool) throws IOException {
         String systemPrompt = properties.systemPrompt()
                 .replace("{mcpRoot}", AgentscopeMcpClientRegistry.primaryMcpRootDisplay(properties));
         DevAgentProperties.Sandbox sandbox = properties.sandbox();
@@ -199,6 +279,9 @@ public class AgentScopeConfig {
                     """;
         }
         Toolkit toolkit = new Toolkit();
+        if (riskReviewTool != null) {
+            toolkit.registerTool(riskReviewTool);
+        }
         if (!sandbox.enabled()) {
             toolkit.registerTool(projectInfoTools);
             toolkit.registerAgentTool(fileChangeTool);
@@ -269,6 +352,7 @@ public class AgentScopeConfig {
                 toolName -> builder.addAllowRule(toolName, allowRule(toolName)));
         SUBAGENT_COLLAB_TOOL_NAMES.forEach(
                 toolName -> builder.addAllowRule(toolName, allowRule(toolName)));
+        builder.addAllowRule("risk_review", allowRule("risk_review"));
         for (AgentscopeMcpClientRegistry.Entry entry : agentscopeMcpClientRegistry.entries()) {
             for (String toolName : entry.enabledTools()) {
                 builder.addAllowRule(toolName, allowRule(toolName));

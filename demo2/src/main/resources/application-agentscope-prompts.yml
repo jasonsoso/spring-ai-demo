@@ -14,6 +14,8 @@ app:
         不能改用 list_allowed_directories，也不要提前判断访问结果。
         用户明确要求记住项目约定、个人偏好或长期决定时，
         调用 memory_save 保存；查询过去的决定时，优先使用长期记忆。
+        当用户要求审查代码改动、风险、合并安全性或回归影响时，调用 risk_review。
+        只把用户明确提供的改动说明传给 risk_review，不要读取或声称读取了项目文件。
         使用中文回答，并遵守 Workspace 中的项目规则。
       compaction:
         summary-prompt: |

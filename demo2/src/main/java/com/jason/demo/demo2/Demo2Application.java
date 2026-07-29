@@ -1,12 +1,14 @@
 package com.jason.demo.demo2;
 
+import io.agentscope.spring.boot.a2a.AgentscopeA2aAutoConfiguration;
 import org.springframework.ai.vectorstore.milvus.autoconfigure.MilvusVectorStoreAutoConfiguration;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication(exclude = {
-        MilvusVectorStoreAutoConfiguration.class
+        MilvusVectorStoreAutoConfiguration.class,
+        AgentscopeA2aAutoConfiguration.class
 })
 @ConfigurationPropertiesScan
 public class Demo2Application {

@@ -1,5 +1,7 @@
 package com.jason.demo.demo2.agentscope.config;
 
+import com.jason.demo.demo2.agentscopea2a.client.RemoteRiskReviewService;
+import com.jason.demo.demo2.agentscopea2a.client.RiskReviewTool;
 import com.jason.demo.demo2.agentscope.mcp.AgentscopeMcpClientRegistry;
 import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
 import com.jason.demo.demo2.agentscope.state.PathSafeAgentStateStore;
@@ -122,6 +124,18 @@ class AgentScopeMiddlewareConfigTest {
         }
     }
 
+    @Test
+    void agentscopeDevAgent_registersRiskReviewToolIndependentOfSandbox() throws Exception {
+        AgentScopeConfig config = new AgentScopeConfig();
+        RiskReviewTool riskReviewTool = new RiskReviewTool(mock(RemoteRiskReviewService.class));
+
+        try (HarnessAgent regularAgent = buildAgent(config, propertiesWithSandbox(false), riskReviewTool);
+             HarnessAgent sandboxAgent = buildAgent(config, propertiesWithSandbox(true), riskReviewTool)) {
+            assertThat(regularAgent.getToolkit().getToolNames()).contains("risk_review");
+            assertThat(sandboxAgent.getToolkit().getToolNames()).contains("risk_review");
+        }
+    }
+
     private DevAgentProperties disabledMemoryProperties() {
         return propertiesWithSandbox(false);
     }
@@ -150,7 +164,18 @@ class AgentScopeMiddlewareConfigTest {
     }
 
     private HarnessAgent buildAgent(DevAgentProperties properties) throws Exception {
-        AgentScopeConfig config = new AgentScopeConfig();
+        return buildAgent(new AgentScopeConfig(), properties);
+    }
+
+    private HarnessAgent buildAgent(AgentScopeConfig config, DevAgentProperties properties)
+            throws Exception {
+        return buildAgent(config, properties, null);
+    }
+
+    private HarnessAgent buildAgent(
+            AgentScopeConfig config,
+            DevAgentProperties properties,
+            RiskReviewTool riskReviewTool) throws Exception {
         Model model = mock(Model.class);
         when(model.getModelName()).thenReturn("test-model");
         AgentStateStore baseStore = mock(AgentStateStore.class);
@@ -169,6 +194,7 @@ class AgentScopeMiddlewareConfigTest {
                 new AgentscopeDistributedBackend.Local(baseStore),
                 harnessStore,
                 middleware,
-                AgentscopeMcpClientRegistry.create(properties));
+                AgentscopeMcpClientRegistry.create(properties),
+                riskReviewTool);
     }
 }
