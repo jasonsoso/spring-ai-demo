@@ -119,8 +119,51 @@ class AgentScopeMiddlewareConfigTest {
     void agentscopeDevAgent_sandboxEnabled_exposesSandboxToolsWithoutWriteFile() throws Exception {
         try (HarnessAgent agent = buildAgent(propertiesWithSandbox(true))) {
             assertThat(agent.getToolkit().getToolNames())
-                    .contains("read_file", "edit_file", "execute")
+                    .contains("read_file", "edit_file", "execute", "list_files", "glob_files", "grep_files")
                     .doesNotContain("write_file");
+        }
+    }
+
+    @Test
+    void agentscopeDevAgent_alwaysRegistersPlanModeAndTaskListTools() throws Exception {
+        try (HarnessAgent off = buildAgent(propertiesWithSandbox(false));
+             HarnessAgent on = buildAgent(propertiesWithSandbox(true))) {
+            assertThat(off.getToolkit().getToolNames())
+                    .contains("plan_enter", "plan_write", "plan_exit", "todo_write");
+            assertThat(on.getToolkit().getToolNames())
+                    .contains("plan_enter", "plan_write", "plan_exit", "todo_write");
+            assertThat(on.getDelegate().getMiddlewares())
+                    .anyMatch(m -> m.getClass().getSimpleName().equals("PlanModeMiddleware"));
+        }
+    }
+
+    @Test
+    void permissionContext_allowsPlanToolsButNotPlanExitOrExecute() {
+        DevAgentProperties sandboxOn = propertiesWithSandbox(true);
+        var ctx = AgentScopeConfig.permissionContext(
+                sandboxOn, AgentscopeMcpClientRegistry.create(sandboxOn));
+        assertThat(ctx.getAllowRules().keySet())
+                .contains("plan_enter", "plan_write", "todo_write", "read_file",
+                        "list_files", "glob_files", "grep_files")
+                .doesNotContain("plan_exit", "execute");
+    }
+
+    @Test
+    void sandboxProjectionRoots_includePlans() {
+        assertThat(AgentScopeConfig.sandboxWorkspaceProjectionRoots())
+                .contains("plans", "project", "AGENTS.md");
+    }
+
+    @Test
+    void agentscopeDevAgent_sandboxEnabled_injectsPlanModePrompt() throws Exception {
+        try (HarnessAgent on = buildAgent(propertiesWithSandbox(true));
+             HarnessAgent off = buildAgent(propertiesWithSandbox(false))) {
+            String onPrompt = on.getDelegate().getSysPrompt();
+            String offPrompt = off.getDelegate().getSysPrompt();
+            assertThat(onPrompt).contains("plan_enter");
+            assertThat(onPrompt).contains("plans/PLAN.md");
+            assertThat(onPrompt).contains("plan_exit");
+            assertThat(offPrompt).doesNotContain("plans/PLAN.md");
         }
     }
 
