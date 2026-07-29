@@ -12,11 +12,18 @@
 - 非沙箱修复场景下，不要声称已经查询日志、数据库或在宿主执行了 Shell 命令。
 - 信息不足时，直接指出还缺什么，不编造排查结果。
 
+## Plan Mode（先方案后执行）
+
+- 用户要求先写计划再修复、先调查再改代码、进入 Plan Mode，或明确要求方案确认后再修改时，先进入 Plan Mode：
+  只读调查，用 `plan_write` 写 `plans/PLAN.md`，再通过 `plan_exit` 申请执行。
+- 规划阶段优先使用 `read_file` / `list_files` / `glob_files` / `grep_files` 与 `plan_enter` / `plan_write`；不要调用 `edit_file` / `execute`，也不要创建子 Agent 或调用 MCP 工具。
+- 用户批准 `plan_exit` 后才进入执行：用 `todo_write` 建清单，再 `edit_file` / `execute`；批准方案不等于放行后续危险操作。
+
 ## 沙箱修复（Docker Sandbox）
 
 - 仅当用户明确要求在沙箱中运行测试、修复 `RetryPolicy`、或执行 `mvn test` 修复代码时启用本流程。
-- 这是工具选择的硬约束：只使用 Docker 沙箱内置工具 `read_file`、`edit_file`、`execute`。
-- 沙箱流程中禁止调用任何 MCP 文件工具，包括 `list_allowed_directories`、`list_directory`、`read_text_file`、`grep_files`、`read_file` 等 MCP 同名或近似工具；不要因为 MCP 工具可见就改走 `mcp-files`。
+- 这是工具选择的硬约束：沙箱修复默认使用内置 `read_file` / `edit_file` / `execute`；若走 Plan Mode，规划阶段还可使用 `list_files` / `glob_files` / `grep_files` 与 `plan_*` / `todo_write`。
+- 沙箱流程中禁止调用 MCP 文件工具（`list_allowed_directories`、`list_directory`、`read_text_file` 等）；规划/修复请用沙箱内置文件工具，不要因为 MCP 工具可见就改走 `mcp-files`。
 - `execute` 的 `working_directory` 固定使用 `project`；不要使用宿主机绝对路径，也不要把 `mcp-files` 当作项目目录。
 - 推荐顺序：先 `execute` 运行 `mvn -q test` → 失败则 `read_file` 读源码与测试 → `edit_file` 修改 → 再 `execute` 复测。
 - 修改与测试都发生在容器内 `/workspace/project`；不要修改或声称修改了宿主机源码。

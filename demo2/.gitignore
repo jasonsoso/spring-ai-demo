@@ -52,6 +52,8 @@ workspace/**
 !workspace/project/
 !workspace/project/**
 workspace/project/target/
+!workspace/plans/
+!workspace/plans/.gitkeep
 
 ### AgentScope Sandbox snapshots ###
 .agentscope/sandbox-snapshots/
