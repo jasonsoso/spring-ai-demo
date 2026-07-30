@@ -43,14 +43,14 @@ public final class NewlineFlatteningDockerSandboxClient
             SandboxSnapshotSpec snapshotSpec,
             DockerSandboxClientOptions options) {
         Sandbox sandbox = new NewlineFlatteningSandbox(
-                delegate.create(workspaceSpec, snapshotSpec, options));
+                delegate.create(workspaceSpec, snapshotSpec, options), registry);
         registry.register(sandbox);
         return sandbox;
     }
 
     @Override
     public Sandbox resume(SandboxState state) {
-        Sandbox sandbox = new NewlineFlatteningSandbox(delegate.resume(state));
+        Sandbox sandbox = new NewlineFlatteningSandbox(delegate.resume(state), registry);
         registry.register(sandbox);
         return sandbox;
     }

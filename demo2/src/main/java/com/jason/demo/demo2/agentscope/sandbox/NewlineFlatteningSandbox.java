@@ -11,14 +11,20 @@ import java.io.InputStream;
 final class NewlineFlatteningSandbox implements Sandbox {
 
     private final Sandbox delegate;
+    private final ActiveSandboxRegistry registry;
 
-    NewlineFlatteningSandbox(Sandbox delegate) {
+    NewlineFlatteningSandbox(Sandbox delegate, ActiveSandboxRegistry registry) {
         this.delegate = delegate;
+        this.registry = registry;
     }
 
     @Override
     public void start() throws Exception {
         delegate.start();
+        // create 时 sessionId 可能尚未写入；start 后补登记。
+        if (registry != null) {
+            registry.register(this);
+        }
     }
 
     @Override
