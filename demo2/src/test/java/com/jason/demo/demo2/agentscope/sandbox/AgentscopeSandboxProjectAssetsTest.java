@@ -53,6 +53,11 @@ class AgentscopeSandboxProjectAssetsTest {
         String dockerfileText = Files.readString(dockerfile);
         assertThat(dockerfileText).contains("python3-wrapper");
         assertThat(dockerfileText).contains("maven.test.failure.ignore");
+
+        String wrapperText = Files.readString(wrapper);
+        assertThat(wrapperText).contains("printf '%b'");
+        assertThat(wrapperText).contains("b64decode");
+        assertThat(wrapperText).contains("mktemp");
     }
 
     @Test

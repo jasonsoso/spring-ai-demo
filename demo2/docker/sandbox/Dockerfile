@@ -2,7 +2,8 @@
 # 构建请用：docker compose -f demo2/docker/sandbox/docker-compose.yml build
 # 为何预跑 mvn test：运行时 network=none，构建期先把依赖拉进本地仓库缓存层。
 # maven.test.failure.ignore=true：样例 RetryPolicy 故意失败，只为下载依赖。
-# python3-wrapper：兼容 AgentScope 2.0.0 edit_file 的 \n 字面量。
+# python3-wrapper：兼容 AgentScope 2.0.0 edit_file 的 \n 字面量，
+# 并在 Windows/docker 丢掉 -c 引号时把拆散的 argv 拼回。
 
 FROM maven:3.9.11-eclipse-temurin-17
 

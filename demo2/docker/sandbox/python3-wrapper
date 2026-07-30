@@ -1,10 +1,29 @@
 #!/bin/sh
-# AgentScope edit_file 兼容：把 -c 代码里的字面量 \n 转成真正换行后再交给系统 python3。
+# AgentScope edit_file 兼容：
+# 1) 把 -c 代码里的字面量 \n 转成真正换行
+# 2) Windows/docker 传参偶发丢掉 -c 外层引号时，把拆散的 argv 拼回
+# 3) 用临时文件执行，避免 argv 内嵌换行再次被拆坏
 
 if [ "$1" = "-c" ] && [ "$#" -ge 2 ]; then
-    code=$(printf '%b' "$2")
+    code="$2"
     shift 2
-    exec /usr/bin/python3 -c "$code" "$@"
+    case "$*" in
+        *b64decode*|*json.loads*)
+            for a in "$@"; do
+                code="$code $a"
+            done
+            set --
+            ;;
+    esac
+    code=$(printf '%b' "$code")
+    tmp=$(mktemp /tmp/as-py.XXXXXX) || exit 1
+    trap 'rm -f "$tmp"' EXIT
+    printf '%s\n' "$code" > "$tmp" || exit 1
+    /usr/bin/python3 "$tmp" "$@"
+    status=$?
+    rm -f "$tmp"
+    trap - EXIT
+    exit "$status"
 fi
 
 exec /usr/bin/python3 "$@"
