@@ -1,11 +1,13 @@
 package com.jason.demo.demo2.agentscope.config;
 
-import com.jason.demo.demo2.agentscopea2a.client.RiskReviewTool;
 import com.jason.demo.demo2.agentscope.mcp.AgentscopeMcpClientRegistry;
 import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
+import com.jason.demo.demo2.agentscope.sandbox.ActiveSandboxRegistry;
+import com.jason.demo.demo2.agentscope.sandbox.NewlineFlatteningDockerSandboxClient;
 import com.jason.demo.demo2.agentscope.state.PathSafeAgentStateStore;
 import com.jason.demo.demo2.agentscope.tool.FileChangeTool;
 import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
+import com.jason.demo.demo2.agentscopea2a.client.RiskReviewTool;
 import com.jason.demo.demo2.config.LoggingAgentscopeModel;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.permission.PermissionBehavior;
@@ -91,7 +93,8 @@ public class AgentScopeConfig {
     }
 
     /** 组装 Docker 沙箱文件系统规格（SESSION 隔离 + 本地快照）。 */
-    static DockerFilesystemSpec dockerFilesystemSpec(DevAgentProperties properties) {
+    static DockerFilesystemSpec dockerFilesystemSpec(
+            DevAgentProperties properties, ActiveSandboxRegistry registry) {
         DevAgentProperties.Sandbox config = properties.sandbox();
         WorkspaceSpec workspace = new WorkspaceSpec();
         workspace.setRoot(config.workspaceRoot());
@@ -99,6 +102,7 @@ public class AgentScopeConfig {
         Path snapshotPath = Path.of(properties.projectRoot()).resolve(config.snapshotRoot()).normalize();
 
         DockerFilesystemSpec filesystem = new DockerFilesystemSpec()
+                .client(new NewlineFlatteningDockerSandboxClient(registry))
                 .image(config.image())
                 .network(config.network())
                 .workspaceRoot(config.workspaceRoot())
@@ -110,6 +114,11 @@ public class AgentScopeConfig {
         filesystem.isolationScope(IsolationScope.SESSION);
         filesystem.workspaceProjectionRoots(sandboxWorkspaceProjectionRoots());
         return filesystem;
+    }
+
+    @Bean
+    ActiveSandboxRegistry activeSandboxRegistry() {
+        return new ActiveSandboxRegistry();
     }
 
     @Bean
@@ -200,7 +209,8 @@ public class AgentScopeConfig {
             AgentStateStore agentscopeAgentStateStore,
             AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry,
-            ObjectProvider<RiskReviewTool> riskReviewTools) throws IOException {
+            ObjectProvider<RiskReviewTool> riskReviewTools,
+            ActiveSandboxRegistry activeSandboxRegistry) throws IOException {
         return buildAgentscopeDevAgent(
                 agentscopeDeepSeekModel,
                 properties,
@@ -212,7 +222,8 @@ public class AgentScopeConfig {
                 agentscopeAgentStateStore,
                 agentExecutionLoggingMiddleware,
                 agentscopeMcpClientRegistry,
-                riskReviewTools.getIfAvailable());
+                riskReviewTools.getIfAvailable(),
+                activeSandboxRegistry);
     }
 
     HarnessAgent agentscopeDevAgent(
@@ -237,7 +248,8 @@ public class AgentScopeConfig {
                 agentscopeAgentStateStore,
                 agentExecutionLoggingMiddleware,
                 agentscopeMcpClientRegistry,
-                null);
+                null,
+                new ActiveSandboxRegistry());
     }
 
     HarnessAgent agentscopeDevAgent(
@@ -263,7 +275,8 @@ public class AgentScopeConfig {
                 agentscopeAgentStateStore,
                 agentExecutionLoggingMiddleware,
                 agentscopeMcpClientRegistry,
-                riskReviewTool);
+                riskReviewTool,
+                new ActiveSandboxRegistry());
     }
 
     private HarnessAgent buildAgentscopeDevAgent(
@@ -277,7 +290,8 @@ public class AgentScopeConfig {
             AgentStateStore agentscopeAgentStateStore,
             AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry,
-            RiskReviewTool riskReviewTool) throws IOException {
+            RiskReviewTool riskReviewTool,
+            ActiveSandboxRegistry activeSandboxRegistry) throws IOException {
         String systemPrompt = properties.systemPrompt()
                 .replace("{mcpRoot}", AgentscopeMcpClientRegistry.primaryMcpRootDisplay(properties));
         DevAgentProperties.Sandbox sandbox = properties.sandbox();
@@ -335,7 +349,7 @@ public class AgentScopeConfig {
             // Compaction 会在工具轮次之间读 workspace，但此时 Docker sandbox 已释放 call context，
             // 会抛 SandboxConfigurationException 并打断后续推理；沙箱演示先关 compaction。
             builder.stateStore(agentscopeAgentStateStore)
-                    .filesystem(dockerFilesystemSpec(properties))
+                    .filesystem(dockerFilesystemSpec(properties, activeSandboxRegistry))
                     .disableCompaction()
                     // Memory flush/maintenance 会在工具调用结束后异步访问 workspace，
                     // 此时 SandboxLifecycleMiddleware 已释放容器，导致 No active sandbox。
