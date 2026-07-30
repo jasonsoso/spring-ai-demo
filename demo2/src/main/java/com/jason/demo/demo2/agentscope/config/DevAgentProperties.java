@@ -20,6 +20,7 @@ public record DevAgentProperties(
         @NotBlank String workspaceRoot,
         @Valid Compaction compaction,
         @Valid Model model,
+        @Valid ModelFallback modelFallback,
         @Valid McpSettings mcp,
         @Valid Memory memory,
         @Valid Sandbox sandbox) {
@@ -39,6 +40,11 @@ public record DevAgentProperties(
             """;
 
     public DevAgentProperties {
+        if (modelFallback == null) {
+            modelFallback = new ModelFallback(
+                    new Model("", "https://api.moonshot.cn/v1", "kimi-k3"),
+                    2);
+        }
         if (mcp == null) {
             mcp = new McpSettings(false, List.of());
         }
@@ -70,6 +76,15 @@ public record DevAgentProperties(
             String apiKey,
             @NotBlank String baseUrl,
             @NotBlank String name) {
+    }
+
+    /**
+     * 主模型失败后的备用模型；apiKey 允许为空（未配置时仅重试主模型）。
+     * maxAttempts 表示单次调用该模型最多尝试次数（含首次）。
+     */
+    public record ModelFallback(
+            @Valid Model fallback,
+            @Min(1) int maxAttempts) {
     }
 
     public record McpSettings(

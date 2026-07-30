@@ -35,6 +35,7 @@ class PlanHostSyncServiceTest {
                 "workspace",
                 new DevAgentProperties.Compaction(6, 2, "请整理会话：{messages}"),
                 new DevAgentProperties.Model("sk-test", "https://api.deepseek.com", "deepseek-v4-pro"),
+                null,
                 new DevAgentProperties.McpSettings(false, java.util.List.of()),
                 null,
                 new DevAgentProperties.Sandbox(
@@ -95,6 +96,7 @@ class PlanHostSyncServiceTest {
                 "workspace",
                 new DevAgentProperties.Compaction(6, 2, "请整理会话：{messages}"),
                 new DevAgentProperties.Model("sk-test", "https://api.deepseek.com", "deepseek-v4-pro"),
+                null,
                 new DevAgentProperties.McpSettings(false, java.util.List.of()),
                 null,
                 null);

@@ -155,6 +155,35 @@ class DevAgentPropertiesBindingTest {
         ).run(ctx -> assertThat(ctx).hasFailed());
     }
 
+    @Test
+    void bindsModelFallback() {
+        runner.withPropertyValues(
+                "app.agentscope.dev-agent.model-fallback.max-attempts=3",
+                "app.agentscope.dev-agent.model-fallback.fallback.api-key=kimi-key",
+                "app.agentscope.dev-agent.model-fallback.fallback.base-url=https://api.moonshot.cn/v1",
+                "app.agentscope.dev-agent.model-fallback.fallback.name=kimi-k3"
+        ).run(ctx -> {
+            DevAgentProperties.ModelFallback fb =
+                    ctx.getBean(DevAgentProperties.class).modelFallback();
+            assertThat(fb.maxAttempts()).isEqualTo(3);
+            assertThat(fb.fallback().apiKey()).isEqualTo("kimi-key");
+            assertThat(fb.fallback().baseUrl()).isEqualTo("https://api.moonshot.cn/v1");
+            assertThat(fb.fallback().name()).isEqualTo("kimi-k3");
+        });
+    }
+
+    @Test
+    void modelFallbackDefaultsWhenAbsent() {
+        runner.run(ctx -> {
+            DevAgentProperties.ModelFallback fb =
+                    ctx.getBean(DevAgentProperties.class).modelFallback();
+            assertThat(fb.maxAttempts()).isEqualTo(2);
+            assertThat(fb.fallback().baseUrl()).isEqualTo("https://api.moonshot.cn/v1");
+            assertThat(fb.fallback().name()).isEqualTo("kimi-k3");
+            assertThat(fb.fallback().apiKey() == null || fb.fallback().apiKey().isBlank()).isTrue();
+        });
+    }
+
     @EnableConfigurationProperties(DevAgentProperties.class)
     static class TestConfig {
     }

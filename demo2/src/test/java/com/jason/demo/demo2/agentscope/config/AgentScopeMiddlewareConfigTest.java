@@ -91,6 +91,7 @@ class AgentScopeMiddlewareConfigTest {
                         "sk-test",
                         "https://api.deepseek.com",
                         "deepseek-v4-pro"),
+                null,
                 new DevAgentProperties.McpSettings(false, List.of()),
                 new DevAgentProperties.Memory(
                         true,
@@ -194,6 +195,7 @@ class AgentScopeMiddlewareConfigTest {
                         "sk-test",
                         "https://api.deepseek.com",
                         "deepseek-v4-pro"),
+                null,
                 new DevAgentProperties.McpSettings(false, List.of()),
                 null,
                 new DevAgentProperties.Sandbox(

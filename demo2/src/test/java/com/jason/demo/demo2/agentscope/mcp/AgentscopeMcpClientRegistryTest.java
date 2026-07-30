@@ -76,6 +76,7 @@ class AgentscopeMcpClientRegistryTest {
                 tempDir.toString(),
                 new DevAgentProperties.Compaction(6, 2, "请整理：{messages}"),
                 new DevAgentProperties.Model("sk", "https://api.deepseek.com", "deepseek-v4-pro"),
+                null,
                 new DevAgentProperties.McpSettings(enabled, clients),
                 null,
                 null);

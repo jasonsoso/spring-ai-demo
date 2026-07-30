@@ -80,6 +80,7 @@ class DevAgentServiceTest {
                 "workspace",
                 new DevAgentProperties.Compaction(6, 2, "请整理会话：{messages}"),
                 new DevAgentProperties.Model("sk-test", "https://api.deepseek.com", "deepseek-v4-pro"),
+                null,
                 new DevAgentProperties.McpSettings(false, java.util.List.of()),
                 null,
                 null);
@@ -216,6 +217,7 @@ class DevAgentServiceTest {
                         "workspace",
                         new DevAgentProperties.Compaction(6, 2, "请整理会话：{messages}"),
                         new DevAgentProperties.Model("  ", "https://api.deepseek.com", "deepseek-v4-pro"),
+                        null,
                         new DevAgentProperties.McpSettings(false, java.util.List.of()),
                         null,
                         null),
