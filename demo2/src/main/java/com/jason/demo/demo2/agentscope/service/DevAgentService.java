@@ -9,8 +9,10 @@ import com.jason.demo.demo2.agentscope.model.PendingToolCall;
 import com.jason.demo.demo2.agentscope.model.WorkspaceDiff;
 import com.jason.demo.demo2.agentscope.diff.WorkspaceDiffService;
 import com.jason.demo.demo2.agentscope.observability.AgentExecutionContext;
+import com.jason.demo.demo2.agentscope.plan.PlanHostSyncService;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.event.AgentEventType;
 import io.agentscope.core.event.AgentResultEvent;
 import io.agentscope.core.event.ConfirmResult;
 import io.agentscope.core.event.RequestStopEvent;
@@ -21,6 +23,7 @@ import io.agentscope.core.event.ToolResultEndEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.core.message.ToolCallState;
+import io.agentscope.core.message.ToolResultState;
 import io.agentscope.core.message.ToolUseBlock;
 import io.agentscope.core.state.AgentState;
 import io.agentscope.core.state.AgentStateStore;
@@ -47,6 +50,7 @@ public class DevAgentService {
     private final AgentStateStore agentStateStore;
     private final Tracer tracer;
     private final WorkspaceDiffService workspaceDiffService;
+    private final PlanHostSyncService planHostSyncService;
     /**
      * HarnessAgent 的 SandboxLifecycleMiddleware 持有共享的 currentAcquireResult，
      * 因此同一个 HarnessAgent 不能并发执行多个沙箱请求。
@@ -59,12 +63,14 @@ public class DevAgentService {
             DevAgentProperties properties,
             AgentStateStore agentStateStore,
             Tracer tracer,
-            WorkspaceDiffService workspaceDiffService) {
+            WorkspaceDiffService workspaceDiffService,
+            PlanHostSyncService planHostSyncService) {
         this.agentscopeDevAgent = agentscopeDevAgent;
         this.properties = properties;
         this.agentStateStore = agentStateStore;
         this.tracer = tracer;
         this.workspaceDiffService = workspaceDiffService;
+        this.planHostSyncService = planHostSyncService;
     }
 
     public DevAgentService(
@@ -72,7 +78,16 @@ public class DevAgentService {
             DevAgentProperties properties,
             AgentStateStore agentStateStore,
             Tracer tracer) {
-        this(agentscopeDevAgent, properties, agentStateStore, tracer, null);
+        this(agentscopeDevAgent, properties, agentStateStore, tracer, null, null);
+    }
+
+    public DevAgentService(
+            HarnessAgent agentscopeDevAgent,
+            DevAgentProperties properties,
+            AgentStateStore agentStateStore,
+            Tracer tracer,
+            WorkspaceDiffService workspaceDiffService) {
+        this(agentscopeDevAgent, properties, agentStateStore, tracer, workspaceDiffService, null);
     }
 
     public Flux<DevAgentEvent> ask(DevAgentRequest request) {
@@ -122,6 +137,7 @@ public class DevAgentService {
             captureBaseline(userId, sessionId);
             int beforeCount = contextMessageCount(userId, sessionId);
             Flux<DevAgentEvent> events = mapAgentEvents(
+                    userId,
                     sessionId,
                     agentscopeDevAgent.streamEvents(
                             request.message(), invocation.runtimeContext()));
@@ -159,6 +175,7 @@ public class DevAgentService {
                     .metadata(Map.of(Msg.METADATA_CONFIRM_RESULTS, confirmResults))
                     .build();
             Flux<DevAgentEvent> events = mapAgentEvents(
+                    userId,
                     sessionId,
                     agentscopeDevAgent.streamEvents(
                             resumeMessage, invocation.runtimeContext()));
@@ -193,13 +210,25 @@ public class DevAgentService {
     }
 
     private Flux<DevAgentEvent> mapAgentEvents(
-            String sessionId, Flux<AgentEvent> agentEvents) {
+            String userId, String sessionId, Flux<AgentEvent> agentEvents) {
         return agentEvents.handle((event, sink) -> {
+            maybeSyncPlanToHost(userId, sessionId, event);
             DevAgentEvent mapped = mapEvent(sessionId, event);
             if (mapped != null) {
                 sink.next(mapped);
             }
         });
+    }
+
+    private void maybeSyncPlanToHost(String userId, String sessionId, AgentEvent event) {
+        if (planHostSyncService == null || event.getType() != AgentEventType.TOOL_RESULT_END) {
+            return;
+        }
+        ToolResultEndEvent e = (ToolResultEndEvent) event;
+        if (!"plan_write".equals(e.getToolCallName()) || e.getState() != ToolResultState.SUCCESS) {
+            return;
+        }
+        planHostSyncService.syncAfterPlanWrite(userId, sessionId);
     }
 
     private Flux<DevAgentEvent> withRequestContext(
