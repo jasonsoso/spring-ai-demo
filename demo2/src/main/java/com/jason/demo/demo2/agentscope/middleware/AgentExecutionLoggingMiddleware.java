@@ -20,6 +20,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -140,13 +141,13 @@ public final class AgentExecutionLoggingMiddleware implements MiddlewareBase {
             AgentExecutionContext ids = AgentExecutionContext.from(context);
             long startedAt = System.nanoTime();
             AtomicReference<ChatUsage> completedUsage = new AtomicReference<>();
-            String model = modelName(input);
+            String configuredModel = modelName(input);
             log.info(
-                    "Model call started. requestId={}, traceId={}, spanId={}, model={}",
+                    "Model call started. requestId={}, traceId={}, spanId={}, configuredModel={}",
                     ids.requestId(),
                     ids.traceId(),
                     ids.spanId(),
-                    model);
+                    configuredModel);
             return Flux.defer(() -> next.apply(input))
                     .doOnNext(event -> {
                         if (event instanceof ModelCallEndEvent endEvent) {
@@ -155,34 +156,49 @@ public final class AgentExecutionLoggingMiddleware implements MiddlewareBase {
                     })
                     .doOnComplete(() -> {
                         ChatUsage usage = completedUsage.get();
+                        String actualModel = modelName(input);
                         log.info(
                                 "Model call completed. requestId={}, traceId={}, spanId={}, "
-                                        + "model={}, durationMs={}, inputTokens={}, "
-                                        + "outputTokens={}, state=SUCCESS",
+                                        + "configuredModel={}, actualModel={}, durationMs={}, "
+                                        + "inputTokens={}, outputTokens={}, state=SUCCESS",
                                 ids.requestId(),
                                 ids.traceId(),
                                 ids.spanId(),
-                                model,
+                                configuredModel,
+                                actualModel,
                                 elapsedMillis(startedAt),
                                 inputTokens(usage),
                                 outputTokens(usage));
+                        if (!Objects.equals(configuredModel, actualModel)) {
+                            log.info(
+                                    "Model fallback observed. requestId={}, configuredModel={}, "
+                                            + "actualModel={}",
+                                    ids.requestId(),
+                                    configuredModel,
+                                    actualModel);
+                        }
                     })
-                    .doOnError(error -> log.warn(
-                            "Model call failed. requestId={}, traceId={}, spanId={}, "
-                                    + "model={}, durationMs={}, errorType={}, state=ERROR",
-                            ids.requestId(),
-                            ids.traceId(),
-                            ids.spanId(),
-                            model,
-                            elapsedMillis(startedAt),
-                            error.getClass().getSimpleName()))
+                    .doOnError(error -> {
+                        String actualModel = modelName(input);
+                        log.warn(
+                                "Model call failed. requestId={}, traceId={}, spanId={}, "
+                                        + "configuredModel={}, actualModel={}, durationMs={}, "
+                                        + "errorType={}, state=ERROR",
+                                ids.requestId(),
+                                ids.traceId(),
+                                ids.spanId(),
+                                configuredModel,
+                                actualModel,
+                                elapsedMillis(startedAt),
+                                error.getClass().getSimpleName());
+                    })
                     .doOnCancel(() -> log.warn(
                             "Model call cancelled. requestId={}, traceId={}, spanId={}, "
-                                    + "model={}, durationMs={}, state=CANCELLED",
+                                    + "configuredModel={}, durationMs={}, state=CANCELLED",
                             ids.requestId(),
                             ids.traceId(),
                             ids.spanId(),
-                            model,
+                            configuredModel,
                             elapsedMillis(startedAt)));
         });
     }

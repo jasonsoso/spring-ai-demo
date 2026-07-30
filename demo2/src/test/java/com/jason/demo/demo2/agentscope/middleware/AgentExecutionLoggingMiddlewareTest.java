@@ -103,9 +103,26 @@ class AgentExecutionLoggingMiddlewareTest {
         middleware.onModelCall(agent, runtime(), input, ignored -> Flux.empty()).blockLast();
 
         assertThat(logs())
-                .contains("model=test-model")
+                .contains("configuredModel=test-model")
+                .contains("actualModel=test-model")
                 .contains("inputTokens=-")
                 .contains("outputTokens=-");
+    }
+
+    @Test
+    void onModelCall_logsConfiguredAndActualModel() {
+        Model model = mock(Model.class);
+        when(model.getModelName())
+                .thenReturn("deepseek-v4-pro")
+                .thenReturn("kimi-k3");
+        ModelCallInput input = new ModelCallInput(List.of(), List.of(), null, model);
+
+        middleware.onModelCall(agent, runtime(), input, ignored -> Flux.empty()).blockLast();
+
+        assertThat(logs())
+                .contains("configuredModel=deepseek-v4-pro")
+                .contains("actualModel=kimi-k3")
+                .contains("Model fallback observed.");
     }
 
     @Test
