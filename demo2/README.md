@@ -78,7 +78,7 @@
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
-| **AgentScope Harness** | Workspace + **PostgresDistributedStore** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** | DeepSeek + 可选 PostgreSQL；MCP 需 Node/npx |
+| **AgentScope Harness** | Workspace + **PostgresDistributedStore** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** + **多模型容错（DeepSeek→Kimi）** | DeepSeek + 可选 Kimi/Moonshot + 可选 PostgreSQL；MCP 需 Node/npx |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -1169,7 +1169,27 @@ flowchart LR
 
 ### AgentScope HarnessAgent（`/agentscope/dev-agent`）
 
-HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** + **可选 Docker Sandbox（默认关）**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
+HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** + **可选 Docker Sandbox（默认关）** + **多模型容错（DeepSeek → Kimi）**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
+
+**多模型容错（DeepSeek → Kimi）：**
+
+- 实现：`FailoverAgentscopeModel` 包装共享 `agentscopeDeepSeekModel`（Harness / SubAgent / A2A Risk Review / Memory Flush 同受益）
+- 主模型：`app.agentscope.dev-agent.model.*`（可用 `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL_NAME` 覆盖）
+- 备用：`app.agentscope.dev-agent.model-fallback.*`；密钥 `KIMI_API_KEY` 或 `MOONSHOT_API_KEY`；默认模型 `kimi-k3`
+- `max-attempts` 含首次调用（默认 `2`）；仅在首个响应 chunk 前失败才重试/切备
+- 未配置 Kimi 密钥时启动 WARN，仅重试主模型
+- 日志：`configuredModel` / `actualModel`；切备时有 `switching to fallback` 与 `Model fallback observed`
+
+```bash
+# 手工验证 fallback（DeepSeek 指到不可达端口；需真实 KIMI_API_KEY）
+export DEEPSEEK_BASE_URL=http://127.0.0.1:65535
+export KIMI_API_KEY=<your-kimi-api-key>
+# 启动应用后
+curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"fallback-user-018\",\"sessionId\":\"fallback-session-018\",\"message\":\"请用一句话说明为什么发布前要先跑测试。\"}"
+# 期望：SSE 仍有回答；日志含 switching to fallback 与 actualModel=kimi-k3
+```
 
 **Toolkit MCP（与「🔌 MCP Client 聊天 / 瑞幸 MCP」无关）：**
 
