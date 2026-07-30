@@ -5,7 +5,7 @@
 **状态**：已确认，待实现  
 **前置能力**：AgentScope Toolkit、AgentEvent SSE、Permission HITL、PostgreSQL AgentStateStore、Workspace、Docker Sandbox（RetryPolicy 样例）、Compaction / Middleware / Memory（非沙箱路径）  
 **参考文章**：[17. AgentScope Java 2.0 Plan Mode 实战：Agent 改代码前，先把方案交给你确认](https://mp.weixin.qq.com/s?__biz=MzcwMjA0Njk3Nw==&mid=2247484465&idx=1&sn=7a5371648c73ad92d08d42c6d6756a3a)  
-**相关规范**：[2026-07-27 Sandbox](./2026-07-27-agentscope-sandbox-design.md)；[2026-07-22 Permission HITL](./2026-07-22-agentscope-permission-hitl-design.md)
+**相关规范**：[2026-07-27 Sandbox](./2026-07-27-agentscope-sandbox-design.md)；[2026-07-22 Permission HITL](./2026-07-22-agentscope-permission-hitl-design.md)；[2026-07-30 计划宿主同步](./2026-07-30-agentscope-plan-host-sync-design.md)
 
 ---
 
@@ -121,7 +121,8 @@ Plan Mode 与 Permission 都会停任务等确认，但对象不同：前者是�
 ### 5.1 持久化
 
 - Plan Mode 会话阶段状态：现有 `AgentStateStore`（沙箱开时为 `PathSafeAgentStateStore`）。
-- 计划正文：沙箱工作区内 `plans/PLAN.md`；通过 `workspaceProjectionRoots` 与 SESSION 快照在多次 `/confirm` 间保留。
+- 计划正文：**权威副本**在沙箱工作区 `plans/PLAN.md`；通过 `workspaceProjectionRoots` 与 SESSION 快照在多次 `/confirm` 间保留。
+- 宿主镜像：`plan_write` 成功后自动覆盖写入宿主 `workspace/plans/PLAN.md`（只读查看用，不进 Diff 回写）；详见 [计划宿主同步](./2026-07-30-agentscope-plan-host-sync-design.md)。
 - 同一 `userId` + `sessionId` 串起 ask 与多次 confirm；换会话不继承未完成规划。
 
 ### 5.2 确认语义
@@ -159,7 +160,7 @@ Plan Mode 与 Permission 都会停任务等确认，但对象不同：前者是�
 
 前置：`sandbox.enabled=true`、PostgreSQL、沙箱镜像已构建。
 
-1. Tab 示例 15 或等价 curl：`ask` → 出现针对 `plan_exit` 的 `REQUIRE_USER_CONFIRM`，此时 `RetryPolicy` 源码未改。
+1. Tab 示例 15 或等价 curl：`ask` → 出现针对 `plan_exit` 的 `REQUIRE_USER_CONFIRM`，此时 `RetryPolicy` 源码未改；且宿主 `workspace/plans/PLAN.md` 已有本次计划内容。
 2. 批准 → 出现 `edit_file` 确认。
 3. 批准 → 出现 `execute`（如 `mvn test`）确认。
 4. 批准 → 测试通过；回复可说明计划文件与改动摘要。

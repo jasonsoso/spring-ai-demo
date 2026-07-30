@@ -1301,7 +1301,7 @@ Spec / Plan：`docs/superpowers/specs/2026-07-27-agentscope-sandbox-design.md`�
 
 **Plan Mode（改代码前先确认方案）：**
 
-Plan Mode 管「只调查 vs 可执行」；Permission 管单次危险操作。`enablePlanMode()` + `enableTaskList()` 始终开启；完整流程提示仅在 `sandbox.enabled=true` 时注入。计划写入工作区 `plans/PLAN.md`；`plan_exit` / `edit_file` / `execute` 均走 `/confirm` HITL。批准方案不等于放行后续写文件或跑命令。
+Plan Mode 管「只调查 vs 可执行」；Permission 管单次危险操作。`enablePlanMode()` + `enableTaskList()` 始终开启；完整流程提示仅在 `sandbox.enabled=true` 时注入。计划写入工作区 `plans/PLAN.md`；`plan_write` 成功后会自动覆盖同步到宿主 `workspace/plans/PLAN.md`（不经 HITL；权威副本仍在沙箱）。可在确认 `plan_exit` 前用编辑器打开该文件查看方案。`plan_exit` / `edit_file` / `execute` 均走 `/confirm` HITL。批准方案不等于放行后续写文件或跑命令。
 
 > **行为变化**：沙箱下 `execute` 不再自动 ALLOW。Tab 示例 13（Sandbox 修 RetryPolicy）也会对 `edit_file` / `execute` 弹确认卡片。
 
@@ -1318,9 +1318,9 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/confirm" \
   -d "{\"userId\":\"plan-user-017\",\"sessionId\":\"plan-session-017\",\"approved\":true}"
 ```
 
-成功标准：第一次确认前源码未改；三次确认后 `mvn test` 在容器内通过。
+成功标准：第一次确认（`plan_exit`）前源码未改，且宿主 `workspace/plans/PLAN.md` 已有本次计划内容；三次确认后 `mvn test` 在容器内通过。
 
-Spec / Plan：`docs/superpowers/specs/2026-07-29-agentscope-plan-mode-design.md`、`docs/superpowers/plans/2026-07-29-agentscope-plan-mode.md`
+Spec / Plan：`docs/superpowers/specs/2026-07-29-agentscope-plan-mode-design.md`、`docs/superpowers/plans/2026-07-29-agentscope-plan-mode.md`；宿主同步：`docs/superpowers/specs/2026-07-30-agentscope-plan-host-sync-design.md`、`docs/superpowers/plans/2026-07-30-agentscope-plan-host-sync.md`
 
 **Middleware 请求关联日志：**
 
