@@ -2,6 +2,7 @@ package com.jason.demo.demo2.agentscope.config;
 
 import com.jason.demo.demo2.agentscope.mcp.AgentscopeMcpClientRegistry;
 import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
+import com.jason.demo.demo2.agentscope.model.FailoverAgentscopeModel;
 import com.jason.demo.demo2.agentscope.sandbox.ActiveSandboxRegistry;
 import com.jason.demo.demo2.agentscope.sandbox.NewlineFlatteningDockerSandboxClient;
 import com.jason.demo.demo2.agentscope.state.PathSafeAgentStateStore;
@@ -10,6 +11,8 @@ import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
 import com.jason.demo.demo2.agentscopea2a.client.RiskReviewTool;
 import com.jason.demo.demo2.config.LoggingAgentscopeModel;
 import io.agentscope.core.model.Model;
+import io.agentscope.core.model.transport.HttpTransport;
+import io.agentscope.core.model.transport.OkHttpTransport;
 import io.agentscope.core.permission.PermissionBehavior;
 import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionMode;
@@ -26,6 +29,8 @@ import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import io.agentscope.harness.agent.sandbox.WorkspaceSpec;
 import io.agentscope.harness.agent.sandbox.impl.docker.DockerFilesystemSpec;
 import io.agentscope.harness.agent.sandbox.snapshot.LocalSnapshotSpec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -40,6 +45,8 @@ import java.util.List;
  */
 @Configuration
 public class AgentScopeConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentScopeConfig.class);
 
     /** 只读项目信息工具，默认放行 */
     private static final List<String> READ_ONLY_TOOL_NAMES =
@@ -131,19 +138,48 @@ public class AgentScopeConfig {
         return toMemoryConfig(properties.memory());
     }
 
-    /** DeepSeek 对话模型，外包一层请求/响应日志 */
+    /** DeepSeek / Kimi 共用 HTTP 客户端，保证同模型重试真正发出新请求 */
+    @Bean(destroyMethod = "close")
+    HttpTransport agentscopeModelHttpTransport() {
+        return new OkHttpTransport();
+    }
+
+    /** DeepSeek 主模型 + 可选 Kimi 备用，外包 Failover 与请求/响应日志 */
     @Bean
     @Qualifier("agentscopeDeepSeekModel")
-    Model agentscopeDeepSeekModel(DevAgentProperties properties) {
-        DevAgentProperties.Model model = properties.model();
-        Model openAi = OpenAIChatModel.builder()
-                .apiKey(model.apiKey() == null ? "" : model.apiKey())
-                .baseUrl(model.baseUrl())
-                .modelName(model.name())
+    Model agentscopeDeepSeekModel(
+            DevAgentProperties properties,
+            HttpTransport agentscopeModelHttpTransport) {
+        DevAgentProperties.Model primaryCfg = properties.model();
+        Model primary = OpenAIChatModel.builder()
+                .apiKey(primaryCfg.apiKey() == null ? "" : primaryCfg.apiKey())
+                .baseUrl(primaryCfg.baseUrl())
+                .modelName(primaryCfg.name())
                 .formatter(new DeepSeekFormatter())
+                .httpTransport(agentscopeModelHttpTransport)
                 .stream(true)
                 .build();
-        return new LoggingAgentscopeModel(openAi, "agentscope-deepseek");
+
+        DevAgentProperties.ModelFallback fallbackCfg = properties.modelFallback();
+        Model fallback = null;
+        String fallbackKey = fallbackCfg.fallback().apiKey();
+        if (fallbackKey != null && !fallbackKey.isBlank()) {
+            DevAgentProperties.Model f = fallbackCfg.fallback();
+            fallback = OpenAIChatModel.builder()
+                    .apiKey(f.apiKey())
+                    .baseUrl(f.baseUrl())
+                    .modelName(f.name())
+                    .httpTransport(agentscopeModelHttpTransport)
+                    .stream(true)
+                    .build();
+        } else {
+            log.warn(
+                    "AgentScope model fallback disabled: set KIMI_API_KEY or MOONSHOT_API_KEY to enable");
+        }
+
+        Model failover =
+                new FailoverAgentscopeModel(primary, fallback, fallbackCfg.maxAttempts());
+        return new LoggingAgentscopeModel(failover, "agentscope-deepseek");
     }
 
     /** 读取项目结构信息（pom、源码目录、主类等） */
