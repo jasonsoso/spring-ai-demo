@@ -268,60 +268,7 @@ public class AgentScopeConfig {
                 activeSandboxRegistry);
     }
 
-    HarnessAgent agentscopeDevAgent(
-            @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
-            DevAgentProperties properties,
-            CompactionConfig agentscopeCompactionConfig,
-            MemoryConfig agentscopeMemoryConfig,
-            ProjectInfoTools projectInfoTools,
-            FileChangeTool fileChangeTool,
-            AgentscopeDistributedBackend agentscopeDistributedBackend,
-            AgentStateStore agentscopeAgentStateStore,
-            AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
-            AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) throws IOException {
-        return buildAgentscopeDevAgent(
-                agentscopeDeepSeekModel,
-                null,
-                properties,
-                agentscopeCompactionConfig,
-                agentscopeMemoryConfig,
-                projectInfoTools,
-                fileChangeTool,
-                agentscopeDistributedBackend,
-                agentscopeAgentStateStore,
-                agentExecutionLoggingMiddleware,
-                agentscopeMcpClientRegistry,
-                null,
-                new ActiveSandboxRegistry());
-    }
 
-    HarnessAgent agentscopeDevAgent(
-            @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
-            DevAgentProperties properties,
-            CompactionConfig agentscopeCompactionConfig,
-            MemoryConfig agentscopeMemoryConfig,
-            ProjectInfoTools projectInfoTools,
-            FileChangeTool fileChangeTool,
-            AgentscopeDistributedBackend agentscopeDistributedBackend,
-            AgentStateStore agentscopeAgentStateStore,
-            AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
-            AgentscopeMcpClientRegistry agentscopeMcpClientRegistry,
-            RiskReviewTool riskReviewTool) throws IOException {
-        return buildAgentscopeDevAgent(
-                agentscopeDeepSeekModel,
-                null,
-                properties,
-                agentscopeCompactionConfig,
-                agentscopeMemoryConfig,
-                projectInfoTools,
-                fileChangeTool,
-                agentscopeDistributedBackend,
-                agentscopeAgentStateStore,
-                agentExecutionLoggingMiddleware,
-                agentscopeMcpClientRegistry,
-                riskReviewTool,
-                new ActiveSandboxRegistry());
-    }
 
     private HarnessAgent buildAgentscopeDevAgent(
             Model agentscopeDeepSeekModel,
