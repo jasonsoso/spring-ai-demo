@@ -1264,14 +1264,15 @@ docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
 **分布式后端（`PostgresDistributedStore` / 共享 Workspace）：**
 
 - 开关：`app.agentscope.distributed.enabled`（本地默认 `true`；测试 `false`）
-  - `true`：探测 `app.agentscope.datasource.*`；成功则 `PostgresDistributedStore` + `RemoteFilesystemSpec`（`IsolationScope.USER`）；失败 WARN 并降级
+  - `true`：探测 `app.agentscope.datasource.*`；成功则 `PostgresDistributedStore`；失败 WARN 并降级
   - `false`：不探测；内存 `AgentStateStore` + 本地 `workspace-root`
-- 成功路径用 `.distributedStore(...)`，不再单独装配 `PostgresAgentStateStore`
+- 无沙箱成功路径：`.distributedStore(...)` + `RemoteFilesystemSpec`（`IsolationScope.USER`）
+- 沙箱 + remote：`.distributedStore(...)` + `PathSafe(stateStore)` + Docker（无 LocalSnapshot）；Harness 注入 `PostgresSnapshotSpec` / advisory lock。Factory 钉住时须一并带上 snapshot/guard，否则 builder 默认为 Noop
 - `DevAgentService` 与 `HarnessAgent` 共用同一 `AgentStateStore` 实例（HITL confirm 仍可用）
 - 启用远程 Workspace **不会**放开内置 filesystem / shell 工具（**除非**另开 `sandbox.enabled=true`，见下方 Docker Sandbox）
 - 本地已有 `workspace/{userId}/MEMORY.md` 切到远程后不会自动迁移（远程优先；需人工拷贝或接受空起点）
 - AgentScope **2.0.0** 的 `PostgresBaseStore` UPSERT 有笔误（`version + 1,,`）；Factory 启动时反射修正，升级 BOM 后可删补丁
-- Spec：`docs/superpowers/specs/2026-07-25-agentscope-postgres-distributed-workspace-design.md`
+- Spec：`docs/superpowers/specs/2026-07-25-agentscope-postgres-distributed-workspace-design.md`；沙箱接力：`docs/superpowers/specs/2026-07-31-agentscope-distributed-sandbox-handoff-design.md`
 
 **Docker Sandbox（可选，默认关）：**
 
@@ -1300,7 +1301,29 @@ docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
 app.agentscope.dev-agent.sandbox.enabled=true
 ```
 
-与 `distributed`：沙箱开启时 **不** 使用 `RemoteFilesystemSpec`（Workspace 走 Docker 投影）；会话状态仍可用 PG，经 `PathSafeAgentStateStore` 编码含 `/` 的 sandbox sessionId。
+与 `distributed`：沙箱开启时 **不** 使用 `RemoteFilesystemSpec`（Workspace 走 Docker 投影）。
+`distributed.enabled=true` 且 PG 可达时：会话经 `PathSafeAgentStateStore` + PG；沙箱 `/workspace` 快照走 **`PostgresSnapshotSpec`（BYTEA）** + advisory lock，**不**写本机 `snapshot-root`。
+PG 不可达或 `distributed=false` 时：降级为本机 `LocalSnapshotSpec`（`snapshot-root`）。
+
+**跨实例 HITL 接力**（`sandbox=true` + `distributed=true` + 同一 PG）：实例 A 在 `plan_exit` / `REQUIRE_USER_CONFIRM` 后可退出；实例 B 用同一 `userId` + `sessionId` 调 `/confirm`，从 PG 恢复 AgentState 与沙箱 tar 后继续。接力点是 HITL 断点，**不**保证模型调用或 `mvn test` 中途 crash 自动续跑。Workspace Diff / apply-diff 本版仍读本机 tar，PG 快照会话下 Diff 可能为空。
+
+```bash
+# 实例 A（8080）跑到 plan_exit 后停掉；实例 B（8082）接手 confirm
+curl -sN -X POST "http://localhost:8080/agentscope/dev-agent/ask" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"distributed-user-019\",\"sessionId\":\"019e872f-7339-7831-961e-d50c5928d8b8\",\"message\":\"请先调查 workspace/project 中 RetryPolicy 第一次重试延迟错误，整理修复计划并等我确认后再修改。\"}"
+
+# 另开终端：mvn -f demo2/pom.xml spring-boot:run -Dspring-boot.run.arguments=--server.port=8082
+# 关闭实例 A 后：
+curl -sN -X POST "http://localhost:8082/agentscope/dev-agent/confirm" \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"distributed-user-019\",\"sessionId\":\"019e872f-7339-7831-961e-d50c5928d8b8\",\"approved\":true}"
+# 每次 REQUIRE_USER_CONFIRM 重复同一 confirm（plan_exit → edit_file → execute）
+```
+
+可选核对 PG：`agentscope.agentscope_sessions`（状态）、`agentscope_snapshots`（tar）。
+
+Spec / Plan：`docs/superpowers/specs/2026-07-31-agentscope-distributed-sandbox-handoff-design.md`、`docs/superpowers/plans/2026-07-31-agentscope-distributed-sandbox-handoff.md`
 
 演示（同一 `userId` + `sessionId`；端口以本机为准，下例 `8081`）：
 

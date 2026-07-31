@@ -98,14 +98,20 @@ public class AgentScopeConfig {
                 .build();
     }
 
-    /** 组装 Docker 沙箱文件系统规格（SESSION 隔离 + 本地快照）。 */
+    /**
+     * 组装 Docker 沙箱文件系统规格（SESSION 隔离）。
+     *
+     * @param useLocalSnapshot {@code true} 挂本机 {@link LocalSnapshotSpec}（distributed 降级）；
+     *                         {@code false} 不设 override，由 Harness 从 {@code DistributedStore}
+     *                         注入 {@code PostgresSnapshotSpec}
+     */
     static DockerFilesystemSpec dockerFilesystemSpec(
-            DevAgentProperties properties, ActiveSandboxRegistry registry) {
+            DevAgentProperties properties,
+            ActiveSandboxRegistry registry,
+            boolean useLocalSnapshot) {
         DevAgentProperties.Sandbox config = properties.sandbox();
         WorkspaceSpec workspace = new WorkspaceSpec();
         workspace.setRoot(config.workspaceRoot());
-
-        Path snapshotPath = Path.of(properties.projectRoot()).resolve(config.snapshotRoot()).normalize();
 
         DockerFilesystemSpec filesystem = new DockerFilesystemSpec()
                 .client(new NewlineFlatteningDockerSandboxClient(registry))
@@ -114,8 +120,14 @@ public class AgentScopeConfig {
                 .workspaceRoot(config.workspaceRoot())
                 .memorySizeBytes(config.memorySizeBytes())
                 .cpuCount(config.cpuCount())
-                .snapshotSpec(new LocalSnapshotSpec(snapshotPath))
                 .workspaceSpec(workspace);
+
+        if (useLocalSnapshot) {
+            Path snapshotPath = Path.of(properties.projectRoot())
+                    .resolve(config.snapshotRoot())
+                    .normalize();
+            filesystem.snapshotSpec(new LocalSnapshotSpec(snapshotPath));
+        }
 
         filesystem.isolationScope(IsolationScope.SESSION);
         filesystem.workspaceProjectionRoots(sandboxWorkspaceProjectionRoots());
@@ -344,8 +356,11 @@ public class AgentScopeConfig {
         if (sandbox.enabled()) {
             // Compaction 会在工具轮次之间读 workspace，但此时 Docker sandbox 已释放 call context，
             // 会抛 SandboxConfigurationException 并打断后续推理；沙箱演示先关 compaction。
+            boolean useLocalSnapshot =
+                    !(agentscopeDistributedBackend instanceof AgentscopeDistributedBackend.Remote);
             builder.stateStore(agentscopeAgentStateStore)
-                    .filesystem(dockerFilesystemSpec(properties, activeSandboxRegistry))
+                    .filesystem(dockerFilesystemSpec(
+                            properties, activeSandboxRegistry, useLocalSnapshot))
                     .disableCompaction()
                     // Memory flush/maintenance 会在工具调用结束后异步访问 workspace，
                     // 此时 SandboxLifecycleMiddleware 已释放容器，导致 No active sandbox。
@@ -354,6 +369,12 @@ public class AgentScopeConfig {
                     // WorkspaceContextMiddleware 同样会在每轮推理重读 workspace；
                     // 沙箱生命周期只覆盖工具调用，避免在容器释放后访问文件系统。
                     .disableWorkspaceContext();
+            // PathSafe stateStore 与 distributedStore 并存：PathSafe 仅编码含 / 的 sessionId，
+            // 底层仍是钉住的同一 PG agentStateStore；Harness 在无 snapshot override 时注入
+            // distributedStore.sandboxSnapshotSpec() / sandboxExecutionGuard()。
+            if (agentscopeDistributedBackend instanceof AgentscopeDistributedBackend.Remote remote) {
+                builder.distributedStore(remote.distributedStore());
+            }
         } else {
             builder.compaction(agentscopeCompactionConfig)
                     .disableFilesystemTools()

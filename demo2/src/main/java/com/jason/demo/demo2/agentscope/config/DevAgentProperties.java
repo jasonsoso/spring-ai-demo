@@ -156,9 +156,9 @@ public record DevAgentProperties(
                     throw new IllegalArgumentException(
                             "sandbox.workspace-root must not be blank when enabled");
                 }
+                // Local 降级才用本机快照目录；Remote（PostgresSnapshot）忽略此字段。
                 if (snapshotRoot == null || snapshotRoot.isBlank()) {
-                    throw new IllegalArgumentException(
-                            "sandbox.snapshot-root must not be blank when enabled");
+                    snapshotRoot = ".agentscope/sandbox-snapshots";
                 }
                 if (memorySizeBytes <= 0) {
                     throw new IllegalArgumentException(

@@ -156,6 +156,19 @@ class DevAgentPropertiesBindingTest {
     }
 
     @Test
+    void sandboxEnabled_blankSnapshotRoot_fallsBackToDefault() {
+        runner.withPropertyValues(
+                "app.agentscope.dev-agent.sandbox.enabled=true",
+                "app.agentscope.dev-agent.sandbox.snapshot-root="
+        ).run(ctx -> {
+            assertThat(ctx).hasNotFailed();
+            DevAgentProperties.Sandbox sandbox = ctx.getBean(DevAgentProperties.class).sandbox();
+            assertThat(sandbox.enabled()).isTrue();
+            assertThat(sandbox.snapshotRoot()).isEqualTo(".agentscope/sandbox-snapshots");
+        });
+    }
+
+    @Test
     void bindsModelFallback() {
         runner.withPropertyValues(
                 "app.agentscope.dev-agent.model-fallback.max-attempts=3",

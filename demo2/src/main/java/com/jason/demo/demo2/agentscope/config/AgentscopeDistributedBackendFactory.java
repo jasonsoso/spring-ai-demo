@@ -46,12 +46,15 @@ public final class AgentscopeDistributedBackendFactory {
         HikariDataSource dataSource = new HikariDataSource(config);
         try (Connection ignored = dataSource.getConnection()) {
             PostgresDistributedStore created = PostgresDistributedStore.create(dataSource);
-            // Pin instances: PostgresDistributedStore.agentStateStore()/baseStore() create new objects each call.
+            // Pin instances: PostgresDistributedStore.agentStateStore()/baseStore()/snapshot/guard
+            // create new objects each call — builder must keep snapshot+guard or they become Noop.
             var stateStore = created.agentStateStore();
             BaseStore baseStore = patchPostgresBaseStoreUpsertSql(created.baseStore());
             DistributedStore pinned = DistributedStore.builder()
                     .agentStateStore(stateStore)
                     .baseStore(baseStore)
+                    .sandboxSnapshotSpec(created.sandboxSnapshotSpec())
+                    .sandboxExecutionGuard(created.sandboxExecutionGuard())
                     .build();
             log.info("AgentScope distributed=postgres url={}", dsProps.url());
             return new AgentscopeDistributedBackend.Remote(pinned, stateStore);
