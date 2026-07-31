@@ -2,7 +2,6 @@ package com.jason.demo.demo2.agentscope.config;
 
 import com.jason.demo.demo2.agentscope.mcp.AgentscopeMcpClientRegistry;
 import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
-import com.jason.demo.demo2.agentscope.model.FailoverAgentscopeModel;
 import com.jason.demo.demo2.agentscope.sandbox.ActiveSandboxRegistry;
 import com.jason.demo.demo2.agentscope.sandbox.NewlineFlatteningDockerSandboxClient;
 import com.jason.demo.demo2.agentscope.state.PathSafeAgentStateStore;
@@ -144,7 +143,7 @@ public class AgentScopeConfig {
         return new OkHttpTransport();
     }
 
-    /** DeepSeek 主模型 + 可选 Kimi 备用，外包 Failover 与请求/响应日志 */
+    /** DeepSeek 对话模型，外包一层请求/响应日志 */
     @Bean
     @Qualifier("agentscopeDeepSeekModel")
     Model agentscopeDeepSeekModel(
@@ -159,27 +158,32 @@ public class AgentScopeConfig {
                 .httpTransport(agentscopeModelHttpTransport)
                 .stream(true)
                 .build();
+        return new LoggingAgentscopeModel(primary, "agentscope-deepseek");
+    }
 
-        DevAgentProperties.ModelFallback fallbackCfg = properties.modelFallback();
-        Model fallback = null;
-        String fallbackKey = fallbackCfg.fallback().apiKey();
-        if (fallbackKey != null && !fallbackKey.isBlank()) {
-            DevAgentProperties.Model f = fallbackCfg.fallback();
-            fallback = OpenAIChatModel.builder()
-                    .apiKey(f.apiKey())
-                    .baseUrl(f.baseUrl())
-                    .modelName(f.name())
-                    .httpTransport(agentscopeModelHttpTransport)
-                    .stream(true)
-                    .build();
-        } else {
+    /**
+     * Kimi 备用模型。apiKey 为空时返回 null（不注册 bean），启动时 warn。
+     */
+    @Bean
+    @Qualifier("agentscopeKimiFallbackModel")
+    Model agentscopeKimiFallbackModel(
+            DevAgentProperties properties,
+            HttpTransport agentscopeModelHttpTransport) {
+        DevAgentProperties.Model f = properties.modelFallback().fallback();
+        String key = f.apiKey();
+        if (key == null || key.isBlank()) {
             log.warn(
                     "AgentScope model fallback disabled: set KIMI_API_KEY or MOONSHOT_API_KEY to enable");
+            return null;
         }
-
-        Model failover =
-                new FailoverAgentscopeModel(primary, fallback, fallbackCfg.maxAttempts());
-        return new LoggingAgentscopeModel(failover, "agentscope-deepseek");
+        Model kimi = OpenAIChatModel.builder()
+                .apiKey(key)
+                .baseUrl(f.baseUrl())
+                .modelName(f.name())
+                .httpTransport(agentscopeModelHttpTransport)
+                .stream(true)
+                .build();
+        return new LoggingAgentscopeModel(kimi, "agentscope-kimi");
     }
 
     /** 读取项目结构信息（pom、源码目录、主类等） */
@@ -236,6 +240,7 @@ public class AgentScopeConfig {
     @Bean
     HarnessAgent agentscopeDevAgent(
             @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
+            @Qualifier("agentscopeKimiFallbackModel") ObjectProvider<Model> agentscopeKimiFallbackModel,
             DevAgentProperties properties,
             CompactionConfig agentscopeCompactionConfig,
             MemoryConfig agentscopeMemoryConfig,
@@ -249,6 +254,7 @@ public class AgentScopeConfig {
             ActiveSandboxRegistry activeSandboxRegistry) throws IOException {
         return buildAgentscopeDevAgent(
                 agentscopeDeepSeekModel,
+                agentscopeKimiFallbackModel.getIfAvailable(),
                 properties,
                 agentscopeCompactionConfig,
                 agentscopeMemoryConfig,
@@ -275,6 +281,7 @@ public class AgentScopeConfig {
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry) throws IOException {
         return buildAgentscopeDevAgent(
                 agentscopeDeepSeekModel,
+                null,
                 properties,
                 agentscopeCompactionConfig,
                 agentscopeMemoryConfig,
@@ -302,6 +309,7 @@ public class AgentScopeConfig {
             RiskReviewTool riskReviewTool) throws IOException {
         return buildAgentscopeDevAgent(
                 agentscopeDeepSeekModel,
+                null,
                 properties,
                 agentscopeCompactionConfig,
                 agentscopeMemoryConfig,
@@ -317,6 +325,7 @@ public class AgentScopeConfig {
 
     private HarnessAgent buildAgentscopeDevAgent(
             Model agentscopeDeepSeekModel,
+            Model kimiFallbackOrNull,
             DevAgentProperties properties,
             CompactionConfig agentscopeCompactionConfig,
             MemoryConfig agentscopeMemoryConfig,
@@ -370,6 +379,7 @@ public class AgentScopeConfig {
                 .name(properties.name())
                 .sysPrompt(systemPrompt)
                 .model(agentscopeDeepSeekModel)
+                .maxRetries(properties.modelFallback().maxAttempts())
                 .toolkit(toolkit)
                 .workspace(Path.of(properties.workspaceRoot()))
                 .permissionContext(permissionContext(properties, agentscopeMcpClientRegistry))
@@ -380,6 +390,9 @@ public class AgentScopeConfig {
                 .disableToolsConfig()
                 .enablePlanMode()
                 .enableTaskList();
+        if (kimiFallbackOrNull != null) {
+            builder.fallbackModel(kimiFallbackOrNull);
+        }
 
         if (sandbox.enabled()) {
             // Compaction 会在工具轮次之间读 workspace，但此时 Docker sandbox 已释放 call context，
