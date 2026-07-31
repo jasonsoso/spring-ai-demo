@@ -78,7 +78,7 @@
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
-| **AgentScope Harness** | Workspace + **PostgresDistributedStore** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** + **多模型容错（DeepSeek→Kimi）** | DeepSeek + 可选 Kimi/Moonshot + 可选 PostgreSQL；MCP 需 Node/npx |
+| **AgentScope Harness** | Workspace + **PostgresDistributedStore** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** + **多模型容错（HarnessAgent fallbackModel）** | DeepSeek + 可选 Kimi/Moonshot + 可选 PostgreSQL；MCP 需 Node/npx |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -1173,12 +1173,12 @@ HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL
 
 **多模型容错（DeepSeek → Kimi）：**
 
-- 实现：`FailoverAgentscopeModel` 包装共享 `agentscopeDeepSeekModel`（Harness / SubAgent / A2A Risk Review / Memory Flush 同受益）
-- 主模型：`app.agentscope.dev-agent.model.*`（可用 `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL_NAME` 覆盖）
-- 备用：`app.agentscope.dev-agent.model-fallback.*`；密钥 `KIMI_API_KEY` 或 `MOONSHOT_API_KEY`；默认模型 `kimi-k3`
-- `max-attempts` 含首次调用（默认 `2`）；仅在首个响应 chunk 前失败才重试/切备
-- 未配置 Kimi 密钥时启动 WARN，仅重试主模型
-- 日志：`configuredModel` / `actualModel`；切备时有 `switching to fallback` 与 `Model fallback observed`
+- 实现：`HarnessAgent.maxRetries` + `fallbackModel`（与 AgentScope 文章一致；切备日志在 `io.agentscope.core.ReActAgent`）
+- 主模型 bean：`agentscopeDeepSeekModel`；备用：`agentscopeKimiFallbackModel`（需 `KIMI_API_KEY` / `MOONSHOT_API_KEY`）
+- 配置：`app.agentscope.dev-agent.model-fallback.*`；默认备用名 `kimi-k3`；`max-attempts` 含首次（默认 `2`）
+- 范围：主 HarnessAgent（含其 SubAgent 策略）；**不含** Memory Flush、本轮也不改 A2A Risk Review
+- 未配置 Kimi 密钥：启动 WARN，不挂 `fallbackModel`
+- 观测：middleware `configuredModel` / `actualModel`；框架日志 `switching to fallback`
 
 ```bash
 # 手工验证 fallback（DeepSeek 指到不可达端口；需真实 KIMI_API_KEY）
