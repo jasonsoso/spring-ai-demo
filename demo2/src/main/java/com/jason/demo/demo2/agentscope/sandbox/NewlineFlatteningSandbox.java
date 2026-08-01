@@ -8,7 +8,7 @@ import io.agentscope.harness.agent.sandbox.SandboxState;
 import java.io.InputStream;
 
 /** 在 {@link Sandbox#exec} 入口把多行命令压成单行，规避 Windows docker 传参拆坏引号。 */
-final class NewlineFlatteningSandbox implements Sandbox {
+public final class NewlineFlatteningSandbox implements Sandbox {
 
     private final Sandbox delegate;
     private final ActiveSandboxRegistry registry;
