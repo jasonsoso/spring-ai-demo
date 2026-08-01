@@ -1235,9 +1235,15 @@
     <div id="tab-agentscope" class="tab-content">
         <div class="agentscope-header">
             <h2>AgentScope HarnessAgent</h2>
-            <p>清单整理 + 项目只读工具 + Toolkit MCP + Harness Memory 跨会话；写 notes/ 与 memory_save（可配置）需人工确认；长会话达阈值会压缩；SSE：SESSION → 工具/生命周期 → REQUIRE_USER_CONFIRM → MESSAGE* → COMPACTION? → DONE</p>
+            <p>双通道：DevAgent（HITL / Diff / 全能力）与 AG-UI（文本流 + 工具事件）。切换协议会新开 sessionId；AG-UI 下写文件 / Plan / 沙箱改码请切回 DevAgent。</p>
         </div>
         <div class="agentscope-meta">
+            <label class="agentscope-protocol">协议
+                <select id="agentscopeProtocol">
+                    <option value="dev-agent" selected>DevAgent</option>
+                    <option value="agui">AG-UI</option>
+                </select>
+            </label>
             <label>userId <input id="agentscopeUserId" type="text" placeholder="可选，如 dev-user-001" value="dev-user-001"></label>
             <label>sessionId <input id="agentscopeSessionId" type="text" placeholder="会话 ID"></label>
             <button type="button" id="agentscopeNewSessionBtn">新开会话（保留 userId）</button>

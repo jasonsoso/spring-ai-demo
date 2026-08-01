@@ -177,6 +177,17 @@
     gap: 8px;
     margin: 0;
 }
+.agentscope-protocol select {
+    margin-left: 0.35rem;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #fff;
+}
+.agentscope-protocol-hint {
+    font-size: 0.85rem;
+    color: #64748b;
+}
 
 .agentscope-confirm-card {
     margin-top: 8px;

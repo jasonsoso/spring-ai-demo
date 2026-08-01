@@ -2,7 +2,10 @@
 let agentscopeAwaitingConfirm = false;
 let agentscopeConfirmInFlight = false;
 let agentscopeRequestInFlight = false;
+let agentscopeProtocol = 'dev-agent'; // 'dev-agent' | 'agui'
+let agentscopeAbortController = null;
 const AGENTSCOPE_REQUEST_TIMEOUT_MS = 120000;
+const AGENTSCOPE_AGUI_HITL_SAMPLES = new Set([4, 9, 13, 15]);
 
 function newAgentscopeSessionId() {
     if (crypto.randomUUID) return crypto.randomUUID();
@@ -14,7 +17,20 @@ function ensureAgentscopeSessionId() {
     if (el && !el.value.trim()) el.value = newAgentscopeSessionId();
 }
 
+function getAgentscopeProtocol() {
+    const el = document.getElementById('agentscopeProtocol');
+    return (el && el.value) || agentscopeProtocol || 'dev-agent';
+}
+
+function abortAgentscopeInFlight() {
+    if (agentscopeAbortController) {
+        try { agentscopeAbortController.abort('protocol-switch'); } catch (_) { /* ignore */ }
+        agentscopeAbortController = null;
+    }
+}
+
 function resetAgentscopeConversation() {
+    abortAgentscopeInFlight();
     const box = document.getElementById('agentscopeMessages');
     if (!box) return;
     box.innerHTML = '<div id="agentscopeWelcome" class="message assistant"><div class="message-content">'
@@ -25,13 +41,23 @@ function resetAgentscopeConversation() {
         + '可用「Code Review Skill」验证动态 Skill + MCP 读样例。'
         + '可用「Code Review SubAgent」验证三角色委派与 source。'
         + '写 notes/ 下文件会弹出确认卡片；memory_save 在默认配置下也会确认。'
+        + '协议可选 DevAgent（全能力）或 AG-UI（文本/工具演示）。'
         + '</div></div>';
     document.getElementById('agentscopeSessionId').value = newAgentscopeSessionId();
     agentscopeAwaitingConfirm = false;
     agentscopeConfirmInFlight = false;
     agentscopeRequestInFlight = false;
     setAgentscopeInputEnabled(true);
-    setAgentscopeStatus('就绪');
+    const proto = getAgentscopeProtocol();
+    setAgentscopeStatus(proto === 'agui' ? '就绪（AG-UI）' : '就绪（DevAgent）');
+}
+
+function switchAgentscopeProtocol(next) {
+    const value = next === 'agui' ? 'agui' : 'dev-agent';
+    agentscopeProtocol = value;
+    const el = document.getElementById('agentscopeProtocol');
+    if (el) el.value = value;
+    resetAgentscopeConversation();
 }
 
 function setAgentscopeStatus(text) {
@@ -132,6 +158,11 @@ function appendAgentscopeSystemMessage(text) {
 }
 
 function fillAgentscopeSample(n) {
+    if (getAgentscopeProtocol() === 'agui' && AGENTSCOPE_AGUI_HITL_SAMPLES.has(n)) {
+        appendAgentscopeSystemMessage('当前为 AG-UI 演示模式，写文件 / Memory 确认 / 沙箱改码 / Plan Mode 请切回 DevAgent 协议。');
+        setAgentscopeStatus('请切回 DevAgent');
+        return;
+    }
     const samples = {
         1: '帮我整理一份今天排查订单接口超时的执行清单',
         2: '支付回调偶发 500，给我一份不超过 6 步的排查顺序',
@@ -284,6 +315,68 @@ function handleAgentscopeSsePayload(turn, payload, sessionId) {
         setAgentscopeStatus('REQUEST_STOP ' + (payload.content || ''));
     }
     return false;
+}
+
+function handleAgentscopeAguiPayload(turn, payload) {
+    const type = payload.type;
+    if (type === 'RUN_STARTED') {
+        setAgentscopeStatus('RUN_STARTED');
+    } else if (type === 'TEXT_MESSAGE_START') {
+        turn.aguiMessageId = payload.messageId || turn.aguiMessageId;
+        setAgentscopeStatus('TEXT_MESSAGE_START');
+    } else if (type === 'TEXT_MESSAGE_CONTENT') {
+        setAgentscopeStatus('流式中…');
+        turn.content.textContent += (payload.delta || payload.content || '');
+        scrollAgentscopeMessages();
+    } else if (type === 'TEXT_MESSAGE_END') {
+        setAgentscopeStatus('TEXT_MESSAGE_END');
+    } else if (type === 'TOOL_CALL_START') {
+        const id = payload.toolCallId || payload.id;
+        const name = payload.toolCallName || payload.name || 'tool';
+        setAgentscopeStatus('TOOL_CALL_START ' + name);
+        upsertAgentscopeToolItem(turn, id, name, null);
+    } else if (type === 'TOOL_CALL_ARGS') {
+        setAgentscopeStatus('TOOL_CALL_ARGS');
+    } else if (type === 'TOOL_CALL_END') {
+        const id = payload.toolCallId || payload.id;
+        upsertAgentscopeToolItem(turn, id, payload.toolCallName || payload.name, 'END');
+    } else if (type === 'TOOL_CALL_RESULT') {
+        const id = payload.toolCallId || payload.id;
+        upsertAgentscopeToolItem(turn, id, payload.toolCallName || payload.name, 'SUCCESS');
+        setAgentscopeStatus('TOOL_CALL_RESULT');
+    } else if (type === 'RUN_FINISHED') {
+        setAgentscopeStatus('RUN_FINISHED');
+    } else if (type === 'RUN_ERROR') {
+        setAgentscopeStatus('RUN_ERROR');
+        renderAgentscopeError(turn, payload.message || payload.content || 'AG-UI RUN_ERROR');
+    }
+}
+
+async function consumeAgentscopeAguiSse(res, turn) {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop();
+        for (const part of parts) {
+            let data = '';
+            part.split('\n').forEach(function (line) {
+                if (line.startsWith('data:')) data += line.slice(5).trim();
+            });
+            if (!data || data === '[DONE]') continue;
+            let payload;
+            try {
+                payload = JSON.parse(data);
+            } catch (_) {
+                continue;
+            }
+            handleAgentscopeAguiPayload(turn, payload);
+        }
+    }
 }
 
 function renderAgentscopeDiffCard(turn, payload) {
@@ -505,29 +598,60 @@ async function sendAgentscopeMessage() {
 
     agentscopeAwaitingConfirm = false;
     agentscopeRequestInFlight = true;
+    agentscopeAbortController = new AbortController();
+    const protocol = getAgentscopeProtocol();
     try {
-        const body = { sessionId: sessionId, message: message };
-        if (userId) body.userId = userId;
-        const res = await fetch('/agentscope/dev-agent/ask', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'text/event-stream'
-            },
-            body: JSON.stringify(body)
-        });
-        if (!res.ok) {
-            throw new Error(await res.text() || ('HTTP ' + res.status));
+        if (protocol === 'agui') {
+            const runId = newAgentscopeSessionId();
+            const messageId = newAgentscopeSessionId();
+            const res = await fetch('/agui/run', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream'
+                },
+                signal: agentscopeAbortController.signal,
+                body: JSON.stringify({
+                    threadId: sessionId,
+                    runId: runId,
+                    messages: [
+                        { id: messageId, role: 'user', content: message }
+                    ]
+                })
+            });
+            if (!res.ok) {
+                throw new Error(await res.text() || ('HTTP ' + res.status));
+            }
+            await consumeAgentscopeAguiSse(res, turn);
+        } else {
+            const body = { sessionId: sessionId, message: message };
+            if (userId) body.userId = userId;
+            const res = await fetch('/agentscope/dev-agent/ask', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream'
+                },
+                signal: agentscopeAbortController.signal,
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+                throw new Error(await res.text() || ('HTTP ' + res.status));
+            }
+            const result = await consumeAgentscopeSse(res, turn, sessionId);
+            agentscopeAwaitingConfirm = result.awaitingConfirm;
         }
-
-        const result = await consumeAgentscopeSse(res, turn, sessionId);
-        agentscopeAwaitingConfirm = result.awaitingConfirm;
     } catch (e) {
-        setAgentscopeStatus('失败');
-        renderAgentscopeError(turn, e.message || String(e));
+        if (e && (e.name === 'AbortError' || String(e.message || e).indexOf('protocol-switch') >= 0)) {
+            setAgentscopeStatus('已取消（协议切换）');
+        } else {
+            setAgentscopeStatus('失败');
+            renderAgentscopeError(turn, e.message || String(e));
+        }
     } finally {
         agentscopeRequestInFlight = false;
-        if (!agentscopeAwaitingConfirm) {
+        agentscopeAbortController = null;
+        if (protocol === 'agui' || !agentscopeAwaitingConfirm) {
             setAgentscopeInputEnabled(true);
         }
     }
@@ -546,4 +670,9 @@ document.getElementById('agentscopeMessageInput')?.addEventListener('keydown', f
 document.getElementById('agentscopeNewSessionBtn')?.addEventListener('click', function () {
     resetAgentscopeConversation();
 });
+document.getElementById('agentscopeProtocol')?.addEventListener('change', function (e) {
+    switchAgentscopeProtocol(e.target.value);
+});
 ensureAgentscopeSessionId();
+agentscopeProtocol = getAgentscopeProtocol();
+setAgentscopeStatus(agentscopeProtocol === 'agui' ? '就绪（AG-UI）' : '就绪（DevAgent）');
