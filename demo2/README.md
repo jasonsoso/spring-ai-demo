@@ -78,7 +78,7 @@
 | **瑞幸 MCP 点单** | My Coffee Skill 编排 + 瑞幸/高德远程 MCP + SSE 多轮点单 | DeepSeek + **LKCOFFEE_TOKEN** + **AMAP_API_KEY** |
 | **ElevenLabs 语音对话** | 按住录音 STT + 流式对话 + 分句 TTS 边播 | DeepSeek + **ELEVENLABS_API_KEY** |
 | **Embabel 自动选路** | Closed 模式三 Agent：星座文案 / 制度问答 / **Quizzard 技术文章出题** | DeepSeek（`DEEPSEEK_API_KEY`） |
-| **AgentScope Harness** | Workspace + **PostgresDistributedStore** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** + **多模型容错（HarnessAgent fallbackModel）** | DeepSeek + 可选 Kimi/Moonshot + 可选 PostgreSQL；MCP 需 Node/npx |
+| **AgentScope Harness** | Workspace + **PostgresDistributedStore** + Permission HITL + Compaction + Middleware requestId + stdio MCP + **Harness Memory** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** + **多模型容错（HarnessAgent fallbackModel）** + **AG-UI 协议开关（`/agui/run`）** | DeepSeek + 可选 Kimi/Moonshot + 可选 PostgreSQL；MCP 需 Node/npx |
 | 可观测性 | Micrometer 指标 + OpenTelemetry 链路 | 可选 OTLP Collector |
 
 ---
@@ -1206,6 +1206,30 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
 | POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` → **`REQUEST_CONTEXT`** →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END` / **`REQUIRE_USER_CONFIRM`** / **`REQUEST_STOP`**）→（可选 **`COMPACTION`**）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}` |
 | POST | `/agentscope/dev-agent/confirm` | 批准或拒绝待确认写文件。Body：`{"userId?":"...","sessionId":"...","approved":true\|false}`。返回 SSE 续流（批准后执行 `request_file_change`） |
 
+#### AG-UI 协议（`/agui/run`，与 DevAgent 双通道）
+
+- 依赖：`agentscope-agui-spring-boot-starter`；默认 Agent：`agentscopeDevAgent`
+- 配置前缀：`agentscope.agui.*`（`server-side-memory=false`，会话仍走现有 stateStore）
+- 前端：AgentScope Tab「协议」开关；**切换协议会新开 sessionId**
+- **范围**：AG-UI 演示文本流 + 工具事件；**HITL / WORKSPACE_DIFF / `/confirm` 仅 DevAgent**
+- **不可混用**：`/agui/run` 的 `threadId` 不能拿去调 `/agentscope/dev-agent/confirm`
+
+```bash
+curl -sN -X POST "http://localhost:8081/agui/run" \
+  -H "Content-Type: application/json" \
+  -d "{\"threadId\":\"agui-thread-020\",\"runId\":\"agui-run-020-001\",\"messages\":[{\"id\":\"agui-message-020-001\",\"role\":\"user\",\"content\":\"请用三句话说明这个研发任务应该先做什么。\"}]}"
+# 期望：RUN_STARTED → TEXT_MESSAGE_* → RUN_FINISHED
+```
+
+读文件/工具：
+
+```bash
+curl -sN -X POST "http://localhost:8081/agui/run/agentscopeDevAgent" \
+  -H "Content-Type: application/json" \
+  -d "{\"threadId\":\"agui-tool-thread-020\",\"runId\":\"agui-tool-run-020-001\",\"messages\":[{\"id\":\"agui-tool-message-020-001\",\"role\":\"user\",\"content\":\"请查看项目 Java / Spring Boot 版本和启动类。\"}]}"
+# 期望：穿插 TOOL_CALL_START → TOOL_CALL_ARGS? → TOOL_CALL_END → TOOL_CALL_RESULT
+```
+
 同 `userId` + `sessionId` 追问可跨重启恢复（PostgreSQL）；换 `sessionId` 应不串话，不同 `userId` 相同 `sessionId` 也不串话。`userId` 为空时内部使用占位 `_anonymous`（ask 与 confirm 须一致）。HITL 待确认工具从 `AgentStateStore` 读取 `ASKING` 状态，不再依赖进程内 Map。
 
 **Workspace（`AGENTS.md`）：**
@@ -1476,7 +1500,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
   -d "{\"userId\":\"memory-user-other-012\",\"sessionId\":\"memory-session-c-012\",\"message\":\"我们项目使用什么构建方式？测试命令是什么？发布窗口安排在什么时候？不要调用项目文件工具；不知道就直接说不知道。\"}"
 ```
 
-前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。写 `notes/` 会弹出确认卡片；「新开会话（保留 userId）」清空对话并换 sessionId；示例「Compaction 七轮」固定 `context-user-009` / `context-session-009`；示例「MCP 读档案 / MCP 越界拒绝」固定 `mcp-user-011`；示例「Memory 记住约定 / 跨会话提问」固定 `memory-user-012` 与对应 sessionId；示例「Code Review Skill」固定 `skill-user-013` / `skill-session-013`。
+前端 Tab：**AgentScope HarnessAgent**（`http://localhost:8081`）。协议可选 **DevAgent | AG-UI**（切换会新开 sessionId；AG-UI 仅文本/工具，HITL/Diff 用 DevAgent）。写 `notes/` 会弹出确认卡片；「新开会话（保留 userId）」清空对话并换 sessionId；示例「Compaction 七轮」固定 `context-user-009` / `context-session-009`；示例「MCP 读档案 / MCP 越界拒绝」固定 `mcp-user-011`；示例「Memory 记住约定 / 跨会话提问」固定 `memory-user-012` 与对应 sessionId；示例「Code Review Skill」固定 `skill-user-013` / `skill-session-013`。
 
 **三层架构**：**展示层**（AgentScope Tab / curl）→ **编排层**（`DevAgentService` 请求上下文 + 事件映射 + store 恢复确认 + Compaction 探测）→ **能力层**（`HarnessAgent` + Middleware / Toolkit（含 MCP / Memory） / Permission / Workspace / Compaction / `AgentStateStore`）。详细流程见 [§25–28 功能设计图](#25-agentscope-harnessagent--三层架构)。
 
