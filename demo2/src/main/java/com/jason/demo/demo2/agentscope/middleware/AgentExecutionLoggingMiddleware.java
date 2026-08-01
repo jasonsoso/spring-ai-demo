@@ -2,6 +2,7 @@ package com.jason.demo.demo2.agentscope.middleware;
 
 import com.jason.demo.demo2.agentscope.observability.AgentExecutionContext;
 import io.agentscope.core.agent.Agent;
+import io.agentscope.core.agent.AgentBase;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.ModelCallEndEvent;
@@ -18,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.context.ContextView;
 
 import java.util.List;
 import java.util.Objects;
@@ -37,8 +39,9 @@ public final class AgentExecutionLoggingMiddleware implements MiddlewareBase {
             RuntimeContext context,
             AgentInput input,
             Function<AgentInput, Flux<AgentEvent>> next) {
-        return Flux.defer(() -> {
-            AgentExecutionContext ids = AgentExecutionContext.from(context);
+        return Flux.deferContextual(contextView -> {
+            RuntimeContext runtimeContext = requireRuntimeContext(context, contextView);
+            AgentExecutionContext ids = AgentExecutionContext.from(runtimeContext);
             long startedAt = System.nanoTime();
             AtomicInteger answerChars = new AtomicInteger();
             log.info(
@@ -48,8 +51,8 @@ public final class AgentExecutionLoggingMiddleware implements MiddlewareBase {
                     ids.traceId(),
                     ids.spanId(),
                     agent.getName(),
-                    context.getUserId(),
-                    context.getSessionId());
+                    runtimeContext.getUserId(),
+                    runtimeContext.getSessionId());
             return Flux.defer(() -> next.apply(input))
                     .doOnNext(event -> {
                         if (event instanceof TextBlockDeltaEvent delta
@@ -81,6 +84,19 @@ public final class AgentExecutionLoggingMiddleware implements MiddlewareBase {
                             ids.spanId(),
                             elapsedMillis(startedAt)));
         });
+    }
+
+    private static RuntimeContext requireRuntimeContext(
+            RuntimeContext context, ContextView contextView) {
+        RuntimeContext runtimeContext =
+                context != null
+                        ? context
+                        : contextView.getOrDefault(AgentBase.RUNTIME_CONTEXT_KEY, null);
+        if (runtimeContext == null) {
+            throw new IllegalStateException(
+                    "RuntimeContext is required for agent execution logging");
+        }
+        return runtimeContext;
     }
 
     @Override

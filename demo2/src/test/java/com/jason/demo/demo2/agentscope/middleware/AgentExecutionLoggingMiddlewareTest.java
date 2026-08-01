@@ -84,6 +84,45 @@ class AgentExecutionLoggingMiddlewareTest {
     }
 
     @Test
+    void onAgent_nullContext_readsRuntimeContextFromReactorContext() {
+        RuntimeContext runtime = RuntimeContext.builder()
+                .userId("agui-user")
+                .sessionId("agui-thread-1")
+                .build();
+        new AgentExecutionContext("request-agui", "trace-agui", "span-agui").writeTo(runtime);
+
+        RuntimeContext finalRuntime = runtime;
+        StepVerifier.create(
+                        middleware.onAgent(
+                                        agent,
+                                        null,
+                                        new AgentInput(List.of()),
+                                        ignored -> Flux.empty())
+                                .contextWrite(ctx -> ctx.put(
+                                        io.agentscope.core.agent.AgentBase.RUNTIME_CONTEXT_KEY,
+                                        finalRuntime)))
+                .verifyComplete();
+
+        assertThat(logs())
+                .contains("sessionId=agui-thread-1")
+                .contains("requestId=request-agui")
+                .contains("Agent execution completed.");
+    }
+
+    @Test
+    void onAgent_nullContext_withoutReactorContext_failsClearly() {
+        StepVerifier.create(middleware.onAgent(
+                        agent,
+                        null,
+                        new AgentInput(List.of()),
+                        ignored -> Flux.empty()))
+                .expectErrorSatisfies(error -> assertThat(error)
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("RuntimeContext is required"))
+                .verify();
+    }
+
+    @Test
     void onReasoning_incrementsRound() {
         RuntimeContext runtime = runtime();
         ReasoningInput input = new ReasoningInput(List.of(), List.of(), null);
