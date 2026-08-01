@@ -1305,7 +1305,9 @@ app.agentscope.dev-agent.sandbox.enabled=true
 `distributed.enabled=true` 且 PG 可达时：会话经 `PathSafeAgentStateStore` + PG；沙箱 `/workspace` 快照走 **`PostgresSnapshotSpec`（BYTEA）** + advisory lock，**不**写本机 `snapshot-root`。
 PG 不可达或 `distributed=false` 时：降级为本机 `LocalSnapshotSpec`（`snapshot-root`）。
 
-**跨实例 HITL 接力**（`sandbox=true` + `distributed=true` + 同一 PG）：实例 A 在 `plan_exit` / `REQUIRE_USER_CONFIRM` 后可退出；实例 B 用同一 `userId` + `sessionId` 调 `/confirm`，从 PG 恢复 AgentState 与沙箱 tar 后继续。接力点是 HITL 断点，**不**保证模型调用或 `mvn test` 中途 crash 自动续跑。Workspace Diff / apply-diff 本版仍读本机 tar，PG 快照会话下 Diff 可能为空。
+Workspace Diff / 批准回写：按会话 `_sandbox_state` 中的 snapshot id，经同一套 SnapshotSpec（PG 或本地）还原 `project/` 后与宿主基线比对；有变更时发 `WORKSPACE_DIFF` 并显示「批准回写」。
+
+**跨实例 HITL 接力**（`sandbox=true` + `distributed=true` + 同一 PG）：实例 A 在 `plan_exit` / `REQUIRE_USER_CONFIRM` 后可退出；实例 B 用同一 `userId` + `sessionId` 调 `/confirm`，从 PG 恢复 AgentState 与沙箱 tar 后继续。接力点是 HITL 断点，**不**保证模型调用或 `mvn test` 中途 crash 自动续跑。
 
 ```bash
 # 实例 A（8080）跑到 plan_exit 后停掉；实例 B（8082）接手 confirm

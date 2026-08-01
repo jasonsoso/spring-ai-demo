@@ -1,11 +1,19 @@
 package com.jason.demo.demo2.agentscope.diff;
 
+import com.jason.demo.demo2.agentscope.config.AgentscopeDistributedBackend;
 import com.jason.demo.demo2.agentscope.config.DevAgentProperties;
 import com.jason.demo.demo2.agentscope.model.WorkspaceDiff;
 import com.jason.demo.demo2.agentscope.model.WorkspaceFileDiff;
+import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.harness.agent.sandbox.snapshot.LocalSnapshotSpec;
 import io.agentscope.harness.agent.sandbox.snapshot.SandboxSnapshot;
+import io.agentscope.harness.agent.sandbox.snapshot.SandboxSnapshotSpec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -13,10 +21,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
@@ -24,24 +32,70 @@ import java.util.stream.Stream;
 @Service
 public class WorkspaceDiffService {
 
+    private static final Logger log = LoggerFactory.getLogger(WorkspaceDiffService.class);
+
+    private static final String SANDBOX_SESSION_PREFIX = "sandbox/session/";
+    private static final String SANDBOX_STATE_KEY = "_sandbox_state";
+
     private final Path projectRoot;
-    private final LocalSnapshotSpec snapshotSpec;
+    private final SandboxSnapshotSpec snapshotSpec;
+    private final AgentStateStore agentStateStore;
+    private final JsonMapper jsonMapper;
     private final Map<String, Map<String, String>> baselines = new ConcurrentHashMap<>();
-    private final Map<String, List<String>> baselineSnapshots = new ConcurrentHashMap<>();
     private final Map<String, WorkspaceDiff> pending = new ConcurrentHashMap<>();
 
-    public WorkspaceDiffService(DevAgentProperties properties) {
-        this.projectRoot = Path.of(properties.projectRoot(), "workspace", "project")
-                .toAbsolutePath().normalize();
+    @Autowired
+    public WorkspaceDiffService(
+            DevAgentProperties properties,
+            AgentscopeDistributedBackend backend,
+            AgentStateStore agentscopeAgentStateStore,
+            JsonMapper jsonMapper) {
+        this(
+                Path.of(properties.projectRoot(), "workspace", "project")
+                        .toAbsolutePath()
+                        .normalize(),
+                resolveSnapshotSpec(properties, backend),
+                agentscopeAgentStateStore,
+                jsonMapper);
+    }
+
+    /** 单测用：直接注入 snapshot 后端，不走 Spring 装配。 */
+    static WorkspaceDiffService forTest(
+            Path projectRoot,
+            SandboxSnapshotSpec snapshotSpec,
+            AgentStateStore agentStateStore,
+            JsonMapper jsonMapper) {
+        return new WorkspaceDiffService(projectRoot, snapshotSpec, agentStateStore, jsonMapper);
+    }
+
+    private WorkspaceDiffService(
+            Path projectRoot,
+            SandboxSnapshotSpec snapshotSpec,
+            AgentStateStore agentStateStore,
+            JsonMapper jsonMapper) {
+        this.projectRoot = projectRoot;
+        this.snapshotSpec = snapshotSpec;
+        this.agentStateStore = agentStateStore;
+        this.jsonMapper = jsonMapper;
+    }
+
+    private static SandboxSnapshotSpec resolveSnapshotSpec(
+            DevAgentProperties properties, AgentscopeDistributedBackend backend) {
+        if (backend instanceof AgentscopeDistributedBackend.Remote remote) {
+            SandboxSnapshotSpec spec = remote.distributedStore().sandboxSnapshotSpec();
+            log.info("WorkspaceDiff snapshot backend=postgres ({})", spec.getClass().getSimpleName());
+            return spec;
+        }
         Path snapshotRoot = Path.of(properties.projectRoot())
-                .resolve(properties.sandbox().snapshotRoot()).toAbsolutePath().normalize();
-        this.snapshotSpec = new LocalSnapshotSpec(snapshotRoot);
+                .resolve(properties.sandbox().snapshotRoot())
+                .toAbsolutePath()
+                .normalize();
+        log.info("WorkspaceDiff snapshot backend=local path={}", snapshotRoot);
+        return new LocalSnapshotSpec(snapshotRoot);
     }
 
     public void captureBaseline(String userId, String sessionId) {
-        String key = key(userId, sessionId);
-        baselines.put(key, snapshotFiles(projectRoot));
-        baselineSnapshots.put(key, snapshotIds());
+        baselines.put(key(userId, sessionId), snapshotFiles(projectRoot));
     }
 
     public WorkspaceDiff createDiff(String userId, String sessionId) {
@@ -50,38 +104,56 @@ public class WorkspaceDiffService {
         if (before == null) {
             return null;
         }
-        Path snapshotProject = restoreProject(key);
+        Path snapshotProject = restoreProject(sessionId);
         if (snapshotProject == null) {
             return null;
         }
-        Map<String, String> after = snapshotFiles(snapshotProject);
-        List<WorkspaceFileDiff> files = new ArrayList<>();
-        StringBuilder unified = new StringBuilder();
-        before.keySet().stream().sorted().forEach(path -> {
-            String oldHash = before.get(path);
-            String newHash = after.get(path);
-            if (newHash == null) {
-                files.add(new WorkspaceFileDiff(path, "DELETED", 0, 1, oldHash, null, null));
-                unified.append("--- a/").append(path).append('\n')
-                        .append("+++ /dev/null\n");
-            } else if (!oldHash.equals(newHash)) {
-                addChangedFile(files, unified, path, oldHash, newHash, projectRoot.resolve(path), snapshotProject.resolve(path));
+        try {
+            Map<String, String> after = snapshotFiles(snapshotProject);
+            List<WorkspaceFileDiff> files = new ArrayList<>();
+            StringBuilder unified = new StringBuilder();
+            before.keySet().stream().sorted().forEach(path -> {
+                String oldHash = before.get(path);
+                String newHash = after.get(path);
+                if (newHash == null) {
+                    files.add(new WorkspaceFileDiff(path, "DELETED", 0, 1, oldHash, null, null));
+                    unified.append("--- a/").append(path).append('\n')
+                            .append("+++ /dev/null\n");
+                } else if (!oldHash.equals(newHash)) {
+                    addChangedFile(
+                            files,
+                            unified,
+                            path,
+                            oldHash,
+                            newHash,
+                            projectRoot.resolve(path),
+                            snapshotProject.resolve(path));
+                }
+            });
+            after.keySet().stream().filter(path -> !before.containsKey(path)).sorted().forEach(path -> {
+                String content = read(snapshotProject.resolve(path));
+                files.add(new WorkspaceFileDiff(
+                        path, "ADDED", countLines(content), 0, null, after.get(path), content));
+                unified.append("--- /dev/null\n+++ b/").append(path).append('\n')
+                        .append("@@ added @@\n").append(prefixLines("+", content));
+            });
+            if (files.isEmpty()) {
+                return null;
             }
-        });
-        after.keySet().stream().filter(path -> !before.containsKey(path)).sorted().forEach(path -> {
-            String content = read(snapshotProject.resolve(path));
-            files.add(new WorkspaceFileDiff(
-                    path, "ADDED", countLines(content), 0, null, after.get(path), content));
-            unified.append("--- /dev/null\n+++ b/").append(path).append('\n')
-                    .append("@@ added @@\n").append(prefixLines("+", content));
-        });
-        if (files.isEmpty()) {
-            return null;
+            WorkspaceDiff diff = new WorkspaceDiff(
+                    UUID.randomUUID().toString(),
+                    userId,
+                    sessionId,
+                    key,
+                    List.copyOf(files),
+                    unified.toString());
+            pending.put(diff.diffId(), diff);
+            return diff;
+        } finally {
+            deleteRecursivelyQuietly(snapshotProject.getParent() == null
+                    ? snapshotProject
+                    : findTempRoot(snapshotProject));
         }
-        WorkspaceDiff diff = new WorkspaceDiff(
-                UUID.randomUUID().toString(), userId, sessionId, key, List.copyOf(files), unified.toString());
-        pending.put(diff.diffId(), diff);
-        return diff;
     }
 
     public WorkspaceDiff getPending(String diffId) {
@@ -131,6 +203,31 @@ public class WorkspaceDiffService {
             throw new IllegalStateException("回写失败，已回滚", ex);
         }
         pending.remove(diffId);
+    }
+
+    Optional<String> resolveSnapshotId(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            Optional<SandboxStateSlotView> slot = agentStateStore.get(
+                    null,
+                    SANDBOX_SESSION_PREFIX + sessionId,
+                    SANDBOX_STATE_KEY,
+                    SandboxStateSlotView.class);
+            if (slot.isEmpty() || slot.get().deleted() || slot.get().json() == null) {
+                return Optional.empty();
+            }
+            JsonNode root = jsonMapper.readTree(slot.get().json());
+            String id = root.path("snapshot").path("id").asText(null);
+            if (id == null || id.isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(id);
+        } catch (Exception ex) {
+            log.warn("Failed to resolve sandbox snapshot id for session={}", sessionId, ex);
+            return Optional.empty();
+        }
     }
 
     private void rollback(Map<Path, byte[]> backups, WorkspaceDiff diff) {
@@ -257,18 +354,16 @@ public class WorkspaceDiffService {
     private record LineDiff(String unified, int additions, int deletions) {
     }
 
-    private Path restoreProject(String sessionKey) {
+    private Path restoreProject(String sessionId) {
         try {
-            List<String> known = baselineSnapshots.getOrDefault(sessionKey, List.of());
-            String snapshotId = snapshotIds().stream()
-                    .filter(id -> !known.contains(id))
-                    .max(Comparator.comparing(this::snapshotModifiedTime))
-                    .orElse(null);
-            if (snapshotId == null) {
+            Optional<String> snapshotId = resolveSnapshotId(sessionId);
+            if (snapshotId.isEmpty()) {
+                log.debug("No sandbox snapshot id for session={}", sessionId);
                 return null;
             }
-            SandboxSnapshot snapshot = snapshotSpec.build(snapshotId);
+            SandboxSnapshot snapshot = snapshotSpec.build(snapshotId.get());
             if (!snapshot.isRestorable()) {
+                log.warn("Sandbox snapshot not restorable id={}", snapshotId.get());
                 return null;
             }
             Path extracted = Files.createTempDirectory("agentscope-diff-");
@@ -278,8 +373,10 @@ public class WorkspaceDiffService {
             }
             Process process = new ProcessBuilder(
                     "tar", "-xf", archive.toString(), "-C", extracted.toString())
-                    .redirectErrorStream(true).start();
+                    .redirectErrorStream(true)
+                    .start();
             if (process.waitFor() != 0) {
+                deleteRecursivelyQuietly(extracted);
                 return null;
             }
             Path direct = extracted.resolve("workspace").resolve("project");
@@ -287,34 +384,40 @@ public class WorkspaceDiffService {
                 return direct;
             }
             direct = extracted.resolve("project");
-            return Files.isDirectory(direct) ? direct : null;
+            if (Files.isDirectory(direct)) {
+                return direct;
+            }
+            deleteRecursivelyQuietly(extracted);
+            return null;
         } catch (Exception ex) {
+            log.warn("Failed to restore sandbox project for session={}", sessionId, ex);
             return null;
         }
     }
 
-    private List<String> snapshotIds() {
-        try {
-            if (!Files.isDirectory(snapshotSpec.getBasePath() == null
-                    ? Path.of(".") : Path.of(snapshotSpec.getBasePath()))) {
-                return List.of();
-            }
-            try (Stream<Path> paths = Files.list(Path.of(snapshotSpec.getBasePath()))) {
-                return paths.filter(path -> path.getFileName().toString().endsWith(".tar"))
-                        .map(path -> path.getFileName().toString()
-                                .substring(0, path.getFileName().toString().length() - 4))
-                        .toList();
-            }
-        } catch (java.io.IOException ex) {
-            return List.of();
+    private static Path findTempRoot(Path snapshotProject) {
+        Path parent = snapshotProject.getParent();
+        if (parent != null && parent.getFileName() != null
+                && "workspace".equals(parent.getFileName().toString())) {
+            return parent.getParent() != null ? parent.getParent() : parent;
         }
+        return parent != null ? parent : snapshotProject;
     }
 
-    private long snapshotModifiedTime(String id) {
-        try {
-            return Files.getLastModifiedTime(Path.of(snapshotSpec.getBasePath(), id + ".tar")).toMillis();
-        } catch (java.io.IOException ex) {
-            return Long.MIN_VALUE;
+    private static void deleteRecursivelyQuietly(Path root) {
+        if (root == null || !Files.exists(root)) {
+            return;
+        }
+        try (Stream<Path> paths = Files.walk(root)) {
+            paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (java.io.IOException ignored) {
+                    // best-effort cleanup
+                }
+            });
+        } catch (java.io.IOException ignored) {
+            // best-effort cleanup
         }
     }
 
