@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.agentscope.service;
 
+import com.jason.demo.demo2.agentscope.config.AgentscopeDevAgentRegistry;
 import com.jason.demo.demo2.agentscope.config.DevAgentProperties;
 import com.jason.demo.demo2.agentscope.model.DevAgentConfirmRequest;
 import com.jason.demo.demo2.agentscope.model.DevAgentEvent;
@@ -10,6 +11,7 @@ import com.jason.demo.demo2.agentscope.model.WorkspaceDiff;
 import com.jason.demo.demo2.agentscope.diff.WorkspaceDiffService;
 import com.jason.demo.demo2.agentscope.observability.AgentExecutionContext;
 import com.jason.demo.demo2.agentscope.plan.PlanHostSyncService;
+import com.jason.demo.demo2.agentscope.rag.AgentscopeRagMode;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentEventType;
@@ -38,6 +40,8 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Semaphore;
 
 @Service
@@ -45,27 +49,28 @@ public class DevAgentService {
 
     private static final Logger log = LoggerFactory.getLogger(DevAgentService.class);
 
-    private final HarnessAgent agentscopeDevAgent;
+    private final AgentscopeDevAgentRegistry agentscopeDevAgentRegistry;
     private final DevAgentProperties properties;
     private final AgentStateStore agentStateStore;
     private final Tracer tracer;
     private final WorkspaceDiffService workspaceDiffService;
     private final PlanHostSyncService planHostSyncService;
+    private final ConcurrentMap<String, AgentscopeRagMode> lastRagModeBySession = new ConcurrentHashMap<>();
     /**
      * HarnessAgent 的 SandboxLifecycleMiddleware 持有共享的 currentAcquireResult，
-     * 因此同一个 HarnessAgent 不能并发执行多个沙箱请求。
+     * 因此同一个 HarnessAgent 不能并发执行多个沙箱请求；多 ragMode 实例共用一把锁。
      */
     private final Semaphore sandboxRequestLock = new Semaphore(1);
 
     @Autowired
     public DevAgentService(
-            HarnessAgent agentscopeDevAgent,
+            AgentscopeDevAgentRegistry agentscopeDevAgentRegistry,
             DevAgentProperties properties,
             AgentStateStore agentStateStore,
             Tracer tracer,
             WorkspaceDiffService workspaceDiffService,
             PlanHostSyncService planHostSyncService) {
-        this.agentscopeDevAgent = agentscopeDevAgent;
+        this.agentscopeDevAgentRegistry = agentscopeDevAgentRegistry;
         this.properties = properties;
         this.agentStateStore = agentStateStore;
         this.tracer = tracer;
@@ -73,6 +78,24 @@ public class DevAgentService {
         this.planHostSyncService = planHostSyncService;
     }
 
+    public DevAgentService(
+            AgentscopeDevAgentRegistry agentscopeDevAgentRegistry,
+            DevAgentProperties properties,
+            AgentStateStore agentStateStore,
+            Tracer tracer) {
+        this(agentscopeDevAgentRegistry, properties, agentStateStore, tracer, null, null);
+    }
+
+    public DevAgentService(
+            AgentscopeDevAgentRegistry agentscopeDevAgentRegistry,
+            DevAgentProperties properties,
+            AgentStateStore agentStateStore,
+            Tracer tracer,
+            WorkspaceDiffService workspaceDiffService) {
+        this(agentscopeDevAgentRegistry, properties, agentStateStore, tracer, workspaceDiffService, null);
+    }
+
+    /** 测试兼容：单 Agent 包装为仅 NONE 的 Registry。 */
     public DevAgentService(
             HarnessAgent agentscopeDevAgent,
             DevAgentProperties properties,
@@ -88,6 +111,36 @@ public class DevAgentService {
             Tracer tracer,
             WorkspaceDiffService workspaceDiffService) {
         this(agentscopeDevAgent, properties, agentStateStore, tracer, workspaceDiffService, null);
+    }
+
+    public DevAgentService(
+            HarnessAgent agentscopeDevAgent,
+            DevAgentProperties properties,
+            AgentStateStore agentStateStore,
+            Tracer tracer,
+            WorkspaceDiffService workspaceDiffService,
+            PlanHostSyncService planHostSyncService) {
+        this(
+                new AgentscopeDevAgentRegistry(
+                        agentscopeDevAgent,
+                        mode -> agentscopeDevAgent,
+                        com.jason.demo.demo2.agentscope.rag.AgentscopeRagKnowledgeHolder.unavailable(
+                                new com.jason.demo.demo2.agentscope.rag.AgentscopeRagProperties(
+                                        false,
+                                        "agentscope-dev-knowledge.txt",
+                                        3,
+                                        0.3,
+                                        false,
+                                        "agentscope_dev_knowledge",
+                                        1024,
+                                        "",
+                                        "https://open.bigmodel.cn/api/paas/v4",
+                                        "embedding-2"))),
+                properties,
+                agentStateStore,
+                tracer,
+                workspaceDiffService,
+                planHostSyncService);
     }
 
     public Flux<DevAgentEvent> ask(DevAgentRequest request) {
@@ -134,12 +187,15 @@ public class DevAgentService {
             DevAgentRequest request, String userId, Invocation invocation) {
         String sessionId = request.sessionId();
         try {
+            AgentscopeRagMode mode = AgentscopeRagMode.from(request.ragMode());
+            lastRagModeBySession.put(sessionKey(userId, sessionId), mode);
+            HarnessAgent agent = agentscopeDevAgentRegistry.get(mode);
             captureBaseline(userId, sessionId);
             int beforeCount = contextMessageCount(userId, sessionId);
             Flux<DevAgentEvent> events = mapAgentEvents(
                     userId,
                     sessionId,
-                    agentscopeDevAgent.streamEvents(
+                    agent.streamEvents(
                             request.message(), invocation.runtimeContext()));
             return Flux.concat(
                     events,
@@ -164,6 +220,10 @@ public class DevAgentService {
                         sessionId, "没有待确认的工具调用"));
             }
 
+            AgentscopeRagMode mode = lastRagModeBySession.getOrDefault(
+                    sessionKey(userId, sessionId), AgentscopeRagMode.NONE);
+            HarnessAgent agent = agentscopeDevAgentRegistry.get(mode);
+
             int beforeCount = contextMessageCount(userId, sessionId);
             List<ConfirmResult> confirmResults = pending.stream()
                     .map(toolCall -> new ConfirmResult(request.approved(), toolCall))
@@ -177,7 +237,7 @@ public class DevAgentService {
             Flux<DevAgentEvent> events = mapAgentEvents(
                     userId,
                     sessionId,
-                    agentscopeDevAgent.streamEvents(
+                    agent.streamEvents(
                             resumeMessage, invocation.runtimeContext()));
             return Flux.concat(
                     events,
@@ -412,6 +472,10 @@ public class DevAgentService {
 
     static String normalizeUserId(String userId) {
         return userId == null || userId.isBlank() ? "_anonymous" : userId.strip();
+    }
+
+    static String sessionKey(String userId, String sessionId) {
+        return normalizeUserId(userId) + "|" + sessionId;
     }
 
     private PendingToolCall toPendingToolCall(ToolUseBlock block) {

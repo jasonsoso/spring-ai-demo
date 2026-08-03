@@ -2,6 +2,8 @@ package com.jason.demo.demo2.agentscope.config;
 
 import com.jason.demo.demo2.agentscope.mcp.AgentscopeMcpClientRegistry;
 import com.jason.demo.demo2.agentscope.middleware.AgentExecutionLoggingMiddleware;
+import com.jason.demo.demo2.agentscope.rag.AgentscopeRagKnowledgeHolder;
+import com.jason.demo.demo2.agentscope.rag.AgentscopeRagMode;
 import com.jason.demo.demo2.agentscope.sandbox.ActiveSandboxRegistry;
 import com.jason.demo.demo2.agentscope.sandbox.NewlineFlatteningDockerSandboxClient;
 import com.jason.demo.demo2.agentscope.state.PathSafeAgentStateStore;
@@ -9,6 +11,7 @@ import com.jason.demo.demo2.agentscope.tool.FileChangeTool;
 import com.jason.demo.demo2.agentscope.tool.ProjectInfoTools;
 import com.jason.demo.demo2.agentscopea2a.client.RiskReviewTool;
 import com.jason.demo.demo2.config.LoggingAgentscopeModel;
+import io.agentscope.core.ReActAgent;
 import io.agentscope.core.model.Model;
 import io.agentscope.core.model.transport.HttpTransport;
 import io.agentscope.core.model.transport.OkHttpTransport;
@@ -16,6 +19,7 @@ import io.agentscope.core.permission.PermissionBehavior;
 import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionMode;
 import io.agentscope.core.permission.PermissionRule;
+import io.agentscope.core.rag.RAGMode;
 import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
@@ -49,7 +53,14 @@ public class AgentScopeConfig {
 
     /** 只读项目信息工具，默认放行 */
     private static final List<String> READ_ONLY_TOOL_NAMES =
-            List.of("read_pom", "list_source_folders", "find_main_class");
+            List.of("read_pom", "list_source_folders", "find_main_class", "retrieve_knowledge");
+
+    private static final String RAG_SYSTEM_HINT = """
+
+            【知识库 RAG】
+            本 Agent 已接入演示知识库（会话约定 / Plan Mode / ragMode / 沙箱 project 路径）。
+            回答此类项目约定问题时，应先检索知识库；AGENTIC 模式下使用 retrieve_knowledge 工具。
+            """;
 
     /** 子 Agent 协作工具，默认放行 */
     private static final List<String> SUBAGENT_COLLAB_TOOL_NAMES =
@@ -246,11 +257,10 @@ public class AgentScopeConfig {
     }
 
     /**
-     * 主开发 Agent：组装模型、工具箱、工作区、权限与记忆。
-     * 沙箱开：DockerFilesystemSpec + PathSafe stateStore；关：现状（可选 RemoteFilesystem）。
+     * 按 ragMode 提供 HarnessAgent；NONE 立即构建，GENERIC/AGENTIC 懒加载。
      */
     @Bean
-    HarnessAgent agentscopeDevAgent(
+    AgentscopeDevAgentRegistry agentscopeDevAgentRegistry(
             @Qualifier("agentscopeDeepSeekModel") Model agentscopeDeepSeekModel,
             @Qualifier("agentscopeKimiFallbackModel") ObjectProvider<Model> agentscopeKimiFallbackModel,
             DevAgentProperties properties,
@@ -263,10 +273,13 @@ public class AgentScopeConfig {
             AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry,
             ObjectProvider<RiskReviewTool> riskReviewTools,
-            ActiveSandboxRegistry activeSandboxRegistry) throws IOException {
-        return buildAgentscopeDevAgent(
+            ActiveSandboxRegistry activeSandboxRegistry,
+            AgentscopeRagKnowledgeHolder agentscopeRagKnowledgeHolder) throws IOException {
+        Model kimi = agentscopeKimiFallbackModel.getIfAvailable();
+        RiskReviewTool riskReviewTool = riskReviewTools.getIfAvailable();
+        HarnessAgent none = buildAgentscopeDevAgent(
                 agentscopeDeepSeekModel,
-                agentscopeKimiFallbackModel.getIfAvailable(),
+                kimi,
                 properties,
                 agentscopeCompactionConfig,
                 agentscopeMemoryConfig,
@@ -276,12 +289,46 @@ public class AgentScopeConfig {
                 agentscopeAgentStateStore,
                 agentExecutionLoggingMiddleware,
                 agentscopeMcpClientRegistry,
-                riskReviewTools.getIfAvailable(),
-                activeSandboxRegistry);
+                riskReviewTool,
+                activeSandboxRegistry,
+                agentscopeRagKnowledgeHolder,
+                AgentscopeRagMode.NONE);
+        return new AgentscopeDevAgentRegistry(
+                none,
+                mode -> {
+                    try {
+                        return buildAgentscopeDevAgent(
+                                agentscopeDeepSeekModel,
+                                kimi,
+                                properties,
+                                agentscopeCompactionConfig,
+                                agentscopeMemoryConfig,
+                                projectInfoTools,
+                                fileChangeTool,
+                                agentscopeDistributedBackend,
+                                agentscopeAgentStateStore,
+                                agentExecutionLoggingMiddleware,
+                                agentscopeMcpClientRegistry,
+                                riskReviewTool,
+                                activeSandboxRegistry,
+                                agentscopeRagKnowledgeHolder,
+                                mode);
+                    } catch (IOException ex) {
+                        throw new IllegalStateException("Failed to build HarnessAgent for " + mode, ex);
+                    }
+                },
+                agentscopeRagKnowledgeHolder);
     }
 
+    /** 兼容旧注入点：默认 NONE Agent。 */
+    @Bean
+    HarnessAgent agentscopeDevAgent(AgentscopeDevAgentRegistry agentscopeDevAgentRegistry) {
+        return agentscopeDevAgentRegistry.get(AgentscopeRagMode.NONE);
+    }
 
-
+    @SuppressWarnings("deprecation")
+    // Temporary: ReActAgent.knowledge/ragMode + fromAgent until AgentScope v2 RAG APIs.
+    // See docs/superpowers/specs/2026-08-03-agentscope-app-layer-rag-design.md §8
     private HarnessAgent buildAgentscopeDevAgent(
             Model agentscopeDeepSeekModel,
             Model kimiFallbackOrNull,
@@ -295,7 +342,10 @@ public class AgentScopeConfig {
             AgentExecutionLoggingMiddleware agentExecutionLoggingMiddleware,
             AgentscopeMcpClientRegistry agentscopeMcpClientRegistry,
             RiskReviewTool riskReviewTool,
-            ActiveSandboxRegistry activeSandboxRegistry) throws IOException {
+            ActiveSandboxRegistry activeSandboxRegistry,
+            AgentscopeRagKnowledgeHolder ragHolder,
+            AgentscopeRagMode ragMode) throws IOException {
+        boolean useRag = ragMode != AgentscopeRagMode.NONE && ragHolder.available();
         String systemPrompt = properties.systemPrompt()
                 .replace("{mcpRoot}", AgentscopeMcpClientRegistry.primaryMcpRootDisplay(properties));
         DevAgentProperties.Sandbox sandbox = properties.sandbox();
@@ -322,6 +372,9 @@ public class AgentScopeConfig {
                     8. 最终说明计划文件、批准结果、修改文件和测试结果。
                     """;
         }
+        if (useRag) {
+            systemPrompt += RAG_SYSTEM_HINT;
+        }
         Toolkit toolkit = new Toolkit();
         if (riskReviewTool != null) {
             toolkit.registerTool(riskReviewTool);
@@ -334,21 +387,49 @@ public class AgentScopeConfig {
             }
         }
 
-        HarnessAgent.Builder builder = HarnessAgent.builder()
-                .name(properties.name())
-                .sysPrompt(systemPrompt)
-                .model(agentscopeDeepSeekModel)
-                .maxRetries(properties.modelFallback().maxAttempts())
-                .toolkit(toolkit)
-                .workspace(Path.of(properties.workspaceRoot()))
-                .permissionContext(permissionContext(properties, agentscopeMcpClientRegistry))
-                .middleware(agentExecutionLoggingMiddleware)
-                .enableAgentTracingLog(false)
-                .disableAtPathExpansion()
-                .disableDefaultWorkspaceSkills()
-                .disableToolsConfig()
-                .enablePlanMode()
-                .enableTaskList();
+        HarnessAgent.Builder builder;
+        if (useRag) {
+            RAGMode frameworkMode = ragMode == AgentscopeRagMode.GENERIC
+                    ? RAGMode.GENERIC
+                    : RAGMode.AGENTIC;
+            ReActAgent seed = ReActAgent.builder()
+                    .name(properties.name())
+                    .sysPrompt(systemPrompt)
+                    .model(agentscopeDeepSeekModel)
+                    .toolkit(toolkit)
+                    .knowledge(ragHolder.knowledgeOrNull())
+                    .ragMode(frameworkMode)
+                    .retrieveConfig(ragHolder.retrieveConfig())
+                    .build();
+            // fromAgent 已拷贝 toolkit / GenericRAGHook；勿再 .toolkit(...) 覆盖
+            builder = HarnessAgent.Builder.fromAgent(seed)
+                    .maxRetries(properties.modelFallback().maxAttempts())
+                    .workspace(Path.of(properties.workspaceRoot()))
+                    .permissionContext(permissionContext(properties, agentscopeMcpClientRegistry))
+                    .middleware(agentExecutionLoggingMiddleware)
+                    .enableAgentTracingLog(false)
+                    .disableAtPathExpansion()
+                    .disableDefaultWorkspaceSkills()
+                    .disableToolsConfig()
+                    .enablePlanMode()
+                    .enableTaskList();
+        } else {
+            builder = HarnessAgent.builder()
+                    .name(properties.name())
+                    .sysPrompt(systemPrompt)
+                    .model(agentscopeDeepSeekModel)
+                    .maxRetries(properties.modelFallback().maxAttempts())
+                    .toolkit(toolkit)
+                    .workspace(Path.of(properties.workspaceRoot()))
+                    .permissionContext(permissionContext(properties, agentscopeMcpClientRegistry))
+                    .middleware(agentExecutionLoggingMiddleware)
+                    .enableAgentTracingLog(false)
+                    .disableAtPathExpansion()
+                    .disableDefaultWorkspaceSkills()
+                    .disableToolsConfig()
+                    .enablePlanMode()
+                    .enableTaskList();
+        }
         if (kimiFallbackOrNull != null) {
             builder.fallbackModel(kimiFallbackOrNull);
         }
