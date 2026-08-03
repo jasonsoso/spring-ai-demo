@@ -1169,7 +1169,16 @@ flowchart LR
 
 ### AgentScope HarnessAgent（`/agentscope/dev-agent`）
 
-HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** + **可选 Docker Sandbox（默认关）** + **多模型容错（DeepSeek → Kimi）**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
+HarnessAgent SSE：清单整理 + 项目只读工具 + **`notes/` 写文件 HITL** + **stdio MCP 只读文件工具** + **Harness Memory 跨会话长期记忆** + **Dynamic Skills（code-reviewer）** + **SubAgent 三角色审查** + **可选 Docker Sandbox（默认关）** + **多模型容错（DeepSeek → Kimi）** + **可选向量 RAG（NONE/GENERIC/AGENTIC）**。只读 Java 工具：`read_pom` / `list_source_folders` / `find_main_class`（`app.agentscope.dev-agent.project-root`，默认 `.`）。写文件工具 `request_file_change` **仅允许** `{projectRoot}/notes/` 下相对路径；写入前暂停并推送 `REQUIRE_USER_CONFIRM`，用户经 `/confirm` 批准或拒绝后恢复同一会话。**delete/remove** 操作及 **notes/ 以外**路径一律 **DENY**，SSE 推送 `TOOL_RESULT_END`（state=`DENIED`），**不会**出现 `REQUIRE_USER_CONFIRM` 确认卡片。
+
+#### AgentScope RAG（临时）
+
+- 依赖：`agentscope-extensions-rag-simple`（`SimpleKnowledge` + `PgVectorStore`）
+- 接线：废弃的 `ReActAgent.knowledge` / `ragMode`，经 `HarnessAgent.Builder.fromAgent` 进入 Harness（`HarnessAgent.Builder` 本身无 RAG API）
+- 模式：请求体 `ragMode`=`NONE`（默认）/ `GENERIC`（自动注入）/ `AGENTIC`（`retrieve_knowledge` 工具）；Tab 上有下拉与示例 16–18
+- PG：复用 `demo2/docker/agentscope-postgres`，镜像 `pgvector/pgvector:pg16`；配置 `app.agentscope.rag.*`；Embedding 走智谱（`ZHIPUAI_API_KEY`）
+- 降级：PG / Embedding 不可用时回退 NONE，应用仍可启动
+- 技术债：官方 v2 知识库 API 落地后按 `docs/superpowers/specs/2026-08-03-agentscope-app-layer-rag-design.md` §8 迁移
 
 **多模型容错（DeepSeek → Kimi）：**
 
