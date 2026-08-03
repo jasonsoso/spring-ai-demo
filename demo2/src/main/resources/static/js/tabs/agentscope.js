@@ -41,6 +41,7 @@ function resetAgentscopeConversation() {
         + '可用「Code Review Skill」验证动态 Skill + MCP 读样例。'
         + '可用「Code Review SubAgent」验证三角色委派与 source。'
         + '写 notes/ 下文件会弹出确认卡片；memory_save 在默认配置下也会确认。'
+        + '可选 RAG 模式验证知识库（临时废弃 API）。'
         + '协议可选 DevAgent（全能力）或 AG-UI（文本/工具演示）。'
         + '</div></div>';
     document.getElementById('agentscopeSessionId').value = newAgentscopeSessionId();
@@ -178,12 +179,23 @@ function fillAgentscopeSample(n) {
         12: '请用 SubAgent 多角色审查 MCP 资料目录里的 TravelBudgetService.java，并给出是否适合合并的结论。',
         13: '请在沙箱中运行测试，修复 RetryPolicy 首次重试延迟翻倍的问题，并重新运行测试。',
         14: '请审查 RetryPolicy.delayMillis 的改动：原实现第一次重试使用第二档延迟，修改后第一次应为 1000ms，第二次 2000ms，第三次 4000ms。请给出结论、风险和建议。',
-        15: '请先调查 workspace/project 里 RetryPolicy 第一次重试延迟错误，整理修复方案。方案确认前不要改代码，等我确认后再执行。'
+        15: '请先调查 workspace/project 里 RetryPolicy 第一次重试延迟错误，整理修复方案。方案确认前不要改代码，等我确认后再执行。',
+        16: '根据项目约定说明 Plan Mode 应该怎么进入？进入后哪些工具可用、哪些不能用？请先检索知识库再回答。',
+        17: '请说明 ragMode 的 NONE、GENERIC、AGENTIC 分别是什么含义，以及本演示默认是哪一种。请先检索知识库。',
+        18: 'Docker Sandbox 模式下 execute 的 working_directory 应该填什么？read_file/edit_file 的 path 有什么约束？请先检索知识库。'
     };
     const input = document.getElementById('agentscopeMessageInput');
     if (input) {
         input.value = samples[n] || '';
         input.focus();
+    }
+    if (n === 16 || n === 17 || n === 18) {
+        const ragMode = document.getElementById('agentscopeRagMode');
+        if (ragMode) ragMode.value = n === 16 ? 'GENERIC' : 'AGENTIC';
+        const userId = document.getElementById('agentscopeUserId');
+        const sessionId = document.getElementById('agentscopeSessionId');
+        if (userId) userId.value = 'rag-user-018';
+        if (sessionId) sessionId.value = 'rag-session-018-' + n;
     }
     if (n === 5) {
         const userId = document.getElementById('agentscopeUserId');
@@ -626,6 +638,8 @@ async function sendAgentscopeMessage() {
         } else {
             const body = { sessionId: sessionId, message: message };
             if (userId) body.userId = userId;
+            const ragMode = (document.getElementById('agentscopeRagMode')?.value || 'NONE').trim();
+            body.ragMode = ragMode;
             const res = await fetch('/agentscope/dev-agent/ask', {
                 method: 'POST',
                 headers: {

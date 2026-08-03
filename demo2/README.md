@@ -1203,7 +1203,7 @@ curl -sN -X POST "http://localhost:8081/agentscope/dev-agent/ask" \
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` → **`REQUEST_CONTEXT`** →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END` / **`REQUIRE_USER_CONFIRM`** / **`REQUEST_STOP`**）→（可选 **`COMPACTION`**）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"..."}` |
+| POST | `/agentscope/dev-agent/ask` | SSE：`SESSION` → **`REQUEST_CONTEXT`** →（`AGENT_START` / `MODEL_CALL_START` / `TOOL_CALL_START` / `TOOL_RESULT_END` / `MESSAGE*` / `AGENT_RESULT` / `AGENT_END` / **`REQUIRE_USER_CONFIRM`** / **`REQUEST_STOP`**）→（可选 **`COMPACTION`**）→ `DONE`（失败为 `ERROR`）。Body：`{"userId?":"...","sessionId":"...","message":"...","ragMode?":"NONE\|GENERIC\|AGENTIC"}`（缺省 `NONE`） |
 | POST | `/agentscope/dev-agent/confirm` | 批准或拒绝待确认写文件。Body：`{"userId?":"...","sessionId":"...","approved":true\|false}`。返回 SSE 续流（批准后执行 `request_file_change`） |
 
 #### AG-UI 协议（`/agui/run`，与 DevAgent 双通道）

@@ -1246,6 +1246,13 @@
             </label>
             <label>userId <input id="agentscopeUserId" type="text" placeholder="可选，如 dev-user-001" value="dev-user-001"></label>
             <label>sessionId <input id="agentscopeSessionId" type="text" placeholder="会话 ID"></label>
+            <label class="agentscope-rag-mode">RAG
+                <select id="agentscopeRagMode">
+                    <option value="NONE" selected>关闭（NONE）</option>
+                    <option value="GENERIC">自动注入（GENERIC）</option>
+                    <option value="AGENTIC">工具检索（AGENTIC）</option>
+                </select>
+            </label>
             <button type="button" id="agentscopeNewSessionBtn">新开会话（保留 userId）</button>
             <span class="agentscope-samples">
                 <button type="button" onclick="fillAgentscopeSample(1)">示例：排查清单</button>
@@ -1263,13 +1270,16 @@
                 <button type="button" onclick="fillAgentscopeSample(13)">示例：Sandbox 修 RetryPolicy</button>
                 <button type="button" onclick="fillAgentscopeSample(14)">示例：A2A 风险审查</button>
                 <button type="button" onclick="fillAgentscopeSample(15)">示例：Plan Mode 先确认方案</button>
+                <button type="button" onclick="fillAgentscopeSample(16)">示例：RAG·Plan Mode 约定</button>
+                <button type="button" onclick="fillAgentscopeSample(17)">示例：RAG·三种 ragMode</button>
+                <button type="button" onclick="fillAgentscopeSample(18)">示例：RAG·沙箱 project 路径</button>
             </span>
         </div>
         <div id="agentscopeStatus" class="agentscope-status">就绪</div>
         <div class="agentscope-layout">
             <div id="agentscopeMessages" class="agentscope-messages">
                 <div id="agentscopeWelcome" class="message assistant">
-                    <div class="message-content">输入排查问题获取检查清单，或询问 Java / Spring Boot 版本、源码结构、启动类。可用「Workspace / AGENTS.md」示例验证项目规则注入。可用「Compaction 七轮（阈值 12）」示例，同一 session 连发观察压缩提示。可用「MCP 读档案」验证 Toolkit MCP；「MCP 越界拒绝」应看到 Access denied。可用「Memory 记住约定」后点「新开会话（保留 userId）」再用「跨会话提问」验证长期记忆。可用「Code Review Skill」验证动态 Skill + MCP 读样例。可用「Code Review SubAgent」验证三角色委派与 source。写 notes/ 下文件会弹出确认卡片；memory_save 在默认配置下也会确认。可点「新开会话（保留 userId）」验证 session 隔离与跨会话记忆。</div>
+                    <div class="message-content">输入排查问题获取检查清单，或询问 Java / Spring Boot 版本、源码结构、启动类。可用「Workspace / AGENTS.md」示例验证项目规则注入。可用「Compaction 七轮（阈值 12）」示例，同一 session 连发观察压缩提示。可用「MCP 读档案」验证 Toolkit MCP；「MCP 越界拒绝」应看到 Access denied。可用「Memory 记住约定」后点「新开会话（保留 userId）」再用「跨会话提问」验证长期记忆。可用「Code Review Skill」验证动态 Skill + MCP 读样例。可用「Code Review SubAgent」验证三角色委派与 source。写 notes/ 下文件会弹出确认卡片；memory_save 在默认配置下也会确认。可点「新开会话（保留 userId）」验证 session 隔离与跨会话记忆。可选 RAG 模式（NONE/GENERIC/AGENTIC）验证知识库检索（临时使用废弃 ReActAgent.knowledge/ragMode）。</div>
                 </div>
             </div>
             <form id="agentscopeForm" class="agentscope-input-bar">
