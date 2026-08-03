@@ -64,7 +64,7 @@ public class AgentscopeRagConfiguration {
                     .embeddingModel(embedding)
                     .embeddingStore(store)
                     .build();
-            ingestIfNeeded(knowledge, store, rag);
+            ingestIfNeeded(knowledge, store, rag, ds);
             RetrieveConfig retrieveConfig = RetrieveConfig.builder()
                     .limit(rag.topK())
                     .scoreThreshold(rag.similarityThreshold())
@@ -90,20 +90,19 @@ public class AgentscopeRagConfiguration {
     static void ingestIfNeeded(
             SimpleKnowledge knowledge,
             PgVectorStore store,
-            AgentscopeRagProperties rag) throws Exception {
+            AgentscopeRagProperties rag,
+            AgentScopeDataSourceProperties ds) throws Exception {
         String table = rag.tableName();
         if (!isSafeSqlIdent(table)) {
             throw new IllegalArgumentException("Unsafe rag table name: " + table);
         }
+        // 勿关闭 PgVectorStore.getConnection()：那是 store 内部连接，关闭后 addDocuments 会失败
         if (rag.reindexOnStartup()) {
-            try (Connection conn = store.getConnection();
-                 Statement st = conn.createStatement()) {
-                st.execute("TRUNCATE TABLE " + table);
-            }
+            executeSql(ds, "TRUNCATE TABLE " + table);
             addDocuments(knowledge, rag);
             return;
         }
-        long count = countRows(store, table);
+        long count = countRows(ds, table);
         if (count == 0L) {
             addDocuments(knowledge, rag);
         } else {
@@ -128,16 +127,35 @@ public class AgentscopeRagConfiguration {
         log.info("AgentScope RAG ingested {} chunks from {}", docs.size(), rag.knowledgeFile());
     }
 
-    private static long countRows(PgVectorStore store, String table) throws Exception {
-        try (Connection conn = store.getConnection();
+    private static long countRows(AgentScopeDataSourceProperties ds, String table) {
+        try {
+            return queryLong(ds, "SELECT COUNT(*) FROM " + table);
+        } catch (Exception ex) {
+            log.warn("AgentScope RAG count failed (will try ingest): {}", ex.toString());
+            return 0L;
+        }
+    }
+
+    private static void executeSql(AgentScopeDataSourceProperties ds, String sql) throws Exception {
+        Properties props = new Properties();
+        props.setProperty("user", ds.username());
+        props.setProperty("password", ds.password());
+        try (Connection conn = DriverManager.getConnection(ds.url(), props);
+             Statement st = conn.createStatement()) {
+            st.execute(sql);
+        }
+    }
+
+    private static long queryLong(AgentScopeDataSourceProperties ds, String sql) throws Exception {
+        Properties props = new Properties();
+        props.setProperty("user", ds.username());
+        props.setProperty("password", ds.password());
+        try (Connection conn = DriverManager.getConnection(ds.url(), props);
              Statement st = conn.createStatement();
-             ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM " + table)) {
+             ResultSet rs = st.executeQuery(sql)) {
             if (rs.next()) {
                 return rs.getLong(1);
             }
-            return 0L;
-        } catch (Exception ex) {
-            log.warn("AgentScope RAG count failed (will try ingest): {}", ex.toString());
             return 0L;
         }
     }
