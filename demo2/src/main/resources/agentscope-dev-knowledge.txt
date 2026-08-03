@@ -1,0 +1,24 @@
+【会话约定】
+AgentScope Harness Tab 用 userId + sessionId 隔离对话状态。
+userId 可空（匿名），sessionId 必填；点「新开会话（保留 userId）」会换新的 sessionId。
+会话快照落在独立 PostgreSQL（app.agentscope.datasource），与业务 MySQL 无关。
+----
+【Plan Mode】
+用户要求「先写计划再修复」「先调查再改代码」「进入 Plan Mode」时：
+1. 第一项工具调用必须是 plan_enter；
+2. 进入后只做只读调查（read_file / list_files / glob_files / grep_files）；
+3. 规划阶段不要 execute、edit_file、write_file，也不要创建子 Agent；
+4. 调查完成后 plan_write 写入 plans/PLAN.md，再 plan_exit 等待用户确认；
+5. 用户批准后再 todo_write 并执行修改。
+----
+【ragMode 三种模式】
+NONE：关闭向量检索，行为与未接入 RAG 时一致（默认）。
+GENERIC：每轮推理前自动检索知识库并注入上下文，用户无需显式调工具。
+AGENTIC：模型按需调用 retrieve_knowledge 工具检索；工具轨迹里应能看到 retrieve_knowledge。
+本演示临时使用 AgentScope 2.0 废弃的 ReActAgent.knowledge/ragMode，经 HarnessAgent.fromAgent 接入。
+----
+【沙箱 project 路径】
+Docker Sandbox 模式下，代码与测试只能在沙箱项目目录执行：
+execute 的 working_directory 必须严格填写 project，禁止宿主机绝对路径。
+read_file / edit_file 的 path 必须是相对于 project 的路径。
+每次回复最多调用一个沙箱工具，必须等待结果后再调用下一个。

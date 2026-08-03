@@ -1,11 +1,14 @@
 # AgentScope 会话状态用 PostgreSQL（与 MySQL spring.datasource 独立）
+# 镜像含 pgvector，供 AgentScope RAG（SimpleKnowledge / PgVectorStore）使用
 # 启动：docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
 # 停止：docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml down
 # 连接：jdbc:postgresql://127.0.0.1:5432/agentscope  user/password=agentscope
+# 若旧 volume 无 vector 扩展：psql 内执行 CREATE EXTENSION IF NOT EXISTS vector;
+# 仍失败可开发环境 down -v 后重建（会清空会话/向量数据）
 services:
   agentscope-postgres:
     container_name: demo2-agentscope-postgres
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     ports:
       - "5432:5432"
     environment:
@@ -14,6 +17,7 @@ services:
       POSTGRES_DB: agentscope
     volumes:
       - agentscope_pg_data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentscope -d agentscope"]
       interval: 5s

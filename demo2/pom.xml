@@ -306,6 +306,10 @@
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-postgresql</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-rag-simple</artifactId>
+        </dependency>
         <!-- AgentScope A2A Server 与 Client（风险审查同容器演示） -->
         <dependency>
             <groupId>io.agentscope</groupId>
