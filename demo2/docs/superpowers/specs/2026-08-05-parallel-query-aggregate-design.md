@@ -24,7 +24,7 @@
 2. Demo 业务：Mock 用户信息与订单并行聚合，扁平响应返回前端。
 3. **两个 Demo 入口**，业务与超时语义相同，仅线程模型不同：
    - 虚拟线程（`newVirtualThreadPerTaskExecutor()`）
-   - JDK8 风格平台线程池（`Executors.newFixedThreadPool(n)` 等）
+   - JDK8 风格平台线程池（手写 `ThreadPoolExecutor`：按 CPU 定核心/最大线程、队列、拒绝策略等；**不用** `Executors.newFixedThreadPool`）
 
 ### 1.3 已确认决策
 
@@ -39,7 +39,7 @@
 | 数据源 | Mock（可 sleep / 抛异常，便于演示） |
 | 范围 | 通用工具 + 双 Demo 接口 |
 | 虚拟线程 Demo | `CompletableFuture.supplyAsync(..., vtExecutor)` |
-| JDK8 Demo | 固定平台线程池 + `CompletableFuture`（Java 8 API）或等价 `Future`；**不使用虚拟线程** |
+| JDK8 Demo | 手写 `ThreadPoolExecutor`（CPU 动态 sizing + 队列 + 拒绝策略）+ `CompletableFuture`；**不使用虚拟线程**；**不用** `newFixedThreadPool` |
 
 ### 1.4 非目标（本版不做）
 
@@ -48,6 +48,7 @@
 - 全有或全无、主从关键路径降级
 - 将现有 `MultiAgentService` 迁移到新工具（可后续再做）
 - 响应式 `Mono.zip` / WebClient 编排作为本版主路径
+- JDK8 Demo 使用 `Executors.newFixedThreadPool` / `newCachedThreadPool` 等便捷工厂（改用手写 `ThreadPoolExecutor`）
 
 ---
 
@@ -65,7 +66,7 @@ flowchart LR
   S --> O[MockOrderQuery]
   S --> T["ParallelQuerySupport\n传入 Executor"]
   T --> E1[VirtualThreadPerTaskExecutor]
-  T --> E2[FixedThreadPool 平台线程]
+  T --> E2[ThreadPoolExecutor 平台线程]
 ```
 
 ### 2.2 组件职责
@@ -120,7 +121,7 @@ flowchart LR
 | 方法 | 路径 | 线程模型 |
 |------|------|----------|
 | GET | `/demo/parallel/virtual/user-profile?userId=` | 虚拟线程池 |
-| GET | `/demo/parallel/jdk8/user-profile?userId=` | JDK8 固定平台线程池 |
+| GET | `/demo/parallel/jdk8/user-profile?userId=` | JDK8 `ThreadPoolExecutor` 平台线程池 |
 
 可选 query（演示用，名称实现时可微调）：
 
@@ -157,7 +158,20 @@ flowchart LR
 | Demo | Executor | 风格要点 |
 |------|----------|----------|
 | virtual | `Executors.newVirtualThreadPerTaskExecutor()` | Java 21 虚拟线程 |
-| jdk8 | `Executors.newFixedThreadPool(n)`（n 固定，如 8；进程内单例 Bean，应用关闭时 shutdown） | JDK8 经典平台线程池；编排可用 Java 8 起的 `CompletableFuture`，**禁止**虚拟线程 |
+| jdk8 | 手写 `new ThreadPoolExecutor(...)` 多参数构造；进程内单例 Bean，应用关闭时 `shutdown` | JDK8 经典平台线程池；编排用 Java 8 起的 `CompletableFuture`；**禁止**虚拟线程；**禁止** `Executors.newFixedThreadPool` / `newCachedThreadPool` 等便捷工厂（便于演示完整参数） |
+
+**JDK8 `ThreadPoolExecutor` 默认参数（可配置覆盖）**
+
+设 `N = Runtime.getRuntime().availableProcessors()`：
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `corePoolSize` | `N` | 按 CPU 核数 |
+| `maximumPoolSize` | `N * 2` | I/O 型并行查询略放大 |
+| `keepAliveTime` | `60s` | 非核心线程空闲回收 |
+| `workQueue` | `ArrayBlockingQueue(200)` | 有界队列，避免无界堆积 |
+| `threadFactory` | 命名前缀 `parallel-jdk8-` | 便于日志排查 |
+| `handler` | `CallerRunsPolicy` | 队列满时由调用线程执行，背压且不直接丢弃（Demo 默认；可改为 `AbortPolicy` 等） |
 
 两路径共用同一 `ParallelProfileService` 逻辑（或薄封装仅注入不同 Executor），避免复制业务代码。
 
@@ -168,7 +182,11 @@ flowchart LR
 | 配置项 | 默认 | 说明 |
 |--------|------|------|
 | `demo.parallel.timeout` | `3s` | 墙钟总预算 |
-| `demo.parallel.jdk8.pool-size` | `8` | JDK8 Demo 固定线程池大小 |
+| `demo.parallel.jdk8.core-pool-size` | `0`（表示用 `N`） | `≤0` 时取 `availableProcessors()` |
+| `demo.parallel.jdk8.max-pool-size` | `0`（表示用 `N*2`） | `≤0` 时取 `core * 2` |
+| `demo.parallel.jdk8.keep-alive` | `60s` | 非核心线程保活 |
+| `demo.parallel.jdk8.queue-capacity` | `200` | 有界队列容量 |
+| `demo.parallel.jdk8.rejected-policy` | `caller_runs` | `caller_runs` / `abort` / `discard` / `discard_oldest` |
 
 虚拟线程 Executor 无需池大小配置。
 
@@ -189,7 +207,8 @@ flowchart LR
 
 - Support API 形态建议：按命名任务提交 `Map<String, Supplier<?>>` 或类型安全的小 DSL，返回 `Map<String, Optional<T>>` / 分路结果对象；Service 再取 `user` / `orders`。
 - 等待实现可用 `CompletableFuture.allOf(...).orTimeout(timeout)`，再逐路 `getNow(null)` / 检查 `isDone`+`isCompletedExceptionally`；超时后对其余 future `cancel(true)`。
-- JDK8 Demo 的线程池必须在 Spring `@PreDestroy` / `DisposableBean` 中关闭，避免泄漏。
+- JDK8 Demo 使用 `ThreadPoolExecutor` 多参数构造创建 Bean，必须在 Spring `@PreDestroy` / `DisposableBean` 中 `shutdown`（可先 `shutdown` 再按需 `awaitTermination`），避免泄漏。
+- 不要用 `Executors.newFixedThreadPool`：其内部是无界 `LinkedBlockingQueue` + 固定大小，拒绝策略与扩容行为都不透明，不利于本 Demo 对照。
 
 ---
 
@@ -199,4 +218,4 @@ flowchart LR
 2. 人为制造订单 4s 延迟时，约 3s 内返回且 `orders == null`、`user` 有值。
 3. 人为制造订单异常时，`orders == null`、`user` 有值，HTTP 200。
 4. `ParallelQuerySupport` 单测覆盖成功 / 异常 / 超时三类。
-5. JDK8 Demo 路径未使用虚拟线程 Executor。
+5. JDK8 Demo 路径未使用虚拟线程 Executor，且使用手写 `ThreadPoolExecutor`（非 `newFixedThreadPool`）。
