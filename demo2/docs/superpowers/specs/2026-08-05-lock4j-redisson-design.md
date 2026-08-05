@@ -17,7 +17,7 @@ demo2 需要可复用的分布式锁能力，用于防并发、防重复提交�
 | 方案 | 结论 |
 |------|------|
 | 纯 Redisson | 可行，但本版希望统一走 lock4j 门面 |
-| **lock4j + Redisson** | **本版采用**：同步场景用 `@Lock`；SSE 场景用编程式 `tryLock` |
+| **lock4j + Redisson** | **本版采用**：同步场景用 `@Lock4j`；SSE 场景用编程式 `tryLock` |
 | Spring Data Redis 自写 SET NX | 续期成本高，不选 |
 
 说明：lock4j 是锁门面；Redisson 是执行后端。二者不是同一层级。
@@ -25,8 +25,8 @@ demo2 需要可复用的分布式锁能力，用于防并发、防重复提交�
 ### 1.2 目标
 
 1. 在 demo2 引入 Redis（Docker）与 **lock4j + Redisson**。
-2. **路径 A**：新增 `POST /demo/lock/submit`，用 `@Lock` 演示同步防重复。
-3. **路径 B**：改造 `POST /agentscope/dev-agent/ask`，用编程式 `tryLock` + Flux `doFinally` 解锁，防同内容重复提交。
+2. **路径 A**：新增 `POST /demo/lock/submit`，用 `@Lock4j` 演示同步防重复。
+3. **路径 B**：改造 `POST /agentscope/dev-agent/ask`，用编程式 `LockTemplate.lock` + Flux `doFinally` 解锁，防同内容重复提交。
 4. 锁 key 维度：`userId + sessionId + message`（message 做短哈希）。
 
 ### 1.3 已确认决策
@@ -35,7 +35,7 @@ demo2 需要可复用的分布式锁能力，用于防并发、防重复提交�
 |------|------|
 | 模块 | demo2（Spring Boot 4.1 / Java 21） |
 | 技术栈 | lock4j + Redisson 后端 |
-| 接入点 | demo 控制器（注解）+ `DevAgentService.ask`（编程式） |
+| 接入点 | demo 控制器（`@Lock4j`）+ `DevAgentService.ask`（编程式） |
 | 互斥维度 | `userId + sessionId + message` |
 | 冲突行为 | 拿不到锁立即失败（不排队、不等待） |
 | demo 锁持有 | 同步方法执行期间；`sleep` 模拟耗时 |
@@ -50,7 +50,7 @@ demo2 需要可复用的分布式锁能力，用于防并发、防重复提交�
 - 幂等落库 / 去重表 / 客户端 `requestId` 协议
 - ZooKeeper 或其它 lock4j 后端
 - Redis 密码、Sentinel、Cluster
-- 把 `@Lock` 打在返回 `Flux` 的方法上
+- 把 `@Lock4j` 打在返回 `Flux` 的方法上
 - 通用业务封装推广到全项目所有接口
 
 ---
@@ -69,7 +69,7 @@ flowchart TB
   subgraph Demo2["demo2 应用"]
     subgraph PathA["路径 A：同步 demo"]
       CTRL["LockDemoController<br/>POST /demo/lock/submit"]
-      SVCA["LockDemoService<br/>@Lock"]
+      SVCA["LockDemoService<br/>@Lock4j"]
       CTRL --> SVCA
     end
     subgraph PathB["路径 B：SSE ask"]
@@ -113,7 +113,7 @@ flowchart LR
 |------|------|------|
 | Docker Redis | 提供单机 Redis | 无 |
 | lock4j + Redisson starter | 自动配置锁执行器 | Redis 可达 |
-| `LockDemoService` | `@Lock` + 模拟临界区 | lock4j 注解 |
+| `LockDemoService` | `@Lock4j` + 模拟临界区 | lock4j 注解 |
 | `LockDemoController` | HTTP 校验、冲突 → 409 | Service |
 | `DevAgentService.ask` | 编程式 tryLock；Flux.doFinally 解锁 | lock4j `LockTemplate`（或等价 API） |
 | `sandboxRequestLock` | 进程内限制沙箱并发 | 与分布式锁无关，保留 |
@@ -122,7 +122,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  APP["业务：@Lock 或 LockTemplate.tryLock"]
+  APP["业务：@Lock4j 或 LockTemplate.lock"]
   L4J["lock4j 门面<br/>注解 · 超时 · 失败策略"]
   RS["Redisson<br/>可重入锁 · Watchdog · Redis 协议"]
   RD[("Redis")]
@@ -176,7 +176,7 @@ flowchart TB
 - **messageHash**: SHA-256 截断等稳定短哈希
 - **acquireTimeout**: `0`
 - **expire**: 建议 `30s`
-- **实现**: Service `@Lock`；锁失败异常 → 409
+- **实现**: Service `@Lock4j`；锁失败异常 → 409
 
 ### 3.3 验收场景
 
@@ -232,11 +232,11 @@ flowchart TD
 ### 4.1 接入点
 
 - 改造 `DevAgentService.ask(DevAgentRequest)`（Controller 签名不变）。
-- **禁止**在返回 `Flux` 的方法上使用 `@Lock`（方法返回即可能提前解锁）。
-- 使用 lock4j `LockTemplate`（或项目内薄封装）编程式：
-  1. 计算 key → `tryLock(wait=0, expire=…)`
-  2. 失败 → `Flux.just(DevAgentEvent.error(sessionId, "duplicate_in_progress"))`（经现有 `withRequestContext` 包装，与现有 error 风格一致）
-  3. 成功 → 返回原 ask Flux，并 `doFinally(signal -> unlock)`
+- **禁止**在返回 `Flux` 的方法上使用 `@Lock4j`（方法返回即可能提前解锁）。
+- 使用 lock4j `LockTemplate` 编程式：
+  1. 计算 key → `lock(key, expire, acquireTimeout=0)`（返回 `null` 即失败）
+  2. 失败 → `Flux.just(DevAgentEvent.error(sessionId, "duplicate_in_progress"))`（经现有 `withRequestContext` 包装）
+  3. 成功 → 返回原 ask Flux，并 `doFinally` → `releaseLock(lockInfo)`（跨线程释放失败则 WARN，依赖 expire 兜底）
 
 ### 4.2 锁约定
 
