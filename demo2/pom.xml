@@ -335,7 +335,7 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- 分布式锁：lock4j 门面 + Redisson 后端 -->
+        <!-- 分布式锁：lock4j 门面 + Redisson 后端（4.x 兼容 Spring Boot 4） -->
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>lock4j-redisson-spring-boot-starter</artifactId>
@@ -344,7 +344,11 @@
         <dependency>
             <groupId>org.redisson</groupId>
             <artifactId>redisson-spring-boot-starter</artifactId>
-            <version>3.45.1</version>
+            <version>4.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
     </dependencies>
 
