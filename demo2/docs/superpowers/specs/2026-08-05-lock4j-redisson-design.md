@@ -53,16 +53,46 @@ demo2 需要可复用的分布式锁能力，用于防并发、防重复提交�
 
 ## 2. 架构
 
-```text
-Client
-  → LockDemoController  (POST /demo/lock/submit)
-      → LockDemoService  (@Lock + 模拟业务 sleep)
-          → lock4j AOP
-              → RedissonLockExecutor
-                  → Redis (Docker demo2-redis)
+### 2.1 逻辑架构
+
+```mermaid
+flowchart TB
+  subgraph Client["调用方"]
+    C1["HTTP Client / curl"]
+  end
+
+  subgraph Demo2["demo2 应用"]
+    CTRL["LockDemoController<br/>POST /demo/lock/submit"]
+    SVC["LockDemoService<br/>@Lock + sleep 模拟临界区"]
+    AOP["lock4j AOP"]
+    EXEC["RedissonLockExecutor"]
+    CTRL --> SVC
+    SVC -.->|拦截| AOP
+    AOP --> EXEC
+  end
+
+  subgraph Infra["基础设施"]
+    REDIS[("Redis<br/>demo2-redis :6379")]
+  end
+
+  C1 -->|JSON| CTRL
+  EXEC -->|加锁 / 解锁| REDIS
 ```
 
-组件职责：
+### 2.2 部署关系（本版）
+
+```mermaid
+flowchart LR
+  subgraph Host["开发机"]
+    APP["demo2<br/>Spring Boot 4.1"]
+    subgraph Docker["Docker"]
+      R["redis:7-alpine<br/>container: demo2-redis<br/>port 6379"]
+    end
+    APP -->|"spring.data.redis"| R
+  end
+```
+
+### 2.3 组件职责
 
 | 单元 | 职责 | 依赖 |
 |------|------|------|
@@ -70,6 +100,20 @@ Client
 | lock4j + Redisson starter | 自动配置锁执行器 | Redis 可达 |
 | `LockDemoService` | 声明锁 key、模拟临界区 | lock4j |
 | `LockDemoController` | HTTP 入参校验、冲突 → 409 | Service |
+
+### 2.4 技术分层（lock4j vs Redisson）
+
+```mermaid
+flowchart TB
+  APP["业务代码 @Lock / LockTemplate"]
+  L4J["lock4j 门面<br/>注解 · 超时 · 失败策略"]
+  RS["Redisson<br/>可重入锁 · Watchdog · Redis 协议"]
+  RD[("Redis")]
+
+  APP --> L4J --> RS --> RD
+```
+
+本版业务只依赖 lock4j 注解；Redisson 作为 executor，不在 demo 代码里直接调 `RLock`（除非排查问题）。
 
 ---
 
@@ -122,6 +166,80 @@ Client
 1. 同 `userId + sessionId + message` 并发两次：第一次进入 sleep，第二次立刻 409。
 2. 不同 `message` 或不同 `sessionId`：可同时成功。
 3. 第一次结束后再提交相同 key：应成功。
+
+### 3.4 成功路径时序
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant CTRL as LockDemoController
+  participant SVC as LockDemoService
+  participant L4J as lock4j AOP
+  participant R as Redis
+
+  C->>CTRL: POST /demo/lock/submit
+  CTRL->>CTRL: 校验 sessionId/message/workMs
+  CTRL->>SVC: submit(userId, sessionId, message, workMs)
+  L4J->>R: tryLock(key, wait=0, expire=30s)
+  R-->>L4J: OK
+  L4J->>SVC: 进入临界区
+  SVC->>SVC: sleep(workMs) 模拟业务
+  SVC-->>L4J: 返回结果
+  L4J->>R: unlock(key)
+  L4J-->>CTRL: LockDemoResponse
+  CTRL-->>C: 200 locked=true
+```
+
+### 3.5 重复提交冲突时序
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C1 as Client-1
+  participant C2 as Client-2
+  participant APP as demo2
+  participant R as Redis
+
+  C1->>APP: submit 同 key
+  APP->>R: tryLock(key)
+  R-->>APP: OK（持有中）
+  Note over APP: sleep(workMs) 未结束
+
+  C2->>APP: submit 同 key
+  APP->>R: tryLock(key) wait=0
+  R-->>APP: FAIL
+  APP-->>C2: 409 duplicate_in_progress
+
+  Note over APP: Client-1 临界区结束
+  APP->>R: unlock(key)
+  APP-->>C1: 200 locked=true
+```
+
+### 3.6 请求处理流程图
+
+```mermaid
+flowchart TD
+  A[收到 POST /demo/lock/submit] --> B{参数合法?}
+  B -->|否| B400[400 Bad Request]
+  B -->|是| C[规范化 userId<br/>空 → anonymous]
+  C --> D[计算 messageHash<br/>拼 lock key]
+  D --> E{tryLock wait=0}
+  E -->|失败 锁冲突| F409[409 duplicate_in_progress]
+  E -->|失败 Redis 不可用| F500[5xx + 日志]
+  E -->|成功| G[执行模拟业务 sleep]
+  G --> H[unlock]
+  H --> I[200 locked=true]
+```
+
+### 3.7 锁 Key 构成
+
+```mermaid
+flowchart LR
+  U["userId"] --> K["demo:lock:submit:{userId}:{sessionId}:{messageHash}"]
+  S["sessionId"] --> K
+  M["message"] --> H["SHA-256 截断"] --> K
+```
 
 ---
 
@@ -188,5 +306,26 @@ docker compose -f demo2/docker/redis/docker-compose.yml up -d
 
 - **不要**直接把 `@Lock` 打在返回 `Flux` 的方法上（方法返回即可能解锁）。
 - 应改为 `LockTemplate` / Redisson 编程式，`tryLock` 失败立即拒，在 Flux `doFinally` 释放。
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant S as DevAgentService
+  participant L as LockTemplate / RLock
+  participant R as Redis
+
+  C->>S: ask(...) → Flux
+  S->>L: tryLock(key, wait=0)
+  alt 失败
+    L-->>S: false
+    S-->>C: SSE error / 409 语义
+  else 成功
+    L-->>S: true
+    S-->>C: 订阅 Flux 推送事件
+    Note over S,C: 流结束 / 取消 / 错误
+    S->>L: unlock in doFinally
+    L->>R: unlock
+  end
+```
 
 本版 demo 只证明「基础设施 + 注解同步路径」可用。
