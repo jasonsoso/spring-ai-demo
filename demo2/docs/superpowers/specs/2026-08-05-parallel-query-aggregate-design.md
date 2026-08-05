@@ -169,9 +169,90 @@ flowchart LR
 | `corePoolSize` | `N` | 按 CPU 核数 |
 | `maximumPoolSize` | `N * 2` | I/O 型并行查询略放大 |
 | `keepAliveTime` | `60s` | 非核心线程空闲回收 |
+| `unit` | `TimeUnit.SECONDS` | `keepAliveTime` 的时间单位 |
 | `workQueue` | `ArrayBlockingQueue(200)` | 有界队列，避免无界堆积 |
 | `threadFactory` | 命名前缀 `parallel-jdk8-` | 便于日志排查 |
 | `handler` | `CallerRunsPolicy` | 队列满时由调用线程执行，背压且不直接丢弃（Demo 默认；可改为 `AbortPolicy` 等） |
+
+### 4.4 `ThreadPoolExecutor` 参数说明与用法
+
+构造方法（本 Demo 使用的完整形态）：
+
+```java
+new ThreadPoolExecutor(
+    corePoolSize,
+    maximumPoolSize,
+    keepAliveTime,
+    unit,
+    workQueue,
+    threadFactory,
+    handler
+);
+```
+
+**任务提交时的大致顺序**（理解参数怎么配合）：
+
+1. 若当前线程数 `< corePoolSize` → **新建线程**执行任务（即使有空闲线程，默认也会先凑满核心数；可用 `prestartAllCoreThreads` 预热）。
+2. 若已达核心数 → 任务进入 **`workQueue`** 排队。
+3. 若队列已满且线程数 `< maximumPoolSize` → **再建线程**（到最大为止）执行。
+4. 若队列满且已达最大线程数 → 触发 **`handler` 拒绝策略**。
+
+因此：不是「先扩到 max 再排队」，而是 **先核心 → 再入队 → 队列满才扩到 max → 再满才拒绝**。
+
+#### `corePoolSize`（核心线程数）
+
+- **含义**：池中常驻（默认不超时回收）的线程数量下限目标。
+- **怎么用**：CPU 密集可取 `N` 或 `N+1`；本 Demo 查询偏 I/O/sleep，取 `N` 作起点即可。
+- **注意**：核心线程默认不会因 `keepAliveTime` 退出；若希望核心也回收，需 `allowCoreThreadTimeOut(true)`（本版默认不开启）。
+
+#### `maximumPoolSize`（最大线程数）
+
+- **含义**：池允许的线程数上限（含核心）。
+- **怎么用**：只有队列满时才会从 `core` 扩到 `max`。I/O 等待多时可设 `N*2`；若队列很大而 max 只比 core 大一点，扩容几乎用不上。
+- **约束**：必须 `maximumPoolSize >= corePoolSize`，否则构造/运行会出问题。
+
+#### `keepAliveTime` + `unit`
+
+- **含义**：超出核心数的那些线程，空闲超过该时间后被回收。
+- **怎么用**：本 Demo 默认 `60s` + `TimeUnit.SECONDS`。流量脉冲过后可把临时线程收回，避免长期占着多余平台线程。
+- **和核心的关系**：默认只作用于「非核心」线程；核心是否回收看 `allowCoreThreadTimeOut`。
+
+#### `workQueue`（工作队列）
+
+- **含义**：核心线程忙时，新任务先放这里等。
+- **本 Demo 选择**：`new ArrayBlockingQueue<>(queueCapacity)`（有界、数组实现、公平性默认非公平）。
+- **怎么用**：
+  - **有界队列**（推荐 Demo/生产默认思路）：容量满了才扩容/拒绝，能形成背压，避免任务无限堆积占内存。
+  - **无界 `LinkedBlockingQueue`**：`newFixedThreadPool` 内部就是这种 → 队列几乎永不满 → **`maximumPoolSize` 形同虚设**，拒绝策略也很难触发；这也是本版不用它的原因之一。
+  - **`SynchronousQueue`**：不存储任务，来一个尝试交给线程；常配合较大 `max`（类似 cached 风格），本 Demo 不采用。
+- **容量建议**：按「可接受排队延迟 × 预计 QPS」粗估；本 Demo 默认 `200`，可用配置改。
+
+#### `threadFactory`（线程工厂）
+
+- **含义**：创建池内线程的工厂，可设名称、是否 daemon、优先级、UncaughtExceptionHandler。
+- **怎么用**：本 Demo 用自定义工厂，线程名形如 `parallel-jdk8-1`、`parallel-jdk8-2`，方便日志、jstack 对照。
+- **建议**：业务池不要用默默无名字的工厂；daemon 一般 `false`，避免进程退出时任务被粗暴掐断（关闭靠 `shutdown`）。
+
+#### `handler`（拒绝策略 `RejectedExecutionHandler`）
+
+- **含义**：队列满且线程数已到 `maximumPoolSize`（或池已 shutdown）时，如何处理新任务。
+- **JDK 内置四种，怎么用**：
+
+| 策略 | 行为 | 适用 |
+|------|------|------|
+| `CallerRunsPolicy`（本 Demo 默认） | 由**提交任务的线程**自己跑这个任务 | 温和背压：拖慢提交方，尽量不丢任务 |
+| `AbortPolicy`（ThreadPoolExecutor 默认） | 抛 `RejectedExecutionException` | 希望快速失败、由上层重试/降级 |
+| `DiscardPolicy` | 默默丢弃新任务 | 可丢的旁路任务；主链路慎用 |
+| `DiscardOldestPolicy` | 丢掉队列里最老的一个，再试一次入队 | 只要最新数据、可丢旧任务的场景 |
+
+- **本 Demo 映射配置**：`caller_runs` / `abort` / `discard` / `discard_oldest` → 上表四种。
+- **与并行聚合的关系**：拒绝发生在「提交到线程池」阶段，早于业务墙钟 3s 超时。若选 `AbortPolicy`，Support 应把该路记为失败 → `null` + 日志，与其它路互不影响。
+
+#### 关闭（不是构造参数，但必须一起用）
+
+- `shutdown()`：不再接新任务，已提交的继续做完。
+- `shutdownNow()`：尝试中断在执行的任务并返回未执行列表。
+- 本 Demo：Spring Bean `@PreDestroy` 中 `shutdown()`，必要时 `awaitTermination`；避免池泄漏。
 
 两路径共用同一 `ParallelProfileService` 逻辑（或薄封装仅注入不同 Executor），避免复制业务代码。
 
@@ -184,7 +265,7 @@ flowchart LR
 | `demo.parallel.timeout` | `3s` | 墙钟总预算 |
 | `demo.parallel.jdk8.core-pool-size` | `0`（表示用 `N`） | `≤0` 时取 `availableProcessors()` |
 | `demo.parallel.jdk8.max-pool-size` | `0`（表示用 `N*2`） | `≤0` 时取 `core * 2` |
-| `demo.parallel.jdk8.keep-alive` | `60s` | 非核心线程保活 |
+| `demo.parallel.jdk8.keep-alive` | `60s` | 非核心线程保活（对应 `keepAliveTime` + `unit`） |
 | `demo.parallel.jdk8.queue-capacity` | `200` | 有界队列容量 |
 | `demo.parallel.jdk8.rejected-policy` | `caller_runs` | `caller_runs` / `abort` / `discard` / `discard_oldest` |
 
