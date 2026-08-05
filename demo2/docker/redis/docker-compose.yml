@@ -1,0 +1,15 @@
+# 分布式锁用 Redis（lock4j + Redisson）
+# 启动：docker compose -f demo2/docker/redis/docker-compose.yml up -d
+# 停止：docker compose -f demo2/docker/redis/docker-compose.yml down
+services:
+  demo2-redis:
+    container_name: demo2-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped

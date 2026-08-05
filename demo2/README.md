@@ -1294,6 +1294,28 @@ docker compose -f demo2/docker/agentscope-postgres/docker-compose.yml up -d
 
 配置见 `app.agentscope.datasource.*`。与下方 **分布式后端** 共用同一 PG；单独看会话时，`distributed.enabled=true` 且 PG 可达时日志含 `distributed=postgres`。
 
+**分布式锁（Redis + lock4j / Redisson）：**
+
+```bash
+docker compose -f demo2/docker/redis/docker-compose.yml up -d
+```
+
+- Demo 注解锁：`POST /demo/lock/submit`（同 `userId+sessionId+message` 并发第二次返回 HTTP 409）
+- DevAgent ask：`POST /agentscope/dev-agent/ask` 编程式锁；冲突 SSE `ERROR` / `duplicate_in_progress`
+- Spec：`docs/superpowers/specs/2026-08-05-lock4j-redisson-design.md`
+
+```bash
+# 终端 1
+curl -s -X POST http://localhost:8081/demo/lock/submit \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"u1\",\"sessionId\":\"s1\",\"message\":\"same\",\"workMs\":5000}"
+
+# 终端 2（立即）
+curl -s -o - -w "\nHTTP:%{http_code}\n" -X POST http://localhost:8081/demo/lock/submit \
+  -H "Content-Type: application/json" \
+  -d "{\"userId\":\"u1\",\"sessionId\":\"s1\",\"message\":\"same\",\"workMs\":5000}"
+```
+
 **分布式后端（`PostgresDistributedStore` / 共享 Workspace）：**
 
 - 开关：`app.agentscope.distributed.enabled`（本地默认 `true`；测试 `false`）

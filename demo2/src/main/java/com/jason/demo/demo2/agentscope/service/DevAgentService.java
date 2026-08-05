@@ -12,6 +12,9 @@ import com.jason.demo.demo2.agentscope.diff.WorkspaceDiffService;
 import com.jason.demo.demo2.agentscope.observability.AgentExecutionContext;
 import com.jason.demo.demo2.agentscope.plan.PlanHostSyncService;
 import com.jason.demo.demo2.agentscope.rag.AgentscopeRagMode;
+import com.jason.demo.demo2.lock.LockKeys;
+import com.baomidou.lock.LockInfo;
+import com.baomidou.lock.LockTemplate;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentEventType;
@@ -55,6 +58,8 @@ public class DevAgentService {
     private final Tracer tracer;
     private final WorkspaceDiffService workspaceDiffService;
     private final PlanHostSyncService planHostSyncService;
+    /** nullable：单测可传 null 关闭分布式锁。 */
+    private final LockTemplate lockTemplate;
     private final ConcurrentMap<String, AgentscopeRagMode> lastRagModeBySession = new ConcurrentHashMap<>();
     /**
      * HarnessAgent 的 SandboxLifecycleMiddleware 持有共享的 currentAcquireResult，
@@ -69,13 +74,15 @@ public class DevAgentService {
             AgentStateStore agentStateStore,
             Tracer tracer,
             WorkspaceDiffService workspaceDiffService,
-            PlanHostSyncService planHostSyncService) {
+            PlanHostSyncService planHostSyncService,
+            LockTemplate lockTemplate) {
         this.agentscopeDevAgentRegistry = agentscopeDevAgentRegistry;
         this.properties = properties;
         this.agentStateStore = agentStateStore;
         this.tracer = tracer;
         this.workspaceDiffService = workspaceDiffService;
         this.planHostSyncService = planHostSyncService;
+        this.lockTemplate = lockTemplate;
     }
 
     public DevAgentService(
@@ -83,7 +90,7 @@ public class DevAgentService {
             DevAgentProperties properties,
             AgentStateStore agentStateStore,
             Tracer tracer) {
-        this(agentscopeDevAgentRegistry, properties, agentStateStore, tracer, null, null);
+        this(agentscopeDevAgentRegistry, properties, agentStateStore, tracer, null, null, null);
     }
 
     public DevAgentService(
@@ -92,7 +99,24 @@ public class DevAgentService {
             AgentStateStore agentStateStore,
             Tracer tracer,
             WorkspaceDiffService workspaceDiffService) {
-        this(agentscopeDevAgentRegistry, properties, agentStateStore, tracer, workspaceDiffService, null);
+        this(agentscopeDevAgentRegistry, properties, agentStateStore, tracer, workspaceDiffService, null, null);
+    }
+
+    public DevAgentService(
+            AgentscopeDevAgentRegistry agentscopeDevAgentRegistry,
+            DevAgentProperties properties,
+            AgentStateStore agentStateStore,
+            Tracer tracer,
+            WorkspaceDiffService workspaceDiffService,
+            PlanHostSyncService planHostSyncService) {
+        this(
+                agentscopeDevAgentRegistry,
+                properties,
+                agentStateStore,
+                tracer,
+                workspaceDiffService,
+                planHostSyncService,
+                null);
     }
 
     /** 测试兼容：单 Agent 包装为仅 NONE 的 Registry。 */
@@ -101,7 +125,7 @@ public class DevAgentService {
             DevAgentProperties properties,
             AgentStateStore agentStateStore,
             Tracer tracer) {
-        this(agentscopeDevAgent, properties, agentStateStore, tracer, null, null);
+        this(agentscopeDevAgent, properties, agentStateStore, tracer, null, null, null);
     }
 
     public DevAgentService(
@@ -110,7 +134,7 @@ public class DevAgentService {
             AgentStateStore agentStateStore,
             Tracer tracer,
             WorkspaceDiffService workspaceDiffService) {
-        this(agentscopeDevAgent, properties, agentStateStore, tracer, workspaceDiffService, null);
+        this(agentscopeDevAgent, properties, agentStateStore, tracer, workspaceDiffService, null, null);
     }
 
     public DevAgentService(
@@ -120,6 +144,17 @@ public class DevAgentService {
             Tracer tracer,
             WorkspaceDiffService workspaceDiffService,
             PlanHostSyncService planHostSyncService) {
+        this(agentscopeDevAgent, properties, agentStateStore, tracer, workspaceDiffService, planHostSyncService, null);
+    }
+
+    public DevAgentService(
+            HarnessAgent agentscopeDevAgent,
+            DevAgentProperties properties,
+            AgentStateStore agentStateStore,
+            Tracer tracer,
+            WorkspaceDiffService workspaceDiffService,
+            PlanHostSyncService planHostSyncService,
+            LockTemplate lockTemplate) {
         this(
                 new AgentscopeDevAgentRegistry(
                         agentscopeDevAgent,
@@ -140,7 +175,8 @@ public class DevAgentService {
                 agentStateStore,
                 tracer,
                 workspaceDiffService,
-                planHostSyncService);
+                planHostSyncService,
+                lockTemplate);
     }
 
     public Flux<DevAgentEvent> ask(DevAgentRequest request) {
@@ -157,10 +193,45 @@ public class DevAgentService {
                             sessionId, "DEEPSEEK_API_KEY is not configured")));
         }
 
+        if (lockTemplate == null) {
+            return withRequestContext(
+                    sessionId,
+                    invocation,
+                    Flux.defer(() -> askAfterContext(request, userId, invocation)));
+        }
+
+        String lockKey = LockKeys.devAgentAskKey(userId, sessionId, request.message());
+        long expireMs = 600_000L;
+        LockInfo lockInfo = lockTemplate.lock(lockKey, expireMs, 0L);
+        if (lockInfo == null) {
+            logRejected(invocation, "duplicate_in_progress");
+            return withRequestContext(
+                    sessionId,
+                    invocation,
+                    Flux.just(DevAgentEvent.error(sessionId, "duplicate_in_progress")));
+        }
+
         return withRequestContext(
                 sessionId,
                 invocation,
-                Flux.defer(() -> askAfterContext(request, userId, invocation)));
+                Flux.defer(() -> askAfterContext(request, userId, invocation))
+                        .doFinally(signal -> {
+                            try {
+                                boolean ok = lockTemplate.releaseLock(lockInfo);
+                                if (!ok) {
+                                    log.warn(
+                                            "ask lock release returned false, key={}, signal={}",
+                                            lockKey,
+                                            signal);
+                                }
+                            } catch (RuntimeException ex) {
+                                log.warn(
+                                        "ask lock release failed, key={}, signal={}",
+                                        lockKey,
+                                        signal,
+                                        ex);
+                            }
+                        }));
     }
 
     public Flux<DevAgentEvent> confirm(DevAgentConfirmRequest request) {

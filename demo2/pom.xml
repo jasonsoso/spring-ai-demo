@@ -33,6 +33,7 @@
         <!-- Embabel 官方 Boot4/SAI2 迁移在 2.0.0 分支；Maven Central 尚无正式版，使用 snapshot -->
         <embabel-agent.version>2.0.0-SNAPSHOT</embabel-agent.version>
         <agentscope.version>2.0.0</agentscope.version>
+        <lock4j.version>2.2.7</lock4j.version>
     </properties>
 
     <repositories>
@@ -333,6 +334,17 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- 分布式锁：lock4j 门面 + Redisson 后端 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>lock4j-redisson-spring-boot-starter</artifactId>
+            <version>${lock4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
+            <version>3.45.1</version>
         </dependency>
     </dependencies>
 
