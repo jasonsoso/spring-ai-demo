@@ -1,9 +1,9 @@
 package com.jason.demo.demo2.controller;
 
-import com.jason.demo.demo2.mq.InMemoryOrderEventStore;
-import com.jason.demo.demo2.mq.OrderEvent;
-import com.jason.demo.demo2.mq.OrderEventPublisher;
-import com.jason.demo.demo2.mq.OrderEventRequest;
+import com.jason.demo.demo2.mq.model.OrderEvent;
+import com.jason.demo.demo2.mq.model.OrderEventRequest;
+import com.jason.demo.demo2.mq.publisher.OrderEventPublisher;
+import com.jason.demo.demo2.mq.store.InMemoryOrderEventStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -36,6 +36,6 @@ class OrderMqControllerTest {
 
         ArgumentCaptor<OrderEvent> captor = ArgumentCaptor.forClass(OrderEvent.class);
         verify(publisher).sendSync(captor.capture());
-        assertThat(captor.getValue().orderId()).isEqualTo("o-1");
+        assertThat(captor.getValue().getOrderId()).isEqualTo("o-1");
     }
 }

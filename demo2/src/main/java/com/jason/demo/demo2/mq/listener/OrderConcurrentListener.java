@@ -1,6 +1,8 @@
-package com.jason.demo.demo2.mq;
+package com.jason.demo.demo2.mq.listener;
 
 import com.jason.demo.demo2.framework.rocketmq.RocketMessageConcurrentlyListener;
+import com.jason.demo.demo2.mq.model.OrderEvent;
+import com.jason.demo.demo2.mq.store.InMemoryOrderEventStore;
 import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.springframework.stereotype.Component;

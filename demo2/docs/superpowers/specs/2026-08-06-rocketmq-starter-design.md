@@ -36,7 +36,7 @@ demo2 需要可演示、可复用的 RocketMQ 集成能力，对齐文章中的�
 | Demo 场景 | 订单事件 + 并发 Listener + 顺序 Listener（同 `orderId` 保序） |
 | 事务后发送 | 使用提供的 `TransactionUtils` |
 | 框架包名 | `com.jason.demo.demo2.framework.rocketmq.*` |
-| Demo 包名 | `com.jason.demo.demo2.mq.*`（不放进 framework） |
+| Demo 包名 | `com.jason.demo.demo2.mq.{model,publisher,listener,store}`（不放进 framework） |
 | JSON | Jackson（Spring 已有） |
 | topic/tag 配置 | 生产/消费统一从 Spring Environment 读取（采纳文章优化建议，不用 Heracles） |
 
@@ -94,7 +94,7 @@ flowchart TB
 | 层 | 包 | 说明 |
 |----|-----|------|
 | 框架 | `com.jason.demo.demo2.framework.rocketmq` | 可迁独立 starter 的通用能力 |
-| 业务 Demo | `com.jason.demo.demo2.mq` | 订单事件演示，依赖框架层 |
+| 业务 Demo | `com.jason.demo.demo2.mq.{model,publisher,listener,store}` | 订单事件演示，依赖框架层 |
 | 基础设施 | `demo2/docker/rocketmq/` | NameServer + Broker Compose |
 
 ---
@@ -119,15 +119,20 @@ com.jason.demo.demo2.framework.rocketmq
     └── TransactionUtils
 
 com.jason.demo.demo2.mq
-├── OrderEvent
-├── OrderEventPublisher
-├── OrderConcurrentListener
-├── OrderOrderlyListener
-├── InMemoryOrderEventStore
-└── OrderMqController
+├── model
+│   ├── OrderEvent
+│   └── OrderEventRequest
+├── publisher
+│   └── OrderEventPublisher
+├── listener
+│   ├── OrderConcurrentListener
+│   ├── OrderOrderlyListener
+│   └── OrderAuditListener
+└── store
+    └── InMemoryOrderEventStore
 ```
 
-`OrderMqController` 放在 `com.jason.demo.demo2.controller`（对齐 `LockDemoController`）；事件、Publisher、Listener、Store 放在 `com.jason.demo.demo2.mq`。
+`OrderMqController` 放在 `com.jason.demo.demo2.controller`（对齐 `LockDemoController`）；Demo 业务按 model / publisher / listener / store 分包。
 
 ### 3.2 组件表
 
@@ -153,25 +158,34 @@ rocketmq:
       enabled: true
       namesrvAddr: 127.0.0.1:9876
       topic: DEMO_ORDER_TOPIC
-      tags: CONCURRENT
+      tags: "*"
       consumerGroup: demo-order-concurrent-group
       listenerBeanName: orderConcurrentListener
     orderOrderly:
       enabled: true
       namesrvAddr: 127.0.0.1:9876
       topic: DEMO_ORDER_TOPIC
-      tags: ORDERLY
+      tags: "*"
       consumerGroup: demo-order-orderly-group
       listenerBeanName: orderOrderlyListener
+    orderAudit:
+      enabled: true
+      namesrvAddr: 127.0.0.1:9876
+      topic: DEMO_ORDER_TOPIC
+      tags: "*"
+      consumerGroup: demo-order-audit-group
+      listenerBeanName: orderAuditListener
   producers:
     orderProducer:
       enabled: true
       namesrvAddr: 127.0.0.1:9876
       producerGroup: demo-order-producer-group
       topic: DEMO_ORDER_TOPIC
+      # 不配 tag
 ```
 
-- Producer 的 `topic` / 默认 `tag` 从同一套 Spring 配置读取（可在 `ProducerConfig` 增加 `topic`/`tag`，或 Demo Publisher 显式指定 tag：`CONCURRENT` / `ORDERLY`）。
+- `BaseEventPublisher` 仅接收 `producerId`；启动时从 `rocketmq.producers.<id>` 自闭环读取 `topic`/`tag`（tag 可空），业务侧 `send(body, keys...)` 无需再传 tag。
+- Demo：单一 `OrderEventPublisher`（无 tag）+ 同 Topic 下多个 `tags=*` 消费者（不同 `consumerGroup`）fan-out。
 - 自动配置入口：Boot 3+/4 使用 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`（或 demo2 内 `@Configuration` 直接扫描）；不使用已废弃的仅 `spring.factories` 路径作为唯一入口。若仅在 demo2 内使用，可用 `@Configuration` + 组件扫描，效果等价。
 
 ---
@@ -201,10 +215,10 @@ Broker push → Abstract*Listener
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/demo/mq/orders/sync` | 同步发送（tag=`CONCURRENT`） |
-| `POST` | `/demo/mq/orders/async` | 异步发送（tag=`CONCURRENT`） |
-| `POST` | `/demo/mq/orders/orderly` | 顺序发送（tag=`ORDERLY`，`shardingKey=orderId`） |
-| `POST` | `/demo/mq/orders/delay?level=S_5` | 延迟发送（tag=`CONCURRENT`） |
+| `POST` | `/demo/mq/orders/sync` | 同步发送（无 tag） |
+| `POST` | `/demo/mq/orders/async` | 异步发送 |
+| `POST` | `/demo/mq/orders/orderly` | 顺序发送（`shardingKey=orderId`） |
+| `POST` | `/demo/mq/orders/delay?level=S_5` | 延迟发送 |
 | `GET` | `/demo/mq/orders/events` | 查内存消费结果（可选 `orderId` 过滤） |
 | `DELETE` | `/demo/mq/orders/events` | 清空 store |
 
@@ -214,7 +228,7 @@ Broker push → Abstract*Listener
 {"orderId":"o-1","type":"CREATED","payload":"demo"}
 ```
 
-Topic：`DEMO_ORDER_TOPIC`；并发 tag `CONCURRENT`，顺序 tag `ORDERLY`。
+Topic：`DEMO_ORDER_TOPIC`；生产者不配 tag；三个消费者均 `tags=*`，每条消息 fan-out 到 `concurrent` / `orderly` / `audit`。
 
 ---
 

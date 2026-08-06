@@ -1,5 +1,6 @@
-package com.jason.demo.demo2.mq;
+package com.jason.demo.demo2.mq.store;
 
+import com.jason.demo.demo2.mq.model.OrderEvent;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

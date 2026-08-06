@@ -4,8 +4,7 @@ import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 import org.apache.rocketmq.client.consumer.listener.MessageListenerConcurrently;
 import org.apache.rocketmq.client.consumer.listener.MessageListenerOrderly;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
@@ -18,17 +17,27 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.EnvironmentAware;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
-import org.springframework.lang.NonNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.util.StringUtils;
 
 import java.util.Map;
 
+/**
+ * RocketMQ 自动装配入口。
+ * <p>
+ * 在 BeanDefinition 注册阶段根据 {@link RocketMQProperties} 动态注册：
+ * <ul>
+ *   <li>{@link DefaultMQPushConsumer}：订阅 topic/tags，绑定业务 Listener</li>
+ *   <li>{@link DefaultMQProducer}：按配置创建，{@code initMethod=start} / {@code destroyMethod=shutdown}</li>
+ * </ul>
+ * 行为约定：{@code enabled=false}、空 consumers/producers、Listener Bean 缺失 → warn 并跳过；
+ * 必填字段为空 → 抛异常导致启动失败。
+ */
+@Slf4j
 @Configuration
 @EnableConfigurationProperties(RocketMQProperties.class)
 public class RocketMQConfiguration
         implements BeanDefinitionRegistryPostProcessor, ApplicationContextAware, EnvironmentAware {
-
-    private static final Logger log = LoggerFactory.getLogger(RocketMQConfiguration.class);
 
     private Environment environment;
     private ApplicationContext applicationContext;
@@ -43,6 +52,9 @@ public class RocketMQConfiguration
         this.applicationContext = applicationContext;
     }
 
+    /**
+     * 尽早绑定配置并注册 Consumer / Producer Bean，保证后续 {@code BaseEventPublisher} 能按名注入 Producer。
+     */
     @Override
     public void postProcessBeanDefinitionRegistry(@NonNull BeanDefinitionRegistry registry) throws BeansException {
         RocketMQProperties props = Binder.get(environment)
@@ -57,6 +69,7 @@ public class RocketMQConfiguration
         // no-op
     }
 
+    /** 校验消费者必填项：consumerGroup / namesrvAddr / topic */
     static void requireConsumerFields(String consumerName, RocketMQProperties.ConsumerConfig config) {
         if (!StringUtils.hasText(config.getConsumerGroup())) {
             throw new IllegalArgumentException("rocketmq 配置错误, consumerGroup 不能为空: " + consumerName);
@@ -69,6 +82,7 @@ public class RocketMQConfiguration
         }
     }
 
+    /** 校验生产者必填项：producerGroup / namesrvAddr（topic 由 Publisher 启动时再校验） */
     static void requireProducerFields(String producerName, RocketMQProperties.ProducerConfig config) {
         if (!StringUtils.hasText(config.getProducerGroup())) {
             throw new IllegalArgumentException("rocketmq 配置错误, producerGroup 不能为空: " + producerName);
@@ -78,6 +92,9 @@ public class RocketMQConfiguration
         }
     }
 
+    /**
+     * 注册 PushConsumer：Listener 缺失或未启用则跳过；Bean 名 = {@code <consumerName>_rocketmq_consumer}。
+     */
     private void registerConsumers(BeanDefinitionRegistry registry, RocketMQProperties props) {
         Map<String, RocketMQProperties.ConsumerConfig> consumers = props.getConsumers();
         if (consumers == null || consumers.isEmpty()) {
@@ -106,6 +123,7 @@ public class RocketMQConfiguration
         }
     }
 
+    /** 创建并订阅：按 Listener 类型注册并发或顺序消费回调。 */
     private DefaultMQPushConsumer createConsumer(RocketMQProperties.ConsumerConfig config) {
         try {
             DefaultMQPushConsumer consumer = new DefaultMQPushConsumer(config.getConsumerGroup());
@@ -127,6 +145,9 @@ public class RocketMQConfiguration
         }
     }
 
+    /**
+     * 注册 Producer：Bean 名优先用 {@code beanName}，否则用 Map key（即业务 Publisher 的 producerId）。
+     */
     private void registerProducers(BeanDefinitionRegistry registry, RocketMQProperties props) {
         Map<String, RocketMQProperties.ProducerConfig> producers = props.getProducers();
         if (producers == null || producers.isEmpty()) {

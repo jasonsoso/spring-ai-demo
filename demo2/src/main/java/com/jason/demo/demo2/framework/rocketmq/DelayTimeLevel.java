@@ -1,7 +1,9 @@
 package com.jason.demo.demo2.framework.rocketmq;
 
 /**
- * RocketMQ 延迟消息等级（1s ~ 24h）。
+ * RocketMQ 固定延迟等级（共 18 档，对应客户端 {@code Message#setDelayTimeLevel}）。
+ * <p>
+ * 枚举名表示可读时长，{@link #getLevel()} 为 1～18 的底层 level 值。
  */
 public enum DelayTimeLevel {
     S_1(1, "1s"),
@@ -23,7 +25,9 @@ public enum DelayTimeLevel {
     H_12(17, "12h"),
     H_24(18, "24h");
 
+    /** RocketMQ delayTimeLevel（1～18） */
     private final int level;
+    /** 可读描述，如 {@code 5s} */
     private final String desc;
 
     DelayTimeLevel(int level, String desc) {

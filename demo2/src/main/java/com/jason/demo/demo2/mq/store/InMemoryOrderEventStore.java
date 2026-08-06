@@ -1,5 +1,6 @@
-package com.jason.demo.demo2.mq;
+package com.jason.demo.demo2.mq.store;
 
+import com.jason.demo.demo2.mq.model.OrderEvent;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -24,7 +25,7 @@ public class InMemoryOrderEventStore {
         }
         List<StoredEvent> filtered = new ArrayList<>();
         for (StoredEvent stored : events) {
-            if (orderIdFilter.equals(stored.event().orderId())) {
+            if (orderIdFilter.equals(stored.event().getOrderId())) {
                 filtered.add(stored);
             }
         }

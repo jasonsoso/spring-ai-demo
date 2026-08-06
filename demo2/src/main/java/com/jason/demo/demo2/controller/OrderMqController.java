@@ -1,10 +1,10 @@
 package com.jason.demo.demo2.controller;
 
 import com.jason.demo.demo2.framework.rocketmq.DelayTimeLevel;
-import com.jason.demo.demo2.mq.InMemoryOrderEventStore;
-import com.jason.demo.demo2.mq.OrderEvent;
-import com.jason.demo.demo2.mq.OrderEventPublisher;
-import com.jason.demo.demo2.mq.OrderEventRequest;
+import com.jason.demo.demo2.mq.model.OrderEvent;
+import com.jason.demo.demo2.mq.model.OrderEventRequest;
+import com.jason.demo.demo2.mq.publisher.OrderEventPublisher;
+import com.jason.demo.demo2.mq.store.InMemoryOrderEventStore;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,21 +35,21 @@ public class OrderMqController {
     public Map<String, Object> sync(@RequestBody OrderEventRequest request) {
         OrderEvent event = toEvent(request);
         publisher.sendSync(event);
-        return Map.of("ok", true, "mode", "sync", "orderId", event.orderId());
+        return Map.of("ok", true, "mode", "sync", "orderId", event.getOrderId());
     }
 
     @PostMapping("/async")
     public Map<String, Object> async(@RequestBody OrderEventRequest request) {
         OrderEvent event = toEvent(request);
         publisher.sendAsync(event);
-        return Map.of("ok", true, "mode", "async", "orderId", event.orderId());
+        return Map.of("ok", true, "mode", "async", "orderId", event.getOrderId());
     }
 
     @PostMapping("/orderly")
     public Map<String, Object> orderly(@RequestBody OrderEventRequest request) {
         OrderEvent event = toEvent(request);
         publisher.sendOrderly(event);
-        return Map.of("ok", true, "mode", "orderly", "orderId", event.orderId());
+        return Map.of("ok", true, "mode", "orderly", "orderId", event.getOrderId());
     }
 
     @PostMapping("/delay")
@@ -64,7 +64,7 @@ public class OrderMqController {
         }
         OrderEvent event = toEvent(request);
         publisher.sendDelay(event, delayLevel);
-        return Map.of("ok", true, "mode", "delay", "level", delayLevel.name(), "orderId", event.orderId());
+        return Map.of("ok", true, "mode", "delay", "level", delayLevel.name(), "orderId", event.getOrderId());
     }
 
     @GetMapping("/events")
@@ -79,11 +79,11 @@ public class OrderMqController {
     }
 
     private static OrderEvent toEvent(OrderEventRequest request) {
-        if (request == null || request.orderId() == null || request.orderId().isBlank()) {
+        if (request == null || request.getOrderId() == null || request.getOrderId().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderId is required");
         }
-        String type = request.type() == null || request.type().isBlank() ? "CREATED" : request.type();
-        String payload = request.payload() == null ? "" : request.payload();
-        return new OrderEvent(request.orderId(), type, payload, Instant.now());
+        String type = request.getType() == null || request.getType().isBlank() ? "CREATED" : request.getType();
+        String payload = request.getPayload() == null ? "" : request.getPayload();
+        return new OrderEvent(request.getOrderId(), type, payload, Instant.now());
     }
 }
