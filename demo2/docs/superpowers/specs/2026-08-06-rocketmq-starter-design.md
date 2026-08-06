@@ -3,7 +3,7 @@
 **日期**: 2026-08-06  
 **项目**: spring-ai-demo / demo2  
 **状态**: 已确认，待实现  
-**参考**: [digital-food-framework-rocketmq-starter 项目分析文档](https://my.feishu.cn/wiki/XmNRw4gYIiB7gqkBB0Xc1mfXnRf)
+**参考**: 文章（RocketMQ Starter 项目分析）
 
 ---
 
@@ -11,7 +11,7 @@
 
 ### 1.1 问题
 
-demo2 需要可演示、可复用的 RocketMQ 集成能力，对齐飞书文档中 `digital-food-framework-rocketmq-starter` 的核心模式（自动配置、多 Producer/Consumer、并发/顺序消费抽象、统一发送基类），但不引入公司内部依赖（Heracles、Trace、灰度、`RequestContext`）。
+demo2 需要可演示、可复用的 RocketMQ 集成能力，对齐文章中的核心模式（自动配置、多 Producer/Consumer、并发/顺序消费抽象、统一发送基类），但不引入文章里的内部依赖（Heracles、Trace、灰度、`RequestContext`）。
 
 仓库内尚无 RocketMQ 相关代码。通用框架代码统一放在 `framework` 包下，便于后续拆成独立 starter。
 
@@ -32,7 +32,7 @@ demo2 需要可演示、可复用的 RocketMQ 集成能力，对齐飞书文档�
 | 能力范围 | 同步/异步/顺序/延迟发送 + 并发与顺序消费 |
 | 客户端 | `rocketmq-client` **5.5.0** |
 | 基础设施 | Docker Compose（NameServer + Broker） |
-| 启动/启用行为 | **对齐文章原文**（见 §5） |
+| 启动/启用行为 | **对齐文章**（见 §5） |
 | Demo 场景 | 订单事件 + 并发 Listener + 顺序 Listener（同 `orderId` 保序） |
 | 事务后发送 | 使用提供的 `TransactionUtils` |
 | 框架包名 | `com.jason.demo.demo2.framework.rocketmq.*` |
@@ -42,12 +42,12 @@ demo2 需要可演示、可复用的 RocketMQ 集成能力，对齐飞书文档�
 
 ### 1.4 非目标（本版不做）
 
-- Heracles 动态配置、公司 Trace、灰度路由、`RequestContext` 传播
+- Heracles 动态配置、Trace、灰度路由、`RequestContext` 传播
 - 发送失败补偿表 / 死信 / 告警
 - `consumeQps` 限流实现
 - RocketMQ 5.x gRPC 客户端（`rocketmq-client-java`）
 - 把 MQ 接到 AgentScope / 真实订单库
-- 修正文章「listenerBeanName 缺失应启动失败」等优化建议（**保持原文 warn+skip 行为**，文档注明已知风险）
+- 修正文章「listenerBeanName 缺失应启动失败」等优化建议（**保持文章 warn+skip 行为**，文档注明已知风险）
 - 本版不单独拆 `demo2-rocketmq-starter` 模块（包名预留 `framework`，后续可迁）
 
 ---
@@ -269,16 +269,16 @@ docker compose -f demo2/docker/rocketmq/docker-compose.yml up -d
 
 ---
 
-## 8. 与原文差异（刻意为之）
+## 8. 与文章差异（刻意为之）
 
-| 原文 | 本版 |
+| 文章 | 本版 |
 |------|------|
 | Heracles / Trace / 灰度 / RequestContext | 删除 |
 | `rocketmq-client` 4.x（文章年代） | **5.5.0**（同 Remoting API 线最新） |
 | Producer topic/tag 走 Heracles | 统一 Spring 配置 |
 | `spring.factories` | Boot 4 兼容的自动配置或 `@Configuration` |
 | Fastjson | Jackson |
-| 公司包名 | `com.jason.demo.demo2.framework.rocketmq` |
+| 文章原包名 | `com.jason.demo.demo2.framework.rocketmq` |
 
 ---
 
