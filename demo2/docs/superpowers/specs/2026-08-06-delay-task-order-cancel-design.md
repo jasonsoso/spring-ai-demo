@@ -17,7 +17,7 @@
 1. 在 `com.jason.demo.demo2.framework.delay` 提供**通用延时任务**能力。
 2. 主投递可配置为 **Redisson 延时队列** 或 **RocketMQ 延时消息**（单主，非双写）。
 3. **定时扫描 MySQL 台账**作为兜底（不是主时钟精度来源）。
-4. 首个用例：简单 **订单表** + 超时未支付自动取消；订单 ID 为 `Long`，用 **Hutool 雪花**生成。
+4. 首个用例：简单 **订单表** + 超时未支付自动取消；`order_id` / `task_id` 均为 `Long`，统一用 **Hutool 雪花**生成。
 5. 持久化：MySQL + **MyBatis-Plus** + **Repository 层**（台账与订单均有 Repository）。
 
 ### 1.3 已确认决策
@@ -28,8 +28,9 @@
 | 能力形态 | 通用延时组件；订单取消为首用例 |
 | 主投递 | `app.delay.backend=redisson\|rocketmq` 可配置单主 |
 | 兜底 | `@Scheduled` 扫描台账到期 `PENDING` 任务 |
-| 台账 | 独立表 `delay_task`（与订单表并存，方案 A） |
+| 台账 | 独立表 `delay_task`（与订单表并存，方案 A）；`task_id` 为 `Long`；Hutool 雪花 |
 | 订单 | 表 `demo_order`；`order_id` 为 `Long`；Hutool 雪花 |
+| ID 生成 | `SnowflakeIdGenerator`（Hutool）统一生成订单与任务主键 |
 | 持久化 | MyBatis-Plus + Repository |
 | 生命周期 | 注册 + 取消（无单独改期 API；改期=取消后重注册） |
 | 失败 | 最多 3 次重试，简单退避推迟 `execute_at` |
@@ -144,7 +145,7 @@ com.jason.demo.demo2.order
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `task_id` | VARCHAR PK | UUID（与订单雪花 ID 分离，避免语义混淆） |
+| `task_id` | BIGINT PK | Hutool 雪花（与 `order_id` 同一生成器） |
 | `task_type` | VARCHAR | 如 `ORDER_CANCEL` |
 | `biz_key` | VARCHAR | 业务键，订单场景为 `String.valueOf(orderId)` |
 | `payload` | TEXT / JSON | 可选扩展 |
@@ -175,7 +176,7 @@ PENDING → CANCELLED（业务主动取消，如已支付）
 ### 4.1 注册（下单）
 
 1. 雪花生成 `order_id`，插入 `demo_order`（`PENDING_PAY`）。
-2. `DelayTaskService.schedule`：插入 `delay_task`（`PENDING`，`execute_at=now+delay`，`task_type=ORDER_CANCEL`）。
+2. `DelayTaskService.schedule`：雪花生成 `task_id`，插入 `delay_task`（`PENDING`，`execute_at=now+delay`，`task_type=ORDER_CANCEL`）。
 3. `DelayDispatcher` 按配置投递：
    - **redisson**：DelayedQueue，到期进入 Executor。
    - **rocketmq**：`sendDelay`，level = 不小于目标时长的最小 `DelayTimeLevel`（例：20s → `S_30`）。
@@ -215,7 +216,7 @@ PENDING → CANCELLED（业务主动取消，如已支付）
 | POST | `/demo/delay-tasks/{taskId}/cancel` | 通用取消任务（可选，便于测组件） |
 | GET | `/demo/delay-tasks` | 按 `bizKey` / `taskId` 查台账 |
 
-`orderId` 路径与响应均为 **Long**（JSON 数字；注意前端 JS 大整数精度，Demo 可用字符串展示或接受 Long 范围说明）。
+`orderId` / `taskId` 路径与响应均为 **Long**（JSON 数字；注意前端 JS 大整数精度，Demo 可用字符串展示或接受 Long 范围说明）。锁 key、MQ payload 中的 `taskId` 以字符串形式携带雪花值即可。
 
 ---
 
