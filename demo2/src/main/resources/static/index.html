@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="/css/tabs/multi-agent.css">
     <link rel="stylesheet" href="/css/tabs/embabel.css">
     <link rel="stylesheet" href="/css/tabs/agentscope.css">
+    <link rel="stylesheet" href="/css/tabs/rocketmq.css">
 </head>
 <body>
 <div class="app-container">
@@ -51,6 +52,7 @@
         <button class="tab-btn" data-tab="a2a" onclick="switchTab('a2a')">🌐 A2A 跨系统对话</button>
         <button class="tab-btn" data-tab="embabel" onclick="switchTab('embabel')">🔀 Embabel 自动选路</button>
         <button class="tab-btn" data-tab="agentscope" onclick="switchTab('agentscope')">🧭 AgentScope Harness</button>
+        <button class="tab-btn" data-tab="rocketmq" onclick="switchTab('rocketmq')">🚀 RocketMQ 消息</button>
     </div>
 
     <!-- ========== 聊天 Tab ========== -->
@@ -1289,6 +1291,71 @@
         </div>
     </div>
 
+    <!-- ========== RocketMQ Tab ========== -->
+    <div id="tab-rocketmq" class="tab-content">
+        <div class="rocketmq-header">
+            <h1>RocketMQ 消息 Demo</h1>
+            <p>同步 / 异步 / 顺序 / 延迟发送，查看并发与顺序消费结果（需本地 Docker RocketMQ）</p>
+        </div>
+        <div class="rocketmq-body">
+            <div class="card">
+                <div class="card-title">📤 发送订单事件</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>orderId</label>
+                        <input type="text" id="mqOrderId" value="o-1" placeholder="订单 ID，顺序消息用作 shardingKey">
+                    </div>
+                    <div class="form-row">
+                        <label>type</label>
+                        <input type="text" id="mqType" value="CREATED" placeholder="如 CREATED / PAID">
+                    </div>
+                    <div class="form-row">
+                        <label>payload</label>
+                        <input type="text" id="mqPayload" value="hello-mq" placeholder="消息内容">
+                    </div>
+                    <div class="form-row">
+                        <label>延迟等级</label>
+                        <select id="mqDelayLevel">
+                            <option value="S_1">S_1 (1s)</option>
+                            <option value="S_5" selected>S_5 (5s)</option>
+                            <option value="S_10">S_10 (10s)</option>
+                            <option value="S_30">S_30 (30s)</option>
+                            <option value="M_1">M_1 (1m)</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <div class="rocketmq-actions">
+                            <button class="btn btn-primary" onclick="rocketmqSend('sync')">同步发送</button>
+                            <button class="btn btn-primary" onclick="rocketmqSend('async')">异步发送</button>
+                            <button class="btn btn-primary" onclick="rocketmqSend('orderly')">顺序发送</button>
+                            <button class="btn btn-primary" onclick="rocketmqSend('delay')">延迟发送</button>
+                        </div>
+                    </div>
+                    <div id="mqSendResult" class="result-box">发送结果会显示在这里</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📥 消费结果（内存 Store）</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>按 orderId 过滤</label>
+                        <input type="text" id="mqFilterOrderId" placeholder="留空=全部">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <div class="rocketmq-actions">
+                            <button class="btn btn-primary" onclick="rocketmqRefreshEvents()">刷新</button>
+                            <button class="btn" onclick="rocketmqClearEvents()">清空</button>
+                        </div>
+                    </div>
+                    <div id="mqEventsResult" class="result-box rocketmq-events">点击「刷新」查看已消费消息；channel=concurrent / orderly</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -1316,5 +1383,6 @@
 <script src="/js/tabs/a2a.js"></script>
 <script src="/js/tabs/embabel.js"></script>
 <script src="/js/tabs/agentscope.js"></script>
+<script src="/js/tabs/rocketmq.js"></script>
 </body>
 </html>
