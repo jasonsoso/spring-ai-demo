@@ -1,6 +1,5 @@
 package com.jason.demo.demo2.framework.rocketmq.producer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.common.message.Message;
@@ -9,6 +8,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationContext;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Map;
 
@@ -27,8 +27,8 @@ class BaseEventPublisherTest {
     DefaultMQProducer producer;
 
     static class DemoPublisher extends BaseEventPublisher {
-        DemoPublisher(String producerId, ObjectMapper objectMapper) {
-            super(producerId, objectMapper);
+        DemoPublisher(String producerId, JsonMapper jsonMapper) {
+            super(producerId, jsonMapper);
         }
 
         void publish(String tag) {
@@ -43,7 +43,7 @@ class BaseEventPublisherTest {
                 .thenThrow(new RuntimeException("temp"))
                 .thenReturn(new SendResult());
 
-        DemoPublisher pub = new DemoPublisher("orderProducer", new ObjectMapper());
+        DemoPublisher pub = new DemoPublisher("orderProducer", JsonMapper.builder().build());
         pub.setApplicationContext(applicationContext);
         pub.setTopic("DEMO_ORDER_TOPIC");
         pub.setMaxTryTimes(2);

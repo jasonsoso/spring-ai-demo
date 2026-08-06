@@ -1,6 +1,5 @@
 package com.jason.demo.demo2.framework.rocketmq.producer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jason.demo.demo2.framework.rocketmq.DelayTimeLevel;
 import com.jason.demo.demo2.framework.rocketmq.util.TransactionUtils;
 import jakarta.annotation.PostConstruct;
@@ -14,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.lang.NonNull;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -25,7 +25,7 @@ public class BaseEventPublisher implements ApplicationContextAware {
     private static final Logger log = LoggerFactory.getLogger(BaseEventPublisher.class);
 
     private final String producerId;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper;
 
     private ApplicationContext applicationContext;
     private DefaultMQProducer producer;
@@ -33,9 +33,9 @@ public class BaseEventPublisher implements ApplicationContextAware {
     private String tag;
     private int maxTryTimes = 2;
 
-    public BaseEventPublisher(String producerId, ObjectMapper objectMapper) {
+    public BaseEventPublisher(String producerId, JsonMapper jsonMapper) {
         this.producerId = producerId;
-        this.objectMapper = objectMapper;
+        this.jsonMapper = jsonMapper;
     }
 
     @Override
@@ -135,7 +135,7 @@ public class BaseEventPublisher implements ApplicationContextAware {
 
     private Message buildMessage(Object messageBodyObj, String messageTag, String... keys) {
         try {
-            byte[] body = objectMapper.writeValueAsBytes(messageBodyObj);
+            byte[] body = jsonMapper.writeValueAsBytes(messageBodyObj);
             Message message = new Message(topic, body);
             String effectiveTag = messageTag != null ? messageTag : tag;
             if (effectiveTag != null && !effectiveTag.isBlank()) {

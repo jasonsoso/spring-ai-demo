@@ -1,18 +1,18 @@
 package com.jason.demo.demo2.mq;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jason.demo.demo2.framework.rocketmq.DelayTimeLevel;
 import com.jason.demo.demo2.framework.rocketmq.producer.BaseEventPublisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
 
 @Component
 public class OrderEventPublisher extends BaseEventPublisher {
 
     public OrderEventPublisher(
-            ObjectMapper objectMapper,
+            JsonMapper jsonMapper,
             @Value("${rocketmq.producers.orderProducer.topic}") String topic) {
-        super("orderProducer", objectMapper);
+        super("orderProducer", jsonMapper);
         setTopic(topic);
     }
 
