@@ -1,0 +1,27 @@
+# RocketMQ（Remoting：NameServer + Broker）
+# 启动：docker compose -f demo2/docker/rocketmq/docker-compose.yml up -d
+# 停止：docker compose -f demo2/docker/rocketmq/docker-compose.yml down
+services:
+  demo2-rocketmq-namesrv:
+    container_name: demo2-rocketmq-namesrv
+    image: apache/rocketmq:5.3.2
+    ports:
+      - "9876:9876"
+    command: sh mqnamesrv
+    restart: unless-stopped
+
+  demo2-rocketmq-broker:
+    container_name: demo2-rocketmq-broker
+    image: apache/rocketmq:5.3.2
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+      - "10912:10912"
+    environment:
+      NAMESRV_ADDR: demo2-rocketmq-namesrv:9876
+    volumes:
+      - ./broker.conf:/home/rocketmq/rocketmq-5.3.2/conf/broker.conf
+    depends_on:
+      - demo2-rocketmq-namesrv
+    command: sh mqbroker -n demo2-rocketmq-namesrv:9876 -c /home/rocketmq/rocketmq-5.3.2/conf/broker.conf
+    restart: unless-stopped
