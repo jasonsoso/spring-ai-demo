@@ -230,7 +230,15 @@ app.delay.max-retry=3
 app.delay.lock-timeout=10s
 ```
 
-新增依赖（本版）：MyBatis-Plus、Hutool（若尚未引入）。Redis / RocketMQ / MySQL 复用现有。
+新增依赖（本版，**对齐 Spring Boot 4.x**）：
+
+| 依赖 | 坐标 / 版本约束 |
+|------|-----------------|
+| MyBatis-Plus | `mybatis-plus-spring-boot4-starter`（**禁止** `boot3-starter`）；≥3.5.13，建议 `3.5.17` + `mybatis-plus-bom` |
+| jsqlparser 模块 | `mybatis-plus-jsqlparser`（与 MP 同版本；JDK 21） |
+| Hutool | `hutool-core`（无 Boot starter，版本与 Boot 无强绑定） |
+
+Redis / RocketMQ / MySQL / lock4j-Redisson 复用现有（Redisson 已用 `4.1.0` 适配 Boot4）。
 
 建表：提供 SQL 脚本（或启动迁移）创建 `demo_order`、`delay_task`。
 

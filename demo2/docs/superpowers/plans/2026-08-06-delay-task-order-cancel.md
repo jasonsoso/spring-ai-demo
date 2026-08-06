@@ -6,13 +6,15 @@
 
 **Architecture:** 调度事实落 `delay_task`，业务事实落 `demo_order`。`DelayTaskService` 写台账后经 `DelayDispatcher` 单主投递；到期由 Backend 回调或 `FallbackScanner` 进入同一 `DelayTaskExecutor`（lock4j 按 taskId 防重 → Handler）。支付成功将台账置 `CANCELLED`（MQ 无法撤回，消费时校验台账）。
 
-**Tech Stack:** Spring Boot 4.1、Java 21、MyBatis-Plus、Hutool 雪花、Redisson DelayedQueue、现有 RocketMQ `DelayTimeLevel` / `sendDelay`、lock4j、JUnit 5 + Mockito
+**Tech Stack:** Spring Boot 4.1、Java 21、MyBatis-Plus **Boot4 Starter**（`mybatis-plus-spring-boot4-starter` ≥3.5.13，本版钉 `3.5.17`）、Hutool 雪花、Redisson DelayedQueue、现有 RocketMQ `DelayTimeLevel` / `sendDelay`、lock4j、JUnit 5 + Mockito
 
 **Spec:** [2026-08-06-delay-task-order-cancel-design.md](../specs/2026-08-06-delay-task-order-cancel-design.md)
 
 ## Global Constraints
 
 - 模块仅限 `demo2`；不改 `demo` 工程
+- **Spring Boot 4.x**：新依赖必须选 Boot4 坐标；禁止引入 `mybatis-plus-spring-boot3-starter` / `mybatis-plus-boot-starter`
+- MyBatis-Plus：`mybatis-plus-spring-boot4-starter` + `mybatis-plus-jsqlparser`（JDK 11+，与 starter 同版本）；建议经 `mybatis-plus-bom` 对齐版本
 - 公共能力在 `com.jason.demo.demo2.framework.*`；订单 Demo 在 `com.jason.demo.demo2.order.*`
 - `order_id` / `task_id` 均为 `Long`，统一 `SnowflakeIdGenerator`（Hutool）
 - 主投递可配置单主：`app.delay.backend=redisson|rocketmq`；禁止双写
@@ -55,18 +57,40 @@
 **Interfaces:**
 - Produces: 可注入的 `DelayProperties`；Mapper 扫描 `framework.delay.repository` 与 `order.repository`
 
-- [ ] **Step 1: 在 `pom.xml` `<properties>` 增加版本，在 `<dependencies>` 增加依赖**
+- [ ] **Step 1: 在 `pom.xml` 用 BOM 对齐 MyBatis-Plus，并引入 Boot4 Starter（勿用 boot3）**
+
+在 `<properties>`：
 
 ```xml
-<mybatis-plus.version>3.5.9</mybatis-plus.version>
+<!-- Spring Boot 4 专用；勿降到 boot3-starter。Boot4 支持自 MP 3.5.13 起 -->
+<mybatis-plus.version>3.5.17</mybatis-plus.version>
 <hutool.version>5.8.35</hutool.version>
 ```
+
+在 `<dependencyManagement>` 增加：
 
 ```xml
 <dependency>
     <groupId>com.baomidou</groupId>
-    <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+    <artifactId>mybatis-plus-bom</artifactId>
     <version>${mybatis-plus.version}</version>
+    <type>pom</type>
+    <scope>import</scope>
+</dependency>
+```
+
+在 `<dependencies>` 增加（版本交给 BOM，不要写 boot3 artifact）：
+
+```xml
+<!-- Spring Boot 4.x 专用 starter（不是 mybatis-plus-spring-boot3-starter） -->
+<dependency>
+    <groupId>com.baomidou</groupId>
+    <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
+</dependency>
+<!-- 3.5.9+ jsqlparser 解耦；JDK 21 用此模块，否则 Lambda 条件等可能缺依赖 -->
+<dependency>
+    <groupId>com.baomidou</groupId>
+    <artifactId>mybatis-plus-jsqlparser</artifactId>
 </dependency>
 <dependency>
     <groupId>cn.hutool</groupId>
@@ -75,7 +99,8 @@
 </dependency>
 ```
 
-若 Boot 4 启动时报 MyBatis-Plus 自动配置不兼容，改用当时文档推荐的 Boot4 兼容坐标，但 API 保持 `BaseMapper` + `@TableName` 不变。
+参考：[MyBatis-Plus Install — Spring Boot4](https://baomidou.com/getting-started/install/)、Maven Central `mybatis-plus-spring-boot4-starter`。  
+API 仍用 `BaseMapper` + `@TableName`；与现有 Redisson `4.1.0`（已为 Boot4）同一原则：按 Boot 大版本选 starter。
 
 - [ ] **Step 2: 写 DDL**
 
