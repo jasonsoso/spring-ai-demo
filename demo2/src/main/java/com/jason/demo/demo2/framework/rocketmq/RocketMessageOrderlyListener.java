@@ -29,13 +29,23 @@ public abstract class RocketMessageOrderlyListener<T> extends AbstractOrderlyRoc
     @SuppressWarnings("unchecked")
     protected ConsumeOrderlyStatus doReceiveMessage(MessageExt messageExt) {
         String body = new String(messageExt.getBody(), StandardCharsets.UTF_8);
+        log.info("received orderly message, msgId={}, topic={}, tags={}, keys={}, queueId={}, "
+                        + "reconsumeTimes={}, bornTimestamp={}, body={}",
+                messageExt.getMsgId(),
+                messageExt.getTopic(),
+                messageExt.getTags(),
+                messageExt.getKeys(),
+                messageExt.getQueueId(),
+                messageExt.getReconsumeTimes(),
+                messageExt.getBornTimestamp(),
+                body);
         T payload;
         try {
             Class<T> messageClass = (Class<T>) ((ParameterizedType) getClass().getGenericSuperclass())
                     .getActualTypeArguments()[0];
             payload = jsonMapper.readValue(body, messageClass);
         } catch (Exception e) {
-            log.error("parse messageBody error, body:{}", body, e);
+            log.error("parse messageBody error, msgId={}, body:{}", messageExt.getMsgId(), body, e);
             return ConsumeOrderlyStatus.SUCCESS;
         }
         return handleMessage(payload, body, messageExt);
