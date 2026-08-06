@@ -118,27 +118,38 @@ public class RocketMQConfiguration
             bd.setBeanClass(DefaultMQPushConsumer.class);
             bd.setInitMethodName("start");
             bd.setDestroyMethodName("shutdown");
-            bd.setInstanceSupplier(() -> createConsumer(config));
-            registry.registerBeanDefinition(consumerName + "_rocketmq_consumer", bd);
+            String consumerBeanName = consumerName + "_rocketmq_consumer";
+            bd.setInstanceSupplier(() -> createConsumer(consumerName, config));
+            registry.registerBeanDefinition(consumerBeanName, bd);
+            log.info("rocketmq consumer bean registered, name={}, consumerGroup={}, topic={}, tags={}, listener={}",
+                    consumerBeanName, config.getConsumerGroup(), config.getTopic(), config.getTags(),
+                    listenerBeanName);
         }
     }
 
     /** 创建并订阅：按 Listener 类型注册并发或顺序消费回调。 */
-    private DefaultMQPushConsumer createConsumer(RocketMQProperties.ConsumerConfig config) {
+    private DefaultMQPushConsumer createConsumer(String consumerName, RocketMQProperties.ConsumerConfig config) {
         try {
             DefaultMQPushConsumer consumer = new DefaultMQPushConsumer(config.getConsumerGroup());
             consumer.setNamesrvAddr(config.getNamesrvAddr());
             consumer.subscribe(config.getTopic(), config.getTags());
             Object listener = applicationContext.getBean(config.getListenerBeanName());
+            String listenerType;
             if (listener instanceof MessageListenerOrderly orderly) {
                 consumer.registerMessageListener(orderly);
+                listenerType = "orderly";
             } else if (listener instanceof MessageListenerConcurrently concurrently) {
                 consumer.registerMessageListener(concurrently);
+                listenerType = "concurrently";
             } else {
                 throw new IllegalStateException(
                         "listener must be MessageListenerOrderly or MessageListenerConcurrently: "
                                 + config.getListenerBeanName());
             }
+            log.info("rocketmq consumer instantiated, name={}, consumerGroup={}, topic={}, tags={}, "
+                            + "listener={}, listenerType={}, listenerClass={}",
+                    consumerName, config.getConsumerGroup(), config.getTopic(), config.getTags(),
+                    config.getListenerBeanName(), listenerType, listener.getClass().getName());
             return consumer;
         } catch (Exception e) {
             throw new IllegalStateException("create rocketmq consumer failed: " + config.getConsumerGroup(), e);
@@ -167,16 +178,21 @@ public class RocketMQConfiguration
             bd.setBeanClass(DefaultMQProducer.class);
             bd.setInitMethodName("start");
             bd.setDestroyMethodName("shutdown");
-            bd.setInstanceSupplier(() -> createProducer(producerName, config));
+            bd.setInstanceSupplier(() -> createProducer(producerName, beanName, config));
             registry.registerBeanDefinition(beanName, bd);
+            log.info("rocketmq producer bean registered, beanName={}, producerGroup={}, namesrvAddr={}, topic={}, tag={}",
+                    beanName, config.getProducerGroup(), config.getNamesrvAddr(), config.getTopic(), config.getTag());
         }
     }
 
-    private DefaultMQProducer createProducer(String producerName, RocketMQProperties.ProducerConfig config) {
+    private DefaultMQProducer createProducer(
+            String producerName, String beanName, RocketMQProperties.ProducerConfig config) {
         try {
             DefaultMQProducer producer = new DefaultMQProducer(config.getProducerGroup());
             producer.setNamesrvAddr(config.getNamesrvAddr());
             producer.setInstanceName(producerName);
+            log.info("rocketmq producer instantiated, beanName={}, producerGroup={}, namesrvAddr={}, topic={}, tag={}",
+                    beanName, config.getProducerGroup(), config.getNamesrvAddr(), config.getTopic(), config.getTag());
             return producer;
         } catch (Exception e) {
             throw new IllegalStateException("create rocketmq producer failed: " + producerName, e);

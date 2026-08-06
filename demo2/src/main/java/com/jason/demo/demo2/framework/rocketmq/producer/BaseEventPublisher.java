@@ -70,6 +70,8 @@ public class BaseEventPublisher implements ApplicationContextAware {
         }
         this.topic = config.getTopic();
         this.tag = config.getTag();
+        log.info("rocketmq publisher initialized, producerId={}, publisherClass={}, topic={}, tag={}, maxTryTimes={}",
+                producerId, getClass().getName(), topic, tag, maxTryTimes);
     }
 
     /** 同步发送（事务提交后执行，带重试）。 */
