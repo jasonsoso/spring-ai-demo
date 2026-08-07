@@ -8,6 +8,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -62,5 +63,11 @@ class JacksonJsonCustomizerTest {
                 .toInstant();
         String instantJson = jsonMapper.writeValueAsString(Map.of("at", instant));
         assertTrue(instantJson.contains("\"at\":\"2026-08-07 10:16:02\""));
+    }
+
+    @Test
+    void localDate_usesYyyyMmDd() {
+        String json = jsonMapper.writeValueAsString(Map.of("day", LocalDate.of(2026, 8, 7)));
+        assertTrue(json.contains("\"day\":\"2026-08-07\""));
     }
 }
