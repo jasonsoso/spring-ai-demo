@@ -12,6 +12,7 @@ import tools.jackson.databind.module.SimpleModule;
 import tools.jackson.databind.ser.std.StdSerializer;
 import tools.jackson.databind.ser.std.ToStringSerializer;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -20,7 +21,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 /**
- * 全局 JSON 写出：Long/long/BigInteger → 字符串；
+ * 全局 JSON 写出：Long/long/BigInteger → 字符串；BigDecimal → 去尾零纯文本；
  * LocalDate → yyyy-MM-dd；LocalDateTime/Instant → yyyy-MM-dd HH:mm:ss（Asia/Shanghai）。
  */
 @Configuration
@@ -42,10 +43,28 @@ public class JacksonJsonCustomizer {
         module.addSerializer(Long.class, ToStringSerializer.instance);
         module.addSerializer(Long.TYPE, ToStringSerializer.instance);
         module.addSerializer(BigInteger.class, ToStringSerializer.instance);
+        module.addSerializer(BigDecimal.class, new BigDecimalPlainStringSerializer());
         module.addSerializer(LocalDate.class, new LocalDateSerializer(DATE_FORMATTER));
         module.addSerializer(LocalDateTime.class, new LocalDateTimeSerializer(DATE_TIME_FORMATTER));
         module.addSerializer(Instant.class, new InstantAsShanghaiStringSerializer());
         return module;
+    }
+
+    /** BigDecimal → JSON 字符串，去尾零且避免科学计数法。 */
+    static final class BigDecimalPlainStringSerializer extends StdSerializer<BigDecimal> {
+
+        BigDecimalPlainStringSerializer() {
+            super(BigDecimal.class);
+        }
+
+        @Override
+        public void serialize(BigDecimal value, JsonGenerator gen, SerializationContext ctxt) throws JacksonException {
+            if (value == null) {
+                gen.writeNull();
+                return;
+            }
+            gen.writeString(value.stripTrailingZeros().toPlainString());
+        }
     }
 
     static final class InstantAsShanghaiStringSerializer extends StdSerializer<Instant> {

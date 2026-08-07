@@ -39,9 +39,23 @@ class JacksonJsonCustomizerTest {
 
         assertTrue(json.contains("\"orderId\":\"2085550503315509248\""));
         assertTrue(json.contains("\"big\":\"2085550503315509248\""));
-        assertTrue(json.contains("\"amount\":9.90") || json.contains("\"amount\":9.9"));
+        assertTrue(json.contains("\"amount\":\"9.9\""));
         assertTrue(json.contains("\"count\":3"));
         assertFalse(json.contains("\"orderId\":2085550503315509248"));
+    }
+
+    @Test
+    void bigDecimal_plainTextStripTrailingZeros() {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("a", new BigDecimal("9.90"));
+        body.put("b", new BigDecimal("1.00"));
+        body.put("c", new BigDecimal("100"));
+
+        String json = jsonMapper.writeValueAsString(body);
+
+        assertTrue(json.contains("\"a\":\"9.9\""));
+        assertTrue(json.contains("\"b\":\"1\""));
+        assertTrue(json.contains("\"c\":\"100\""));
     }
 
     @Test
@@ -55,6 +69,7 @@ class JacksonJsonCustomizerTest {
 
         String orderJson = jsonMapper.writeValueAsString(order);
         assertTrue(orderJson.contains("\"orderId\":\"55\""));
+        assertTrue(orderJson.contains("\"amount\":\"1\""));
         assertTrue(orderJson.contains("\"createdAt\":\"2026-08-07 10:16:02\""));
         assertTrue(orderJson.contains("\"updatedAt\":\"2026-08-07 10:16:02\""));
 
