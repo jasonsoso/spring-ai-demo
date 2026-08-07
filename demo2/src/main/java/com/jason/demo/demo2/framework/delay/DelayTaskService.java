@@ -6,6 +6,7 @@ import com.jason.demo.demo2.framework.delay.repository.DelayTaskRepository;
 import com.jason.demo.demo2.framework.id.SnowflakeIdGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -44,6 +45,7 @@ public class DelayTaskService {
      * @param delay    延时；为 null 时使用 {@link DelayProperties#getDefaultDelay()}
      * @return 雪花 taskId
      */
+    @Transactional
     public long schedule(String taskType, String bizKey, String payload, Duration delay) {
         Duration effectiveDelay = delay == null ? properties.getDefaultDelay() : delay;
         long taskId = idGenerator.nextId();
@@ -75,6 +77,7 @@ public class DelayTaskService {
      *
      * @return 是否更新到台账行
      */
+    @Transactional
     public boolean cancelByBizKey(String taskType, String bizKey) {
         Optional<DelayTaskEntity> pending = repository.findPendingByBizKey(taskType, bizKey);
         boolean updated = repository.markCancelled(taskType, bizKey);
@@ -87,6 +90,7 @@ public class DelayTaskService {
      *
      * @return 是否更新到台账行
      */
+    @Transactional
     public boolean cancelById(long taskId) {
         boolean updated = repository.markCancelledById(taskId);
         if (updated) {

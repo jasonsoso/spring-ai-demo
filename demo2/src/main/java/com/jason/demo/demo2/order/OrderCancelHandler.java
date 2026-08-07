@@ -7,7 +7,11 @@ import com.jason.demo.demo2.order.repository.OrderEntity;
 import com.jason.demo.demo2.order.repository.OrderRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 订单超时取消：仅 {@link OrderStatus#PENDING_PAY} 可取消。
+ */
 @Slf4j
 @Component
 public class OrderCancelHandler implements DelayTaskHandler {
@@ -24,6 +28,7 @@ public class OrderCancelHandler implements DelayTaskHandler {
     }
 
     @Override
+    @Transactional
     public void handle(DelayTaskEntity task) {
         long orderId = Long.parseLong(task.getBizKey());
         OrderEntity order = orderRepository.findById(orderId).orElse(null);

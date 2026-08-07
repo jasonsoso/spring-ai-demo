@@ -8,6 +8,7 @@ import com.jason.demo.demo2.order.repository.OrderEntity;
 import com.jason.demo.demo2.order.repository.OrderRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -16,6 +17,9 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 订单 Demo：下单/支付与延时台账同事务。
+ */
 @Service
 public class OrderService {
 
@@ -35,6 +39,10 @@ public class OrderService {
         this.delayProperties = delayProperties;
     }
 
+    /**
+     * 创建待支付订单并注册超时取消任务（同一本地事务）。
+     */
+    @Transactional
     public Map<String, Object> create(BigDecimal amount, Duration delay) {
         if (amount == null || amount.signum() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount must be positive");
@@ -65,6 +73,10 @@ public class OrderService {
         return result;
     }
 
+    /**
+     * 支付成功：订单置 PAID，并取消对应延时任务（同一本地事务）。
+     */
+    @Transactional
     public Map<String, Object> pay(long orderId) {
         boolean paid = orderRepository.markPaid(orderId);
         if (!paid) {
