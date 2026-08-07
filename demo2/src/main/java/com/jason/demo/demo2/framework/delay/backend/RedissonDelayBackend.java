@@ -15,6 +15,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Redisson 延时后端：{@link RDelayedQueue} 到期转入阻塞队列，后台单线程消费并调用 {@link DelayTaskExecutor}。
+ */
 @Slf4j
 @Component
 public class RedissonDelayBackend implements DelayBackend {
@@ -61,6 +64,7 @@ public class RedissonDelayBackend implements DelayBackend {
         log.info("redisson delay cancel, taskId={}, removed={}", taskId, removed);
     }
 
+    /** 阻塞拉取到期 taskId 并执行；中断或关闭时退出。 */
     private void consumeLoop() {
         while (running.get()) {
             try {

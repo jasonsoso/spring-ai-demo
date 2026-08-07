@@ -10,6 +10,9 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * MySQL 台账扫描兜底：主路径（Redisson/RocketMQ）丢消息或投递失败时，仍能捞起到期 PENDING 任务执行。
+ */
 @Slf4j
 @Component
 public class FallbackScanner {
@@ -27,6 +30,7 @@ public class FallbackScanner {
         this.properties = properties;
     }
 
+    /** 固定间隔扫描到期 PENDING 任务，批量交给 {@link DelayTaskExecutor}。 */
     @Scheduled(fixedDelayString = "${app.delay.scan-interval-ms:5000}")
     public void scan() {
         List<DelayTaskEntity> due = repository.findDuePending(Instant.now(), properties.getScanBatchSize());

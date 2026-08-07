@@ -9,6 +9,9 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
+/**
+ * RocketMQ 延时后端：将 Duration 映射到固定 18 档 delayTimeLevel 后发送；取消为逻辑取消（no-op）。
+ */
 @Slf4j
 @Component
 public class RocketMqDelayBackend implements DelayBackend {

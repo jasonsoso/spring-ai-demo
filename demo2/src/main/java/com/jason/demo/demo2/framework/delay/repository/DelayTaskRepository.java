@@ -11,6 +11,9 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 延时任务台账仓储：封装 MyBatis-Plus 查询与状态变更（含 CAS / 取消 / 重试回写）。
+ */
 @Repository
 public class DelayTaskRepository {
 
@@ -28,6 +31,7 @@ public class DelayTaskRepository {
         return Optional.ofNullable(mapper.selectById(taskId));
     }
 
+    /** 扫描到期 PENDING，按 executeAt 升序，LIMIT batch。 */
     public List<DelayTaskEntity> findDuePending(Instant now, int limit) {
         LocalDateTime deadline = LocalDateTime.ofInstant(now, ZoneId.systemDefault());
         return mapper.selectList(new LambdaQueryWrapper<DelayTaskEntity>()
@@ -51,6 +55,7 @@ public class DelayTaskRepository {
                 .last("LIMIT 1")));
     }
 
+    /** 按业务键将 PENDING → CANCELLED。 */
     public boolean markCancelled(String taskType, String bizKey) {
         LocalDateTime now = LocalDateTime.now();
         int rows = mapper.update(null, new LambdaUpdateWrapper<DelayTaskEntity>()
@@ -62,6 +67,7 @@ public class DelayTaskRepository {
         return rows > 0;
     }
 
+    /** 按 taskId 将 PENDING → CANCELLED。 */
     public boolean markCancelledById(long taskId) {
         LocalDateTime now = LocalDateTime.now();
         int rows = mapper.update(null, new LambdaUpdateWrapper<DelayTaskEntity>()
@@ -72,6 +78,7 @@ public class DelayTaskRepository {
         return rows > 0;
     }
 
+    /** 乐观 CAS：仅当当前状态为 from 时改为 to。 */
     public boolean casStatus(long taskId, String from, String to) {
         LocalDateTime now = LocalDateTime.now();
         int rows = mapper.update(null, new LambdaUpdateWrapper<DelayTaskEntity>()
@@ -90,6 +97,7 @@ public class DelayTaskRepository {
                 .set(DelayTaskEntity::getUpdatedAt, now));
     }
 
+    /** 失败重试：回 PENDING，更新 retryCount 与下次 executeAt。 */
     public void scheduleRetry(long taskId, int newRetry, Instant newExecuteAt) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime executeAt = LocalDateTime.ofInstant(newExecuteAt, ZoneId.systemDefault());

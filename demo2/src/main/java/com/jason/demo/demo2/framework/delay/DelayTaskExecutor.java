@@ -17,10 +17,14 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 延时任务执行器：分布式锁防重，CAS 推进状态，按 taskType 路由 {@link DelayTaskHandler}，失败按退避重试。
+ */
 @Slf4j
 @Component
 public class DelayTaskExecutor {
 
+    /** 第 1/2/3 次重试间隔：5s / 15s / 30s */
     private static final Duration[] RETRY_BACKOFF = {
             Duration.ofSeconds(5),
             Duration.ofSeconds(15),
@@ -30,6 +34,7 @@ public class DelayTaskExecutor {
     private final DelayTaskRepository repository;
     private final LockTemplate lockTemplate;
     private final DelayProperties properties;
+    /** key = {@link DelayTaskHandler#taskType()} */
     private final Map<String, DelayTaskHandler> handlers;
 
     public DelayTaskExecutor(
@@ -44,6 +49,10 @@ public class DelayTaskExecutor {
                 .collect(Collectors.toMap(DelayTaskHandler::taskType, Function.identity(), (a, b) -> a));
     }
 
+    /**
+     * 执行指定任务（主路径到期或扫描兜底均可调用）。
+     * 抢不到锁则直接返回，由其他持锁方或下次扫描再试。
+     */
     public void execute(long taskId) {
         String lockKey = "delay:task:" + taskId;
         long expireMs = properties.getLockTimeout().toMillis();

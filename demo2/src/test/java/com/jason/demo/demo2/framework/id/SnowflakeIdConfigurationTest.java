@@ -2,15 +2,13 @@ package com.jason.demo.demo2.framework.id;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 
-import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -20,10 +18,10 @@ class SnowflakeIdConfigurationTest {
     @SuppressWarnings("unchecked")
     void generator_usesAllocatedNodeIds() {
         StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        when(redis.execute(any(DefaultRedisScript.class), anyList())).thenReturn("3");
-        ValueOperations<String, String> values = mock(ValueOperations.class);
-        when(redis.opsForValue()).thenReturn(values);
-        when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
+        when(redis.execute(any(DefaultRedisScript.class), anyList(), any()))
+                .thenAnswer(SnowflakeIdConfigurationTest::answer);
+        when(redis.execute(any(DefaultRedisScript.class), anyList(), any(), any()))
+                .thenAnswer(SnowflakeIdConfigurationTest::answer);
 
         SnowflakeProperties props = new SnowflakeProperties();
         SnowflakeNodeAllocator allocator =
@@ -35,5 +33,18 @@ class SnowflakeIdConfigurationTest {
 
         assertTrue(generator.nextId() > 0);
         allocator.close();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object answer(org.mockito.invocation.InvocationOnMock invocation) {
+        List<String> keys = invocation.getArgument(1);
+        DefaultRedisScript<?> script = invocation.getArgument(0);
+        if (keys.size() == 2) {
+            return "3";
+        }
+        if (script.getResultType() == Long.class) {
+            return 1L;
+        }
+        return "OK";
     }
 }

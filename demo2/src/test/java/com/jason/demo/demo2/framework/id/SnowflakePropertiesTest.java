@@ -9,7 +9,7 @@ class SnowflakePropertiesTest {
     @Test
     void defaults_matchSpec() {
         SnowflakeProperties props = new SnowflakeProperties();
-        assertEquals("demo2:snowflake", props.getKeyPrefix());
+        assertEquals("app:snowflake", props.getKeyPrefix());
         assertEquals(30, props.getLeaseTtlSeconds());
         assertEquals(10, props.getHeartbeatIntervalSeconds());
     }

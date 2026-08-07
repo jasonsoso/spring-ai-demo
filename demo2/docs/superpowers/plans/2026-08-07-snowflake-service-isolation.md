@@ -23,31 +23,39 @@
 
 ---
 
+
+
 ## File Structure
 
-| 文件 | 职责 |
-|------|------|
-| `.../framework/id/SnowflakeProperties.java` | `app.snowflake.*` 配置 |
-| `.../framework/id/AllocatedSnowflakeNode.java` | 分配结果：app / dc / worker / instanceId |
-| `.../framework/id/SnowflakeNodeAllocator.java` | dc 分配、worker 租约、心跳、释放 |
-| `.../framework/id/SnowflakeIdConfiguration.java` | `@Bean` 装配 allocator + generator |
-| `.../framework/id/SnowflakeIdGenerator.java` | 去掉 `@Component` 与写死无参；保留双参 + `nextId()` |
-| `demo2/src/main/resources/application.properties` | `app.snowflake.*` |
-| `.../framework/id/SnowflakeNodeAllocatorTest.java` | Allocator 单测（Mock Redis） |
-| `.../framework/id/SnowflakeIdGeneratorTest.java` | 已有，保持双参构造 |
-| `.../order/OrderServiceTest.java` 等 | 回归：仍 `@Mock SnowflakeIdGenerator`，无需改逻辑 |
+
+| 文件                                                 | 职责                                      |
+| -------------------------------------------------- | --------------------------------------- |
+| `.../framework/id/SnowflakeProperties.java`        | `app.snowflake.*` 配置                    |
+| `.../framework/id/AllocatedSnowflakeNode.java`     | 分配结果：app / dc / worker / instanceId     |
+| `.../framework/id/SnowflakeNodeAllocator.java`     | dc 分配、worker 租约、心跳、释放                   |
+| `.../framework/id/SnowflakeIdConfiguration.java`   | `@Bean` 装配 allocator + generator        |
+| `.../framework/id/SnowflakeIdGenerator.java`       | 去掉 `@Component` 与写死无参；保留双参 + `nextId()` |
+| `demo2/src/main/resources/application.properties`  | `app.snowflake.*`                       |
+| `.../framework/id/SnowflakeNodeAllocatorTest.java` | Allocator 单测（Mock Redis）                |
+| `.../framework/id/SnowflakeIdGeneratorTest.java`   | 已有，保持双参构造                               |
+| `.../order/OrderServiceTest.java` 等                | 回归：仍 `@Mock SnowflakeIdGenerator`，无需改逻辑 |
+
 
 ---
+
+
 
 ### Task 1: SnowflakeProperties + AllocatedSnowflakeNode
 
 **Files:**
+
 - Create: `demo2/src/main/java/com/jason/demo/demo2/framework/id/SnowflakeProperties.java`
 - Create: `demo2/src/main/java/com/jason/demo/demo2/framework/id/AllocatedSnowflakeNode.java`
 - Modify: `demo2/src/main/resources/application.properties`
 - Test: `demo2/src/test/java/com/jason/demo/demo2/framework/id/SnowflakePropertiesTest.java`
 
 **Interfaces:**
+
 - Produces: `SnowflakeProperties`（`getKeyPrefix()` / `getLeaseTtlSeconds()` / `getHeartbeatIntervalSeconds()`）；`AllocatedSnowflakeNode(String applicationName, long datacenterId, long workerId, String instanceId)`
 
 - [ ] **Step 1: Write the failing test**
@@ -64,7 +72,7 @@ class SnowflakePropertiesTest {
     @Test
     void defaults_matchSpec() {
         SnowflakeProperties props = new SnowflakeProperties();
-        assertEquals("demo2:snowflake", props.getKeyPrefix());
+        assertEquals("app:snowflake", props.getKeyPrefix());
         assertEquals(30, props.getLeaseTtlSeconds());
         assertEquals(10, props.getHeartbeatIntervalSeconds());
     }
@@ -107,7 +115,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.snowflake")
 public class SnowflakeProperties {
 
-    private String keyPrefix = "demo2:snowflake";
+    private String keyPrefix = "app:snowflake";
     private int leaseTtlSeconds = 30;
     private int heartbeatIntervalSeconds = 10;
 
@@ -141,7 +149,7 @@ public class SnowflakeProperties {
 
 ```properties
 # ===== Snowflake 节点自动分配（服务=dc，机器=worker）=====
-app.snowflake.key-prefix=demo2:snowflake
+app.snowflake.key-prefix=app:snowflake
 app.snowflake.lease-ttl-seconds=30
 app.snowflake.heartbeat-interval-seconds=10
 ```
@@ -168,19 +176,23 @@ git commit -m "feat(demo2): add snowflake node allocation properties"
 
 ---
 
+
+
 ### Task 2: 改造 SnowflakeIdGenerator（去掉写死节点）
 
 **Files:**
+
 - Modify: `demo2/src/main/java/com/jason/demo/demo2/framework/id/SnowflakeIdGenerator.java`
 - Test: `demo2/src/test/java/com/jason/demo/demo2/framework/id/SnowflakeIdGeneratorTest.java`（已有，应仍通过）
 
 **Interfaces:**
+
 - Consumes: 无
 - Produces: `SnowflakeIdGenerator(long workerId, long datacenterId)` + `long nextId()`；**不再**是 `@Component`，无参写死 `(1,1)` 删除（Spring Bean 由 Task 5 提供）
 
 - [ ] **Step 1: Write / adjust failing expectation**
 
-确认 `SnowflakeIdGeneratorTest` 使用双参构造。若类上仍有 `@Component` 与无参构造，本 Task 删除它们后，**在尚未有 `SnowflakeIdConfiguration` 时**，完整 Spring 上下文可能缺 Bean——因此本 Task **不要**跑需要真实 `SnowflakeIdGenerator` Bean 的 `@SpringBootTest`；只跑纯单元测试。
+确认 `SnowflakeIdGeneratorTest` 使用双参构造。若类上仍有 `@Component` 与无参构造，本 Task 删除它们后，**在尚未有** `SnowflakeIdConfiguration` **时**，完整 Spring 上下文可能缺 Bean——因此本 Task **不要**跑需要真实 `SnowflakeIdGenerator` Bean 的 `@SpringBootTest`；只跑纯单元测试。
 
 可选增强测试（同一文件追加）：
 
@@ -249,13 +261,17 @@ git commit -m "refactor(demo2): require explicit snowflake worker/datacenter ids
 
 ---
 
+
+
 ### Task 3: SnowflakeNodeAllocator — datacenterId 永久分配
 
 **Files:**
+
 - Create: `demo2/src/main/java/com/jason/demo/demo2/framework/id/SnowflakeNodeAllocator.java`（本 Task 先实现 dc + 骨架；worker 可抛 `UnsupportedOperationException` 或先写完整类但测试只覆盖 dc）
 - Create: `demo2/src/test/java/com/jason/demo/demo2/framework/id/SnowflakeNodeAllocatorTest.java`
 
 **Interfaces:**
+
 - Consumes: `StringRedisTemplate`、`SnowflakeProperties`、`String applicationName`
 - Produces（本 Task）: `long ensureDatacenterId(String applicationName)`；Redis keys：`{prefix}:dc:{app}`、`{prefix}:dc:used`
 
@@ -441,13 +457,17 @@ git commit -m "feat(demo2): allocate permanent snowflake datacenterId via Redis"
 
 ---
 
+
+
 ### Task 4: worker 租约、心跳、释放、allocate()
 
 **Files:**
+
 - Modify: `demo2/src/main/java/com/jason/demo/demo2/framework/id/SnowflakeNodeAllocator.java`
 - Modify: `demo2/src/test/java/com/jason/demo/demo2/framework/id/SnowflakeNodeAllocatorTest.java`
 
 **Interfaces:**
+
 - Consumes: Task 3 的 `ensureDatacenterId`
 - Produces:
   - `AllocatedSnowflakeNode allocate()`
@@ -682,6 +702,8 @@ Run:
 mvn -f demo2/pom.xml -Dtest=SnowflakeNodeAllocatorTest test
 ```
 
+
+
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -694,13 +716,17 @@ git commit -m "feat(demo2): lease snowflake workerId with Redis TTL heartbeat"
 
 ---
 
+
+
 ### Task 5: Spring 装配 SnowflakeIdConfiguration
 
 **Files:**
+
 - Create: `demo2/src/main/java/com/jason/demo/demo2/framework/id/SnowflakeIdConfiguration.java`
 - Create: `demo2/src/test/java/com/jason/demo/demo2/framework/id/SnowflakeIdConfigurationTest.java`（纯单测：用 mock allocator 验证 generator 构造参数；或跳过 Spring 上下文，改为轻量验证配置类可编译 + 手动 new）
 
 **Interfaces:**
+
 - Consumes: `SnowflakeNodeAllocator.allocate()` / `startHeartbeat()` / `current()` / `close()`
 - Produces: Spring Bean `SnowflakeIdGenerator`、`SnowflakeNodeAllocator`（`destroyMethod = "close"`）
 
@@ -818,13 +844,17 @@ git commit -m "feat(demo2): wire snowflake generator from Redis-allocated node"
 
 ---
 
+
+
 ### Task 6: 回归与手工验收清单
 
 **Files:**
+
 - 无必须改动的生产代码（若发现 `@SpringBootTest` 缺 Redis 再补 test properties / 排除）
 - 检查：`grep -R "new SnowflakeIdGenerator()" demo2` 应为空；无参路径已删除
 
 **Interfaces:**
+
 - Consumes: 完整装配
 - Produces: 可运行的 demo2（需本地 Redis）
 
@@ -857,13 +887,13 @@ Expected: PASS
 4. Redis CLI：
 
 ```bash
-redis-cli GET demo2:snowflake:dc:demo2
-redis-cli SMEMBERS demo2:snowflake:dc:used
-redis-cli KEYS "demo2:snowflake:worker:*"
+redis-cli GET app:snowflake:dc:demo2
+redis-cli SMEMBERS app:snowflake:dc:used
+redis-cli KEYS "app:snowflake:worker:*"
 ```
 
-5. 停应用后 worker key 应被 DEL；或 kill -9 后等待 ≤30s TTL 消失
-6. 再启一次：`GET demo2:snowflake:dc:demo2` 与首次相同
+1. 停应用后 worker key 应被 DEL；或 kill -9 后等待 ≤30s TTL 消失
+2. 再启一次：`GET app:snowflake:dc:demo2` 与首次相同
 
 - [ ] **Step 4: Commit（若有测试/文档微调）**
 
@@ -878,23 +908,30 @@ git commit -m "test(demo2): cover snowflake allocation regression checks"
 
 ---
 
+
+
 ## Spec coverage（自检）
 
-| Spec 要求 | Task |
-|-----------|------|
-| dc=服务、worker=机器，0..31 | Task 3–4 |
-| Redis 永久 dc + TTL worker | Task 3–4 |
-| fail-fast，不降级 | Task 4–5 |
-| `spring.application.name` | Task 5 |
-| 心跳 / 释放 / 丢租约打 error | Task 4 |
-| 配置项 `app.snowflake.*` | Task 1 |
-| 改造 Generator，业务注入不变 | Task 2、5、6 |
-| 单测：复用 dc、抢 worker、占满、续约/释放 | Task 3–4 |
-| 可观测 ready 日志 | Task 4 |
-| 非目标（Leaf/哈希/自动回收 dc 等） | 未纳入 |
+
+| Spec 要求                    | Task       |
+| -------------------------- | ---------- |
+| dc=服务、worker=机器，0..31      | Task 3–4   |
+| Redis 永久 dc + TTL worker   | Task 3–4   |
+| fail-fast，不降级              | Task 4–5   |
+| `spring.application.name`  | Task 5     |
+| 心跳 / 释放 / 丢租约打 error       | Task 4     |
+| 配置项 `app.snowflake.*`      | Task 1     |
+| 改造 Generator，业务注入不变        | Task 2、5、6 |
+| 单测：复用 dc、抢 worker、占满、续约/释放 | Task 3–4   |
+| 可观测 ready 日志               | Task 4     |
+| 非目标（Leaf/哈希/自动回收 dc 等）     | 未纳入        |
+
+
+
 
 ## Placeholder / 一致性自检
 
 - 无 TBD；构造参数顺序全程 `(workerId, datacenterId)`
 - Key 前缀与 spec：`{prefix}:dc:{app}` / `{prefix}:dc:used` / `{prefix}:worker:{dc}:{worker}`
 - Lua `false`/`null` 均视为耗尽
+

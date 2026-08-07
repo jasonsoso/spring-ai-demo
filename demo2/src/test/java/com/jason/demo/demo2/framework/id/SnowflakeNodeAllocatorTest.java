@@ -5,11 +5,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.stubbing.Answer;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 
-import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -18,9 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,13 +37,14 @@ class SnowflakeNodeAllocatorTest {
         properties.setLeaseTtlSeconds(30);
         properties.setHeartbeatIntervalSeconds(10);
         allocator = new SnowflakeNodeAllocator(redis, properties, "order-service");
+        stubRedisScripts("OK");
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void ensureDatacenterId_returnsExistingMapping() {
         when(redis.execute(any(DefaultRedisScript.class), eq(List.of(
-                "test:snowflake:dc:order-service", "test:snowflake:dc:used"))))
+                "test:snowflake:dc:order-service", "test:snowflake:dc:used")), any()))
                 .thenReturn("7");
 
         assertEquals(7L, allocator.ensureDatacenterId("order-service"));
@@ -54,23 +53,14 @@ class SnowflakeNodeAllocatorTest {
     @Test
     @SuppressWarnings("unchecked")
     void ensureDatacenterId_failsWhenSlotsExhausted() {
-        when(redis.execute(any(DefaultRedisScript.class), anyList())).thenReturn(null);
+        when(redis.execute(any(DefaultRedisScript.class), anyList(), any())).thenReturn(null);
 
         assertThrows(IllegalStateException.class,
                 () -> allocator.ensureDatacenterId("order-service"));
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void allocate_acquiresFirstFreeWorker() {
-        when(redis.execute(any(DefaultRedisScript.class), anyList())).thenReturn("1");
-
-        ValueOperations<String, String> values = mock(ValueOperations.class);
-        when(redis.opsForValue()).thenReturn(values);
-        when(values.setIfAbsent(
-                eq("test:snowflake:worker:1:0"), anyString(), eq(Duration.ofSeconds(30))))
-                .thenReturn(true);
-
         AllocatedSnowflakeNode node = allocator.allocate();
         assertEquals(1L, node.datacenterId());
         assertEquals(0L, node.workerId());
@@ -79,41 +69,43 @@ class SnowflakeNodeAllocatorTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void allocate_failsWhenAllWorkersTaken() {
-        when(redis.execute(any(DefaultRedisScript.class), anyList())).thenReturn("1");
-        ValueOperations<String, String> values = mock(ValueOperations.class);
-        when(redis.opsForValue()).thenReturn(values);
-        when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false);
-
+        stubRedisScripts(null);
         assertThrows(IllegalStateException.class, () -> allocator.allocate());
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void renewLease_succeedsOnlyForOwner() {
-        when(redis.execute(any(DefaultRedisScript.class), anyList())).thenReturn("1");
-        ValueOperations<String, String> values = mock(ValueOperations.class);
-        when(redis.opsForValue()).thenReturn(values);
-        when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
-
         allocator.allocate();
-
-        when(redis.execute(any(DefaultRedisScript.class), anyList(), any(), any()))
-                .thenReturn(1L);
         assertTrue(allocator.renewLease());
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void releaseLease_deletesOnlyOwnedKey() {
-        when(redis.execute(any(DefaultRedisScript.class), anyList())).thenReturn("1");
-        ValueOperations<String, String> values = mock(ValueOperations.class);
-        when(redis.opsForValue()).thenReturn(values);
-        when(values.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
         allocator.allocate();
-
-        when(redis.execute(any(DefaultRedisScript.class), anyList(), any())).thenReturn(1L);
         assertTrue(allocator.releaseLease());
+    }
+
+    @SuppressWarnings("unchecked")
+    private void stubRedisScripts(String acquireResult) {
+        lenient().when(redis.execute(any(DefaultRedisScript.class), anyList(), any()))
+                .thenAnswer(redisScriptAnswer(acquireResult));
+        lenient().when(redis.execute(any(DefaultRedisScript.class), anyList(), any(), any()))
+                .thenAnswer(redisScriptAnswer(acquireResult));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Answer<Object> redisScriptAnswer(String acquireResult) {
+        return invocation -> {
+            List<String> keys = invocation.getArgument(1);
+            DefaultRedisScript<?> script = invocation.getArgument(0);
+            if (keys.size() == 2) {
+                return "1";
+            }
+            if (script.getResultType() == Long.class) {
+                return 1L;
+            }
+            return acquireResult;
+        };
     }
 }

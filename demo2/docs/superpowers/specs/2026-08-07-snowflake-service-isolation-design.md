@@ -195,7 +195,7 @@ snowflake ready, app={}, datacenterId={}, workerId={}, instanceId={}
 
 ```properties
 # 建议含应用或环境，避免多环境共 Redis 撞 key
-app.snowflake.key-prefix=demo2:snowflake
+app.snowflake.key-prefix=app:snowflake
 app.snowflake.lease-ttl-seconds=30
 app.snowflake.heartbeat-interval-seconds=10
 ```
