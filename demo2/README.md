@@ -1316,6 +1316,28 @@ curl -s -o - -w "\nHTTP:%{http_code}\n" -X POST http://localhost:8081/demo/lock/
   -d "{\"userId\":\"u1\",\"sessionId\":\"s1\",\"message\":\"same\",\"workMs\":5000}"
 ```
 
+**延时任务 + 订单超时取消（`framework.delay` / `/demo/orders`）：**
+
+- 依赖：MySQL 执行 `src/main/resources/db/delay-order-schema.sql`；Redis（Redisson 主路径 / 锁）；可选 RocketMQ（`app.delay.backend=rocketmq`）
+- 主投递：`app.delay.backend=redisson|rocketmq`（单主）；扫描兜底：`app.delay.scan-interval-ms`
+- Spec / Plan：`docs/superpowers/specs/2026-08-06-delay-task-order-cancel-design.md`、`docs/superpowers/plans/2026-08-06-delay-task-order-cancel.md`
+
+```bash
+# 创建待支付订单并注册超时取消（默认 30s，可改 delay）
+curl -s -X POST http://localhost:8081/demo/orders \
+  -H "Content-Type: application/json" \
+  -d "{\"amount\":9.9,\"delay\":\"10s\"}"
+
+# 查询订单；到期后 status 应为 CANCELLED
+curl -s http://localhost:8081/demo/orders/{orderId}
+
+# 支付路径：先支付则保持 PAID，延时任务逻辑取消
+curl -s -X POST http://localhost:8081/demo/orders/{orderId}/pay
+
+# 查台账
+curl -s "http://localhost:8081/demo/delay-tasks?bizKey={orderId}"
+```
+
 **分布式后端（`PostgresDistributedStore` / 共享 Workspace）：**
 
 - 开关：`app.agentscope.distributed.enabled`（本地默认 `true`；测试 `false`）
