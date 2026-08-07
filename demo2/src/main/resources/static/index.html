@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="/css/tabs/embabel.css">
     <link rel="stylesheet" href="/css/tabs/agentscope.css">
     <link rel="stylesheet" href="/css/tabs/rocketmq.css">
+    <link rel="stylesheet" href="/css/tabs/order-delay.css">
 </head>
 <body>
 <div class="app-container">
@@ -53,6 +54,7 @@
         <button class="tab-btn" data-tab="embabel" onclick="switchTab('embabel')">🔀 Embabel 自动选路</button>
         <button class="tab-btn" data-tab="agentscope" onclick="switchTab('agentscope')">🧭 AgentScope Harness</button>
         <button class="tab-btn" data-tab="rocketmq" onclick="switchTab('rocketmq')">🚀 RocketMQ 消息</button>
+        <button class="tab-btn" data-tab="order-delay" onclick="switchTab('order-delay')">⏱️ 订单超时取消</button>
     </div>
 
     <!-- ========== 聊天 Tab ========== -->
@@ -1356,6 +1358,48 @@
         </div>
     </div>
 
+    <!-- ========== 订单超时取消 Tab ========== -->
+    <div id="tab-order-delay" class="tab-content">
+        <div class="order-delay-header">
+            <h1>订单超时取消 Demo</h1>
+            <p>通用延时任务：主路径 Redisson/RocketMQ + MySQL 台账扫描兜底（需 MySQL 表 + Redis）</p>
+        </div>
+        <div class="order-delay-body">
+            <div class="card">
+                <div class="card-title">🧾 创建 / 支付 / 查询</div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <label>金额</label>
+                        <input type="number" id="orderDelayAmount" value="9.9" step="0.01" min="0.01">
+                    </div>
+                    <div class="form-row">
+                        <label>超时</label>
+                        <input type="text" id="orderDelaySeconds" value="10s" placeholder="如 10s / 30s">
+                    </div>
+                    <div class="form-row">
+                        <label>orderId</label>
+                        <input type="text" id="orderDelayOrderId" placeholder="创建后自动填入；也可手动填">
+                    </div>
+                    <div class="form-row">
+                        <label></label>
+                        <div class="order-delay-actions">
+                            <button class="btn btn-primary" onclick="orderDelayCreate()">创建待支付订单</button>
+                            <button class="btn btn-primary" onclick="orderDelayPay()">模拟支付</button>
+                            <button class="btn" onclick="orderDelayRefresh()">刷新订单+台账</button>
+                        </div>
+                    </div>
+                    <div id="orderDelayResult" class="result-box">结果会显示在这里</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">📋 操作日志</div>
+                <div class="card-body">
+                    <div id="orderDelayLog" class="result-box order-delay-log">操作日志</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -1384,5 +1428,6 @@
 <script src="/js/tabs/embabel.js"></script>
 <script src="/js/tabs/agentscope.js"></script>
 <script src="/js/tabs/rocketmq.js"></script>
+<script src="/js/tabs/order-delay.js"></script>
 </body>
 </html>

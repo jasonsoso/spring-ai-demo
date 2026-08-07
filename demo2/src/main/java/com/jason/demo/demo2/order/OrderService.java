@@ -57,10 +57,10 @@ public class OrderService {
                 effective);
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("orderId", orderId);
+        result.put("orderId", String.valueOf(orderId));
         result.put("status", order.getStatus());
         result.put("amount", amount);
-        result.put("taskId", taskId);
+        result.put("taskId", String.valueOf(taskId));
         result.put("delay", effective.toString());
         return result;
     }
@@ -75,7 +75,7 @@ public class OrderService {
                     "cannot pay order in status " + existing.getStatus());
         }
         delayTaskService.cancelByBizKey(DelayTaskType.ORDER_CANCEL, String.valueOf(orderId));
-        return Map.of("orderId", orderId, "status", OrderStatus.PAID.name());
+        return Map.of("orderId", String.valueOf(orderId), "status", OrderStatus.PAID.name());
     }
 
     public OrderEntity get(long orderId) {

@@ -28,7 +28,7 @@ public class DelayTaskController {
         if (!ok) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "pending task not found: " + taskId);
         }
-        return Map.of("ok", true, "taskId", taskId);
+        return Map.of("ok", true, "taskId", String.valueOf(taskId));
     }
 
     @GetMapping

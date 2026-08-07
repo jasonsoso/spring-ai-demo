@@ -46,8 +46,8 @@ class OrderServiceTest {
 
         Map<String, Object> result = orderService.create(new BigDecimal("9.90"), Duration.ofSeconds(10));
 
-        assertEquals(55L, result.get("orderId"));
-        assertEquals(77L, result.get("taskId"));
+        assertEquals("55", result.get("orderId"));
+        assertEquals("77", result.get("taskId"));
         verify(orderRepository).insert(argThat(o -> o.getOrderId() == 55L
                 && OrderStatus.PENDING_PAY.name().equals(o.getStatus())));
         verify(delayTaskService).schedule(DelayTaskType.ORDER_CANCEL, "55", null, Duration.ofSeconds(10));
