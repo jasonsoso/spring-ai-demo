@@ -35,6 +35,9 @@
         <agentscope.version>2.0.0</agentscope.version>
         <lock4j.version>2.2.7</lock4j.version>
         <rocketmq-client.version>5.5.0</rocketmq-client.version>
+        <!-- Spring Boot 4 专用；勿降到 boot3-starter。Boot4 支持自 MP 3.5.13 起 -->
+        <mybatis-plus.version>3.5.17</mybatis-plus.version>
+        <hutool.version>5.8.35</hutool.version>
     </properties>
 
     <repositories>
@@ -119,6 +122,13 @@
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-json-jackson3</artifactId>
                 <version>2.0.0</version>
+            </dependency>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-bom</artifactId>
+                <version>${mybatis-plus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -360,6 +370,21 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-tx</artifactId>
+        </dependency>
+        <!-- Spring Boot 4.x 专用 starter（不是 mybatis-plus-spring-boot3-starter） -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
+        </dependency>
+        <!-- 3.5.9+ jsqlparser 解耦；JDK 21 用此模块 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-core</artifactId>
+            <version>${hutool.version}</version>
         </dependency>
     </dependencies>
 
