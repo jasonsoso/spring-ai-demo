@@ -5,6 +5,8 @@ import com.baomidou.lock.LockTemplate;
 import com.jason.demo.demo2.framework.delay.config.DelayProperties;
 import com.jason.demo.demo2.framework.delay.repository.DelayTaskEntity;
 import com.jason.demo.demo2.framework.delay.repository.DelayTaskRepository;
+import com.jason.demo.demo2.framework.trace.TraceSupport;
+import io.micrometer.tracing.test.simple.SimpleTracer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,7 +46,8 @@ class DelayTaskExecutorTest {
         properties.setLockTimeout(Duration.ofSeconds(10));
         properties.setMaxRetry(3);
         when(handler.taskType()).thenReturn(DelayTaskType.ORDER_CANCEL);
-        executor = new DelayTaskExecutor(repository, lockTemplate, properties, List.of(handler));
+        TraceSupport traceSupport = new TraceSupport(new SimpleTracer());
+        executor = new DelayTaskExecutor(repository, lockTemplate, properties, List.of(handler), traceSupport);
     }
 
     @Test

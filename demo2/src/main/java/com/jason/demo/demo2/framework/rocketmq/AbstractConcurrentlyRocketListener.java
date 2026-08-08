@@ -5,8 +5,10 @@ import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
 import org.apache.rocketmq.client.consumer.listener.MessageListenerConcurrently;
 import org.apache.rocketmq.common.message.MessageExt;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 并发消费模板：统一异常处理与前后置钩子。
@@ -17,14 +19,31 @@ import java.util.List;
 @Slf4j
 public abstract class AbstractConcurrentlyRocketListener implements MessageListenerConcurrently {
 
+    private RocketMqTracePropagator tracePropagator;
+
+    @Autowired(required = false)
+    public void setTracePropagator(RocketMqTracePropagator tracePropagator) {
+        this.tracePropagator = tracePropagator;
+    }
+
     @Override
     public ConsumeConcurrentlyStatus consumeMessage(
             List<MessageExt> msgs, ConsumeConcurrentlyContext context) {
         if (msgs == null || msgs.isEmpty()) {
             return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
         }
-        // PushConsumer 默认每次回调一批，本框架按首条处理（与 Demo 单条投递场景对齐）
         MessageExt messageExt = msgs.getFirst();
+        if (tracePropagator == null) {
+            return consumeWithoutTrace(messageExt);
+        }
+        AtomicReference<ConsumeConcurrentlyStatus> status =
+                new AtomicReference<>(ConsumeConcurrentlyStatus.RECONSUME_LATER);
+        tracePropagator.runWithExtractedOrNew(messageExt, "rocketmq.consume", () ->
+                status.set(consumeWithoutTrace(messageExt)));
+        return status.get();
+    }
+
+    private ConsumeConcurrentlyStatus consumeWithoutTrace(MessageExt messageExt) {
         try {
             preReceiveMessage(messageExt);
             return doReceiveMessage(messageExt);

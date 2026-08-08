@@ -5,8 +5,10 @@ import org.apache.rocketmq.client.consumer.listener.ConsumeOrderlyStatus;
 import org.apache.rocketmq.client.consumer.listener.MessageListenerOrderly;
 import org.apache.rocketmq.common.message.MessageExt;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 顺序消费模板：统一异常处理与前后置钩子。
@@ -17,12 +19,30 @@ import java.util.List;
 @Slf4j
 public abstract class AbstractOrderlyRocketListener implements MessageListenerOrderly {
 
+    private RocketMqTracePropagator tracePropagator;
+
+    @Autowired(required = false)
+    public void setTracePropagator(RocketMqTracePropagator tracePropagator) {
+        this.tracePropagator = tracePropagator;
+    }
+
     @Override
     public ConsumeOrderlyStatus consumeMessage(List<MessageExt> msgs, ConsumeOrderlyContext context) {
         if (msgs == null || msgs.isEmpty()) {
             return ConsumeOrderlyStatus.SUCCESS;
         }
         MessageExt messageExt = msgs.getFirst();
+        if (tracePropagator == null) {
+            return consumeWithoutTrace(messageExt);
+        }
+        AtomicReference<ConsumeOrderlyStatus> status =
+                new AtomicReference<>(ConsumeOrderlyStatus.SUSPEND_CURRENT_QUEUE_A_MOMENT);
+        tracePropagator.runWithExtractedOrNew(messageExt, "rocketmq.consume", () ->
+                status.set(consumeWithoutTrace(messageExt)));
+        return status.get();
+    }
+
+    private ConsumeOrderlyStatus consumeWithoutTrace(MessageExt messageExt) {
         try {
             preReceiveMessage(messageExt);
             return doReceiveMessage(messageExt);

@@ -1,8 +1,11 @@
 package com.jason.demo.demo2.framework.rocketmq.producer;
 
 import com.jason.demo.demo2.framework.rocketmq.DelayTimeLevel;
+import com.jason.demo.demo2.framework.rocketmq.RocketMqTracePropagator;
 import com.jason.demo.demo2.framework.rocketmq.configuration.RocketMQProperties;
 import com.jason.demo.demo2.framework.rocketmq.util.TransactionUtils;
+import io.micrometer.context.ContextSnapshot;
+import io.micrometer.context.ContextSnapshotFactory;
 import jakarta.annotation.PostConstruct;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendCallback;
@@ -43,6 +46,7 @@ public class BaseEventPublisher implements ApplicationContextAware {
     private JsonMapper jsonMapper;
     private String topic;
     private String tag;
+    private RocketMqTracePropagator tracePropagator;
     /** 同步 / 顺序发送失败时的最大尝试次数 */
     private int maxTryTimes = 2;
 
@@ -70,6 +74,7 @@ public class BaseEventPublisher implements ApplicationContextAware {
         }
         this.topic = config.getTopic();
         this.tag = config.getTag();
+        this.tracePropagator = applicationContext.getBeanProvider(RocketMqTracePropagator.class).getIfAvailable();
         log.info("rocketmq publisher initialized, producerId={}, publisherClass={}, topic={}, tag={}, maxTryTimes={}",
                 producerId, getClass().getName(), topic, tag, maxTryTimes);
     }
@@ -84,16 +89,21 @@ public class BaseEventPublisher implements ApplicationContextAware {
     protected void sendAsync(Object messageBodyObj, String... keys) {
         Message message = buildMessage(messageBodyObj, keys);
         TransactionUtils.afterCommitSyncExecute(() -> {
+            ContextSnapshot snapshot = ContextSnapshotFactory.builder().build().captureAll();
             try {
                 producer.send(message, new SendCallback() {
                     @Override
                     public void onSuccess(SendResult sendResult) {
-                        log.info("async send success, result:{}", sendResult);
+                        try (ContextSnapshot.Scope scope = snapshot.setThreadLocals()) {
+                            log.info("async send success, result:{}", sendResult);
+                        }
                     }
 
                     @Override
                     public void onException(Throwable e) {
-                        log.error("async send error, message:{}", messageBodyObj, e);
+                        try (ContextSnapshot.Scope scope = snapshot.setThreadLocals()) {
+                            log.error("async send error, message:{}", messageBodyObj, e);
+                        }
                     }
                 });
             } catch (Exception e) {
@@ -169,6 +179,9 @@ public class BaseEventPublisher implements ApplicationContextAware {
             }
             if (keys != null && keys.length > 0) {
                 message.setKeys(String.join(" ", keys));
+            }
+            if (tracePropagator != null) {
+                tracePropagator.inject(message);
             }
             return message;
         } catch (Exception e) {

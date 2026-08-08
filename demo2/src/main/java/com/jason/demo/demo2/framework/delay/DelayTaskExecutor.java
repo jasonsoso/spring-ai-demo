@@ -5,6 +5,7 @@ import com.baomidou.lock.LockTemplate;
 import com.jason.demo.demo2.framework.delay.config.DelayProperties;
 import com.jason.demo.demo2.framework.delay.repository.DelayTaskEntity;
 import com.jason.demo.demo2.framework.delay.repository.DelayTaskRepository;
+import com.jason.demo.demo2.framework.trace.TraceSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -34,6 +35,7 @@ public class DelayTaskExecutor {
     private final DelayTaskRepository repository;
     private final LockTemplate lockTemplate;
     private final DelayProperties properties;
+    private final TraceSupport traceSupport;
     /** key = {@link DelayTaskHandler#taskType()} */
     private final Map<String, DelayTaskHandler> handlers;
 
@@ -41,10 +43,12 @@ public class DelayTaskExecutor {
             DelayTaskRepository repository,
             LockTemplate lockTemplate,
             DelayProperties properties,
-            List<DelayTaskHandler> handlerList) {
+            List<DelayTaskHandler> handlerList,
+            TraceSupport traceSupport) {
         this.repository = repository;
         this.lockTemplate = lockTemplate;
         this.properties = properties;
+        this.traceSupport = traceSupport;
         this.handlers = handlerList.stream()
                 .collect(Collectors.toMap(DelayTaskHandler::taskType, Function.identity(), (a, b) -> a));
     }
@@ -54,6 +58,10 @@ public class DelayTaskExecutor {
      * 抢不到锁则直接返回，由其他持锁方或下次扫描再试。
      */
     public void execute(long taskId) {
+        traceSupport.runInSpan("delay.task.execute", () -> doExecuteUnderLock(taskId));
+    }
+
+    private void doExecuteUnderLock(long taskId) {
         String lockKey = "delay:task:" + taskId;
         long expireMs = properties.getLockTimeout().toMillis();
         LockInfo lockInfo = lockTemplate.lock(lockKey, expireMs, 0L);
