@@ -74,17 +74,23 @@ public class OrderService {
     }
 
     /**
-     * 支付成功：订单置 PAID，并取消对应延时任务（同一本地事务）。
+     * 支付成功：先校验待支付，再置 PAID，并取消对应延时任务（同一本地事务）。
      */
     @Transactional
     public Map<String, Object> pay(long orderId) {
-        boolean paid = orderRepository.markPaid(orderId);
-        if (!paid) {
-            OrderEntity existing = orderRepository.findById(orderId)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "order not found"));
+        OrderEntity existing = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "order not found"));
+        if (!OrderStatus.PENDING_PAY.name().equals(existing.getStatus())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "cannot pay order in status " + existing.getStatus());
+        }
+        boolean paid = orderRepository.markPaid(orderId);
+        if (!paid) {
+            OrderEntity latest = orderRepository.findById(orderId).orElse(existing);
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "cannot pay order in status " + latest.getStatus());
         }
         delayTaskService.cancelByBizKey(DelayTaskType.ORDER_CANCEL, String.valueOf(orderId));
         return Map.of("orderId", orderId, "status", OrderStatus.PAID.name());

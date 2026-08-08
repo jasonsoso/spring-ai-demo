@@ -36,6 +36,8 @@ public class FallbackScanner {
         List<DelayTaskEntity> due = repository.findDuePending(Instant.now(), properties.getScanBatchSize());
         for (DelayTaskEntity task : due) {
             try {
+                log.info("calling DelayTaskExecutor#execute from FallbackScanner, taskId={}",
+                        task.getTaskId());
                 executor.execute(task.getTaskId());
             } catch (Exception e) {
                 log.error("fallback scan execute failed, taskId={}", task.getTaskId(), e);

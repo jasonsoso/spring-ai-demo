@@ -27,6 +27,8 @@ public class DelayTaskMqListener extends RocketMessageConcurrentlyListener<Delay
             log.warn("delay task mq payload missing taskId, msgId={}", messageExt.getMsgId());
             return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
         }
+        log.info("calling DelayTaskExecutor#execute from DelayTaskMqListener, taskId={}, msgId={}",
+                payload.getTaskId(), messageExt.getMsgId());
         executor.execute(payload.getTaskId());
         return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
     }

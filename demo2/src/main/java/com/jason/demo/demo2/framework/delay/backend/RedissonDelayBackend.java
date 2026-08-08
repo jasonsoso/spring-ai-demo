@@ -70,6 +70,8 @@ public class RedissonDelayBackend implements DelayBackend {
             try {
                 Long taskId = destinationQueue.poll(1, TimeUnit.SECONDS);
                 if (taskId != null) {
+                    log.info("calling DelayTaskExecutor#execute from RedissonDelayBackend, taskId={}",
+                            taskId);
                     executor.execute(taskId);
                 }
             } catch (InterruptedException e) {
