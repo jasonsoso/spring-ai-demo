@@ -10,6 +10,7 @@ import com.embabel.common.ai.model.ModelProvider;
 import com.embabel.common.ai.model.OptionsConverter;
 import com.jason.demo.demo2.config.LoggingChatModel;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.annotation.Bean;
@@ -71,7 +72,7 @@ public class EmbabelLlmModelFixConfig {
                 springAi.getNativeSupport());
     }
 
-    private static final class ModelIncludingOptionsConverter implements OptionsConverter<OpenAiChatOptions> {
+    private static final class ModelIncludingOptionsConverter implements OptionsConverter {
 
         private final String modelName;
 
@@ -80,9 +81,10 @@ public class EmbabelLlmModelFixConfig {
         }
 
         @Override
-        public OpenAiChatOptions convertOptions(LlmOptions options) {
+        public ChatOptions convertOptions(LlmOptions options, String model) {
+            String resolvedModel = (modelName != null && !modelName.isBlank()) ? modelName : model;
             return OpenAiChatOptions.builder()
-                    .model(modelName)
+                    .model(resolvedModel)
                     .temperature(options.getTemperature())
                     .topP(options.getTopP())
                     .maxTokens(options.getMaxTokens())
