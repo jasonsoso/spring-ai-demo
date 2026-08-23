@@ -1,6 +1,6 @@
 package com.jason.demo.demo2.framework.jackson;
 
-import com.jason.demo.demo2.order.repository.OrderEntity;
+import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -60,7 +60,7 @@ class JacksonJsonCustomizerTest {
 
     @Test
     void localDateTimeAndInstant_useConfiguredPattern() {
-        OrderEntity order = new OrderEntity();
+        OrderDO order = new OrderDO();
         order.setOrderId(55L);
         order.setStatus("PAID");
         order.setAmount(new BigDecimal("1.00"));

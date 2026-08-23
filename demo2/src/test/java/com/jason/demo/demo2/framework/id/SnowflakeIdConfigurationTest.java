@@ -1,5 +1,7 @@
 package com.jason.demo.demo2.framework.id;
 
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeIdConfiguration;
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;

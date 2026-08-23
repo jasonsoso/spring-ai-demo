@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.framework.id;
 
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;

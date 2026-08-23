@@ -14,217 +14,233 @@
 
 ### 1.2 目标
 
-1. 按「接入 / 领域核心 / 基础设施」重排订单包，业务规则（待支付才能付/取消）进领域对象与领域服务。
-2. 表映射类命名为 `OrderDO`；前端只用 `ReqVO` / `ResVO`。
-3. 全部订单 HTTP 改为 **POST + Body**，路径不带参数。
-4. 对象转换使用 **MapStruct**。
-5. 保持现有下单 / 支付 / 超时取消语义与 `demo_order` 表结构不变。
+1. 按「接入 / 领域核心 / 基础设施」重排订单包，业务规则进领域对象与领域服务。
+2. 表映射类命名为 `OrderDO`（`dao.entity`）；前端只用 `ReqVO` / `ResVO`。
+3. 全部订单 HTTP 改为 **POST + Body**；**仅下单**接口/action 使用 **orderPlace** 命名（替代原 create），其余动作用 pay / get / cancel。
+4. **新增手动取消订单**：未支付（`PENDING_PAY`）可取消；与延时 MQ/扫描触发的超时取消并列，共三条取消路径。
+5. 应用层用 **CmdExe** + **MapStruct**；同步更新前端 Demo 与 README。
 
 ### 1.3 已确认决策
 
 | 维度 | 选择 |
 |------|------|
-| 分包 | `app` + `service.core` + `service.infrastructure` |
-| 依赖方向 | `app → service.core → service.infrastructure`（传统分层，**不是** COLA 依赖倒置） |
-| 领域对象 | `Order extends OrderDO`（领域复用表字段，省一次 DO 转换） |
-| 领域服务 | `OrderDomainService` 放在 `service.core`，可直接调用 infra 仓储 |
-| Maven 模块 | **不拆** `order-core` / `order-infra`；core 与 infra 同属 demo2 单模块 |
-| 前端对象 | 按接口拆 `XxxReqVO` / `XxxResVO` |
-| 内部 DTO | **本版不做**；DTO 留给以后微服务之间调用；不预建空 `client` 包 |
-| 转换 | MapStruct：VO ↔ `Order` / 用例结果；不做 `Order` ↔ `OrderDO` |
-| HTTP | 仅 POST；无 GET；无路径参数 |
-| 路径 | `POST /demo/orders/create`、`/pay`、`/get` |
-| 应用编排 | `OrderApplicationService` 在 `app`：事务 + 延时任务；不依赖 VO |
-| 延时回调 | `OrderCancelHandler` 留在 `app` |
-| 持久化 | 表 `demo_order` 不变；`OrderEntity` 更名为 `OrderDO` |
-| 并发 | 支付/取消仍用 `UPDATE ... WHERE status = PENDING_PAY` |
+| 下单命名 | 仅 **`OrderPlace*`** / **`orderPlace`**（CmdExe、VO、URL）；pay/get/cancel **不带 Place** |
+| 分包 | `app` + `service.common` + `service.core` + `service.infrastructure` |
+| 依赖方向 | `app → service.core → service.infrastructure` |
+| CmdExe | `OrderPlaceCmdExe`、`OrderPaySuccessCmdExe`、`OrderGetCmdExe`、`OrderExpireCmdExe`、`OrderCancelCmdExe` |
+| 取消路径 | ① 延时主路径（Redisson/MQ）→ `listener.OrderCancelHandler` → `OrderExpireCmdExe`；② 扫描兜底触发同一延时执行链；③ **手动** `POST /demo/orders/cancel` → `OrderCancelCmdExe` |
+| 取消规则 | 仅 `PENDING_PAY` 可取消；手动取消成功后 **取消对应延时任务**（`cancelByBizKey`） |
+| 延时 SPI | `OrderCancelHandler` 薄适配，只调 `OrderExpireCmdExe` |
+| DAO | `dao.entity.OrderDO` + `dao.mapper.OrderMapper`（`BaseMapper<OrderDO>`） |
+| Repository | `OrderRepository` + `OrderDoConvert`；对外只用 `Order` |
+| 转换 | `OrderVoConvert`（VO）；`OrderDoConvert`（`Order` ↔ `OrderDO`） |
+| HTTP 路径 | `orderPlace`、`pay`、`get`、`cancel`（均 `POST /demo/orders/{action}`） |
 
-### 1.4 非目标（本版不做）
+### 1.4 非目标
 
-- 新增 `client` 模块或 DTO / 二方库 API
-- COLA Gateway：领域接口放 core、实现放 infra、core 不依赖 infra
-- 把 core / infrastructure 拆成独立 Maven 模块
-- 领域事件、独立状态机组件、改期 API
-- 修改 `demo_order` / `delay_task` 表结构或延时框架本身
-- 兼容旧 URL：`POST /demo/orders`、`GET /demo/orders/{id}`、`POST /demo/orders/{id}/pay`
-
-### 1.5 与 COLA 的关系（刻意取舍）
-
-[COLA](https://github.com/alibaba/COLA) 2.0 之后官方是 **Domain 不依赖 Infrastructure**，用 Gateway 倒置依赖。本版按调用链习惯选择 **core 依赖 infrastructure**，并允许 `Order` 继承 `OrderDO`。这是明确取舍：写起来短，换存储或拆 Maven 模块时成本更高。单模块内 Java 允许 `Order`（core）继承 `OrderDO`（infra）、同时 `OrderMapper` 使用 `Order`。
+- `client` 模块 / 微服务 DTO
+- COLA 依赖倒置、拆 Maven 子模块
+- 兼容旧 URL（`POST /demo/orders`、`GET .../{id}`、`POST .../{id}/pay`）
 
 ---
 
 ## 2. 架构
 
-### 2.1 逻辑架构
-
-```text
-HTTP POST + ReqVO
-        │
-        ▼
-   order.app
-   ├── OrderController
-   ├── vo / convert（MapStruct）
-   ├── OrderApplicationService   事务、DelayTaskService
-   └── OrderCancelHandler
-        │
-        ▼
-   order.service.core
-   ├── Order extends OrderDO
-   ├── OrderStatus
-   └── OrderDomainService        直接调仓储
-        │
-        ▼
-   order.service.infrastructure
-   ├── OrderDO / OrderMapper / OrderRepository
-   └── MySQL demo_order
-```
-
-依赖：**app → core → infrastructure**。app 不直接依赖 Mapper/`OrderDO` 类型做业务（查询结果类型是 `Order`）。`DelayTaskService` 仍由 app 调用，领域不感知延时框架。
-
-### 2.2 包与类
+### 2.1 包与类
 
 ```
 com.jason.demo.demo2.order
 ├── app
-│   ├── OrderController
-│   ├── OrderApplicationService
-│   ├── OrderCancelHandler
-│   ├── CreateOrderResult
+│   ├── controller / OrderController
+│   ├── executor
+│   │   ├── OrderPlaceCmdExe
+│   │   ├── OrderPaySuccessCmdExe
+│   │   ├── OrderGetCmdExe
+│   │   ├── OrderExpireCmdExe          # 超时取消（延时框架回调）
+│   │   └── OrderCancelCmdExe          # 手动取消（HTTP）
+│   ├── listener
+│   │   └── OrderCancelHandler         # DelayTaskHandler → OrderExpireCmdExe
+│   ├── job                              # 预留
+│   ├── OrderPlaceResult
 │   ├── vo
-│   │   ├── CreateOrderReqVO / CreateOrderResVO
+│   │   ├── OrderPlaceReqVO / OrderPlaceResVO
 │   │   ├── PayOrderReqVO / PayOrderResVO
-│   │   └── GetOrderReqVO / GetOrderResVO
-│   └── convert
-│       └── OrderVoConvert          # MapStruct
+│   │   ├── GetOrderReqVO / GetOrderResVO
+│   │   └── CancelOrderReqVO / CancelOrderResVO
+│   └── convert / OrderVoConvert
 └── service
+    ├── common / OrderStatus
     ├── core
-    │   ├── Order                   # extends OrderDO
-    │   ├── OrderStatus
+    │   ├── domain / Order               # extends OrderDO
     │   └── OrderDomainService
     └── infrastructure
-        ├── OrderDO
-        ├── OrderMapper             # BaseMapper<Order>
-        └── OrderRepository
+        ├── dao
+        │   ├── entity / OrderDO
+        │   └── mapper / OrderMapper
+        └── repository
+            ├── OrderRepository
+            └── convert / OrderDoConvert
 ```
 
-| 原类型 | 去向 |
-|--------|------|
-| `OrderController` | `app.OrderController` |
-| `OrderService` | 拆为 `app.OrderApplicationService` + `core.OrderDomainService` |
-| `OrderCancelHandler` | `app.OrderCancelHandler` |
-| `CreateOrderRequest` | `CreateOrderReqVO` 等 |
-| `OrderStatus` | `service.core.OrderStatus` |
-| `OrderEntity` | `service.infrastructure.OrderDO`；`Order` 继承它 |
-| `OrderMapper` / `OrderRepository` | `service.infrastructure` |
+### 2.2 取消订单三条路径
 
-### 2.3 各层职责
+```text
+路径 1 & 2（延时框架，主投递 Redisson/MQ + 扫描兜底）
+  DelayTask 到期 → OrderCancelHandler.handle
+    → OrderExpireCmdExe.execute(orderId)
+    → cancel() + markCancelled（已是终态则跳过，不抛错）
 
-**app（接入 + 用例编排）**
+路径 3（用户手动）
+  POST /demo/orders/cancel
+    → OrderCancelCmdExe.execute(orderId)
+    → cancel() + markCancelled + delayTaskService.cancelByBizKey
+    → 非 PENDING_PAY → 409
+```
 
-- Controller：三个 POST，校验协议层错误（缺字段、delay 格式）。
-- MapStruct：ReqVO → 应用入参；`Order` / `CreateOrderResult` → ResVO。
-- `OrderApplicationService`：入参为基本类型或 `Order`，**不依赖 VO**。负责 `@Transactional`、调 `OrderDomainService`、注册/取消延时任务。
-- `CreateOrderResult`：仅 create 用例需要（`taskId`、`delay` 不属于订单表）。不是微服务 DTO。
-- `OrderCancelHandler`：实现既有 `DelayTaskHandler`，解析 `bizKey` 后走领域取消。
-
-**service.core（领域核心）**
-
-- `Order`：在 `OrderDO` 字段上增加 `create` / `pay` / `cancel`。
-- `OrderDomainService`：组织「找单、调聚合、调仓储」；可注入 `OrderRepository`。
-- 不调用 `DelayTaskService`，不返回 ResVO。
-
-**service.infrastructure**
-
-- `OrderDO`：`@TableName("demo_order")`，字段与现表一致。
-- `OrderMapper extends BaseMapper<Order>`：插入/更新的是子类 `Order`，避免只认父类导致行为字段丢失。
-- `OrderRepository`：`insert` / `findById`（返回 `Order`）/ `markPaid` / `markCancelled`（条件更新）。
+`OrderExpireCmdExe` 与 `OrderCancelCmdExe` 共用 `OrderDomainService` 的取消逻辑（加载、`order.cancel()`、条件更新）；**仅手动取消**额外撤销台账/延时投递。
 
 ---
 
 ## 3. HTTP 与对象
 
-全部 **POST**，`Content-Type: application/json`，id 只出现在 Body。
+全部 **POST**，`Content-Type: application/json`，Body 传参，**无路径变量**。
 
-| 路径 | 入参 | 出参 |
-|------|------|------|
-| `POST /demo/orders/create` | `CreateOrderReqVO`：`amount`，可选 `delay`（`30s` / `PT30S` 等，语义与现解析一致） | `CreateOrderResVO`：`orderId, status, amount, taskId, delay` |
-| `POST /demo/orders/pay` | `PayOrderReqVO`：`orderId` | `PayOrderResVO`：`orderId, status` |
-| `POST /demo/orders/get` | `GetOrderReqVO`：`orderId` | `GetOrderResVO`：`orderId, status, amount, createdAt, updatedAt` |
+| 路径 | Controller 方法 | CmdExe | ReqVO | ResVO |
+|------|-----------------|--------|-------|-------|
+| `POST /demo/orders/orderPlace` | `orderPlace` | `OrderPlaceCmdExe` | `OrderPlaceReqVO` | `OrderPlaceResVO` |
+| `POST /demo/orders/pay` | `pay` | `OrderPaySuccessCmdExe` | `PayOrderReqVO` | `PayOrderResVO` |
+| `POST /demo/orders/get` | `get` | `OrderGetCmdExe` | `GetOrderReqVO` | `GetOrderResVO` |
+| `POST /demo/orders/cancel` | `cancel` | `OrderCancelCmdExe` | `CancelOrderReqVO` | `CancelOrderResVO` |
 
-删除：`POST /demo/orders`、`GET /demo/orders/{id}`、`POST /demo/orders/{id}/pay`。
+> 相对旧版：仅 **`create` → `orderPlace`**；`pay` / `get` 保持简短动作名；`get` 由 GET 改为 POST+Body；新增 `cancel`。
 
-`CreateOrderReqVO.delay` 为字符串；应用层使用 `Duration`。转换在 `OrderVoConvert` 的自定义方法中复用现有 `parseDelay` 规则；非法格式 → 400。
+### 3.1 报文示例
+
+**orderPlace**
+
+```json
+// Req
+{ "amount": 9.9, "delay": "10s" }
+// Res
+{ "orderId": "...", "status": "PENDING_PAY", "amount": "9.9", "taskId": "...", "delay": "PT10S" }
+```
+
+**pay**
+
+```json
+// Req
+{ "orderId": "2085550503315509248" }
+// Res
+{ "orderId": "2085550503315509248", "status": "PAID" }
+```
+
+**get**
+
+```json
+// Req
+{ "orderId": "2085550503315509248" }
+// Res
+{ "orderId": "...", "status": "CANCELLED", "amount": "9.9", "createdAt": "...", "updatedAt": "..." }
+```
+
+**cancel**
+
+```json
+// Req
+{ "orderId": "2085550503315509248" }
+// Res
+{ "orderId": "2085550503315509248", "status": "CANCELLED" }
+```
+
+Long / BigDecimal 序列化沿用 `JacksonJsonCustomizer`。`delay` 在 `OrderVoConvert` 中转 `Duration`。
 
 ---
 
 ## 4. 领域行为
 
-与现网规则一致，从 `OrderService` 挪到 `Order` / `OrderDomainService`。
-
 | 行为 | 规则 |
 |------|------|
-| `Order.create(orderId, amount, now)` | `amount > 0`，状态 `PENDING_PAY`，写入金额与时间戳 |
-| `pay()` | 仅 `PENDING_PAY` → `PAID` 并刷新 `updatedAt`；否则抛领域异常 |
-| `cancel()` | 仅 `PENDING_PAY` → `CANCELLED` 并返回 `true`；否则返回 `false`（超时任务跳过，不抛错） |
-
-雪花 ID 仍由 app 向 `SnowflakeIdGenerator` 申请后传入 `create`。状态在库中存枚举名字符串，与现实现一致。
+| `Order.create(...)` | `amount > 0` → `PENDING_PAY` |
+| `pay()` | 仅 `PENDING_PAY` → `PAID`；否则异常 |
+| `cancel()` | 仅 `PENDING_PAY` → `CANCELLED` 返回 `true`；否则 `false`（超时路径跳过） |
 
 ### 4.1 用例数据流
 
-**create：** ReqVO → Duration → `OrderApplicationService.create(amount, delay)` → `Order.create` → `repository.insert` → `delayTaskService.schedule`（同一事务）→ `CreateOrderResult` → `CreateOrderResVO`。未传 delay 时用 `DelayProperties.getDefaultDelay()`。
-
-**pay：** `orderId` → DomainService 加载 → `order.pay()` → `markPaid`（0 行则冲突）→ `delayTaskService.cancelByBizKey` → `PayOrderResVO`。
-
-**get：** `orderId` → `findById`，空则 404 → `GetOrderResVO`。
-
-**超时取消：** Handler 解析 `bizKey` → 找不到则打日志返回 → `order.cancel()` 为 false 则跳过 → 否则 `markCancelled`。
+| 用例 | 流程 |
+|------|------|
+| orderPlace | `Order.create` → insert → schedule 延时取消任务 → `OrderPlaceResult` |
+| pay | 加载 → `pay()` → markPaid → cancelByBizKey |
+| get | findById → 404 或 ResVO |
+| cancel（手动） | 加载 → `cancel()` 失败则 409 → markCancelled → cancelByBizKey |
+| expire（超时） | Handler → `OrderExpireCmdExe` → cancel() false 则日志跳过 → markCancelled |
 
 ---
 
-## 5. 异常与并发
+## 5. Repository 与 DAO
+
+```text
+OrderRepository + OrderDoConvert
+  insert(Order)       → toDo → mapper.insert
+  findById            → toDomain
+  markPaid / markCancelled → LambdaUpdateWrapper<OrderDO>，WHERE status=PENDING_PAY
+```
+
+`@MapperScan` → `...infrastructure.dao.mapper`。
+
+---
+
+## 6. 异常与并发
 
 | 情况 | HTTP |
 |------|------|
-| `amount` 缺失或非正、`delay` 非法、`orderId` 缺失 | 400 |
+| 参数非法 | 400 |
 | 订单不存在 | 404 |
-| 非待支付却 pay，或条件更新 0 行 | 409 |
+| 非待支付 pay / cancel，或条件更新 0 行 | 409 |
 
-领域异常由 app 映射为 HTTP，**不要**在 `OrderDomainService` 里抛 `ResponseStatusException`。超时取消路径不把「已支付/已取消」当成错误。
+超时取消（expire）不返回 HTTP，只打日志。
 
-`markPaid` / `markCancelled` 保持：
+---
 
-```text
-UPDATE ... SET status=目标, updated_at=now
-WHERE order_id=? AND status='PENDING_PAY'
+## 7. 前端与文档（实现必做）
+
+| 文件 | 改动 |
+|------|------|
+| `static/js/tabs/order-delay.js` | `orderPlace` / `pay` / `get` / **cancel** 四个 POST + JSON Body |
+| `static/index.html` | 订单 Demo 区增加 **「取消订单」** 按钮，绑定 `orderDelayCancel()` |
+| `demo2/README.md` | 更新 curl（含 cancel 示例） |
+
+示例 fetch：
+
+```javascript
+// 下单
+fetch('/demo/orders/orderPlace', { method: 'POST', headers: {...}, body: JSON.stringify({ amount, delay }) })
+// 支付
+fetch('/demo/orders/pay', { method: 'POST', body: JSON.stringify({ orderId }) })
+// 查询
+fetch('/demo/orders/get', { method: 'POST', body: JSON.stringify({ orderId }) })
+// 取消
+fetch('/demo/orders/cancel', { method: 'POST', body: JSON.stringify({ orderId }) })
 ```
 
----
-
-## 6. MapStruct 与工程配置
-
-1. `demo2/pom.xml` 增加 `mapstruct` 与 `mapstruct-processor`；`maven-compiler-plugin` 的 `annotationProcessorPaths` 中 **先 lombok、后 mapstruct**，避免与现有 Lombok 冲突。
-2. `OrderVoConvert`：`componentModel = "spring"`。
-3. `@MapperScan`（`DelayMybatisPlusConfig`）从 `com.jason.demo.demo2.order.repository` 改为 `com.jason.demo.demo2.order.service.infrastructure`。
+台账 `/demo/delay-tasks?bizKey=` 不变。
 
 ---
 
-## 7. 测试与文档
+## 8. 测试
 
-| 项 | 要求 |
+| 项 | 场景 |
 |----|------|
-| `Order` / `OrderDomainService` | 覆盖 create 金额校验、pay 成功/错误状态、cancel true/false |
-| `OrderApplicationService` | 原 `OrderServiceTest`：下单注册延时、支付取消延时、404、非待支付 冲突 |
-| `OrderCancelHandlerTest` | 待支付取消、已支付跳过；import 改到新包 |
-| `JacksonJsonCustomizerTest` | 不再把表实体当 API 响应；可对 `OrderDO` 或 `Order` 测 Long/时间序列化 |
-| README | 更新 `/demo/orders` 三段 curl 为 create/pay/get + JSON Body |
-
-行为断言与现测试一致，只改类型与 URL，不改延时/支付语义。
+| `OrderPlaceCmdExe` | 下单 + 注册延时 |
+| `OrderPaySuccessCmdExe` | 支付 + 取消延时任务 |
+| `OrderCancelCmdExe` | 待支付取消成功；已支付/已取消 → 409；取消后 cancelByBizKey |
+| `OrderExpireCmdExe` + Handler | 超时取消；已支付跳过 |
+| `OrderGetCmdExe` | 查询 / 404 |
+| `OrderRepository` + `OrderDoConvert` | Order 往返 |
+| 前端冒烟 | orderPlace → cancel → get 为 CANCELLED；或 orderPlace → 等 expire |
 
 ---
 
-## 8. 范围外联动
+## 9. 范围外
 
-- `framework.delay`、`SnowflakeIdGenerator`、订单表 SQL **不改**。
-- 延时 Demo 的其它文档若写死旧 URL，实现时与 README 一并改。
-- 以后若做微服务：在 `client` 增加 API + DTO，app 的 RPC 实现转调 `OrderApplicationService`；本版不为它预留空类。
+- `framework.delay`、表结构不改
+- 以后微服务：`client` + DTO → 调 `app.executor`

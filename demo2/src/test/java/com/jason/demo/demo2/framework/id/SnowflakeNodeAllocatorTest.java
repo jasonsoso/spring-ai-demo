@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.framework.id;
 
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

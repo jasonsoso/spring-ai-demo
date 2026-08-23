@@ -13,7 +13,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableConfigurationProperties(DelayProperties.class)
 @MapperScan({
         "com.jason.demo.demo2.framework.delay.repository",
-        "com.jason.demo.demo2.order.repository"
+        "com.jason.demo.demo2.order.service.infrastructure.dao.mapper"
 })
 public class DelayMybatisPlusConfig {
 }

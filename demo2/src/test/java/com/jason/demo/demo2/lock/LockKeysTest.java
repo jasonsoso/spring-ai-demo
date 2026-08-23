@@ -25,4 +25,9 @@ class LockKeysTest {
         assertThat(LockKeys.devAgentAskKey("u1", "s1", "m"))
                 .startsWith("agentscope:dev-agent:ask:u1:s1:");
     }
+
+    @Test
+    void delayScannerFallbackKey_isStable() {
+        assertThat(LockKeys.delayScannerFallbackKey()).isEqualTo("delay:scanner:fallback");
+    }
 }

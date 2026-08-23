@@ -27,4 +27,8 @@ public final class LockKeys {
     public static String devAgentAskKey(String userId, String sessionId, String message) {
         return "agentscope:dev-agent:ask:" + userId + ":" + sessionId + ":" + messageHash(message);
     }
+
+    public static String delayScannerFallbackKey() {
+        return "delay:scanner:fallback";
+    }
 }

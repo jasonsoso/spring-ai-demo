@@ -11,6 +11,14 @@ function orderDelayAppend(msg) {
         : '') + line;
 }
 
+async function orderDelayJsonPost(url, body) {
+    return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+}
+
 async function orderDelayCreate() {
     const amount = document.getElementById('orderDelayAmount').value.trim();
     const delay = document.getElementById('orderDelaySeconds').value.trim() || '10s';
@@ -18,10 +26,9 @@ async function orderDelayCreate() {
     resultBox.className = 'result-box loading';
     resultBox.textContent = '创建订单中...';
     try {
-        const res = await fetch('/demo/orders', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ amount: Number(amount), delay: delay })
+        const res = await orderDelayJsonPost('/demo/orders/orderPlace', {
+            amount: Number(amount),
+            delay: delay
         });
         const text = await res.text();
         const data = JSON.parse(text);
@@ -53,7 +60,7 @@ async function orderDelayPay() {
     resultBox.className = 'result-box loading';
     resultBox.textContent = '支付中...';
     try {
-        const res = await fetch('/demo/orders/' + encodeURIComponent(orderId) + '/pay', { method: 'POST' });
+        const res = await orderDelayJsonPost('/demo/orders/pay', { orderId: orderId });
         const text = await res.text();
         if (!res.ok) {
             resultBox.className = 'result-box error';
@@ -63,6 +70,32 @@ async function orderDelayPay() {
         resultBox.className = 'result-box';
         resultBox.textContent = text;
         orderDelayAppend('已支付 orderId=' + orderId + '（到期后应仍为 PAID）');
+    } catch (e) {
+        resultBox.className = 'result-box error';
+        resultBox.textContent = '请求失败：' + e.message;
+    }
+}
+
+async function orderDelayCancel() {
+    const orderId = document.getElementById('orderDelayOrderId').value.trim() || orderDelayLastOrderId;
+    if (!orderId) {
+        alert('请先创建订单或填写 orderId');
+        return;
+    }
+    const resultBox = document.getElementById('orderDelayResult');
+    resultBox.className = 'result-box loading';
+    resultBox.textContent = '取消中...';
+    try {
+        const res = await orderDelayJsonPost('/demo/orders/cancel', { orderId: orderId });
+        const text = await res.text();
+        if (!res.ok) {
+            resultBox.className = 'result-box error';
+            resultBox.textContent = '取消失败：' + text;
+            return;
+        }
+        resultBox.className = 'result-box';
+        resultBox.textContent = text;
+        orderDelayAppend('已取消 orderId=' + orderId + '（延时任务应被逻辑取消）');
     } catch (e) {
         resultBox.className = 'result-box error';
         resultBox.textContent = '请求失败：' + e.message;
@@ -80,7 +113,7 @@ async function orderDelayRefresh() {
     resultBox.textContent = '查询中...';
     try {
         const [orderRes, taskRes] = await Promise.all([
-            fetch('/demo/orders/' + encodeURIComponent(orderId)),
+            orderDelayJsonPost('/demo/orders/get', { orderId: orderId }),
             fetch('/demo/delay-tasks?bizKey=' + encodeURIComponent(orderId))
         ]);
         const orderText = await orderRes.text();

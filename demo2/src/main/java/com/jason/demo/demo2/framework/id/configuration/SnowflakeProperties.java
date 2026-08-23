@@ -1,4 +1,4 @@
-package com.jason.demo.demo2.framework.id;
+package com.jason.demo.demo2.framework.id.configuration;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;

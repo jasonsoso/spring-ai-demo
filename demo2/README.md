@@ -1324,15 +1324,24 @@ curl -s -o - -w "\nHTTP:%{http_code}\n" -X POST http://localhost:8081/demo/lock/
 
 ```bash
 # 创建待支付订单并注册超时取消（默认 30s，可改 delay）
-curl -s -X POST http://localhost:8081/demo/orders \
+curl -s -X POST http://localhost:8081/demo/orders/orderPlace \
   -H "Content-Type: application/json" \
   -d "{\"amount\":9.9,\"delay\":\"10s\"}"
 
 # 查询订单；到期后 status 应为 CANCELLED
-curl -s http://localhost:8081/demo/orders/{orderId}
+curl -s -X POST http://localhost:8081/demo/orders/get \
+  -H "Content-Type: application/json" \
+  -d "{\"orderId\":\"{orderId}\"}"
 
 # 支付路径：先支付则保持 PAID，延时任务逻辑取消
-curl -s -X POST http://localhost:8081/demo/orders/{orderId}/pay
+curl -s -X POST http://localhost:8081/demo/orders/pay \
+  -H "Content-Type: application/json" \
+  -d "{\"orderId\":\"{orderId}\"}"
+
+# 手动取消：仅待支付订单可取消
+curl -s -X POST http://localhost:8081/demo/orders/cancel \
+  -H "Content-Type: application/json" \
+  -d "{\"orderId\":\"{orderId}\"}"
 
 # 查台账
 curl -s "http://localhost:8081/demo/delay-tasks?bizKey={orderId}"

@@ -30,6 +30,12 @@ public class DelayProperties {
     /** 每次扫描最多捞取的到期任务数 */
     private int scanBatchSize = 50;
 
+    /** 是否启用 FallbackScanner 扫描级分布式锁（多节点互斥） */
+    private boolean scanLockEnabled = true;
+
+    /** 扫描锁 TTL，应 ≥ 单次扫描最大耗时 */
+    private Duration scanLockTimeout = Duration.ofSeconds(10);
+
     /** Redisson 到期后的目标阻塞队列名 */
     private String redissonQueueName = "demo2:delay:queue";
 

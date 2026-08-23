@@ -1,5 +1,8 @@
-package com.jason.demo.demo2.framework.id;
+package com.jason.demo.demo2.framework.id.configuration;
 
+import com.jason.demo.demo2.framework.id.AllocatedSnowflakeNode;
+import com.jason.demo.demo2.framework.id.SnowflakeIdGenerator;
+import com.jason.demo.demo2.framework.id.SnowflakeNodeAllocator;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;

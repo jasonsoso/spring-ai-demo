@@ -63,6 +63,7 @@
 ```java
 package com.jason.demo.demo2.framework.id;
 
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeProperties;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -280,6 +281,7 @@ git commit -m "refactor(demo2): require explicit snowflake worker/datacenter ids
 ```java
 package com.jason.demo.demo2.framework.id;
 
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -364,6 +366,7 @@ Expected: FAIL（类不存在）
 ```java
 package com.jason.demo.demo2.framework.id;
 
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -371,11 +374,8 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SnowflakeNodeAllocator implements AutoCloseable {
@@ -737,6 +737,8 @@ git commit -m "feat(demo2): lease snowflake workerId with Redis TTL heartbeat"
 ```java
 package com.jason.demo.demo2.framework.id;
 
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeIdConfiguration;
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -792,6 +794,7 @@ Expected: FAIL
 ```java
 package com.jason.demo.demo2.framework.id;
 
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeProperties;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;

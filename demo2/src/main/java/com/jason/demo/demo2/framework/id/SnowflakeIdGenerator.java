@@ -2,6 +2,7 @@ package com.jason.demo.demo2.framework.id;
 
 import cn.hutool.core.lang.Snowflake;
 import cn.hutool.core.util.IdUtil;
+import com.jason.demo.demo2.framework.id.configuration.SnowflakeIdConfiguration;
 
 /**
  * Hutool 雪花发号器封装。
