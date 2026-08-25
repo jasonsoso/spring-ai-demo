@@ -1322,25 +1322,45 @@ curl -s -o - -w "\nHTTP:%{http_code}\n" -X POST http://localhost:8081/demo/lock/
 - 主投递：`app.delay.backend=redisson|rocketmq`（单主）；扫描兜底：`app.delay.scan-interval-ms`
 - Spec / Plan：`docs/superpowers/specs/2026-08-06-delay-task-order-cancel-design.md`、`docs/superpowers/plans/2026-08-06-delay-task-order-cancel.md`
 
+**会员 C 端 Demo（`member` / `/demo/members`）：**
+
+- 依赖 MySQL 表 `demo_member` 和订单表字段 `demo_order.member_id`
+- 新环境可执行 `src/main/resources/db/delay-order-schema.sql`
+- 已有环境先执行 `src/main/resources/db/delay-order-schema.sql` 创建会员表，再执行 `src/main/resources/db/member-module-migration.sql` 给 `demo_order` 增加 `member_id` 字段
+- Redis 用于登录态，默认 key 前缀为 `demo2:auth:session:`，TTL 为 `app.auth.session-ttl=24h`
+
 ```bash
+# 首次使用先注册，再登录并从响应中复制 token
+curl -s -X POST http://localhost:8081/demo/members/register \
+  -H "Content-Type: application/json" \
+  -d "{\"phone\":\"13888999999\",\"password\":\"pwd123456\"}"
+curl -s -X POST http://localhost:8081/demo/members/login \
+  -H "Content-Type: application/json" \
+  -d "{\"phone\":\"13888999999\",\"password\":\"pwd123456\"}"
+token="<登录响应中的 token>"
+
 # 创建待支付订单并注册超时取消（默认 30s，可改 delay）
 curl -s -X POST http://localhost:8081/demo/orders/orderPlace \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $token" \
   -d "{\"amount\":9.9,\"delay\":\"10s\"}"
 
 # 查询订单；到期后 status 应为 CANCELLED
 curl -s -X POST http://localhost:8081/demo/orders/get \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $token" \
   -d "{\"orderId\":\"{orderId}\"}"
 
 # 支付路径：先支付则保持 PAID，延时任务逻辑取消
 curl -s -X POST http://localhost:8081/demo/orders/pay \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $token" \
   -d "{\"orderId\":\"{orderId}\"}"
 
 # 手动取消：仅待支付订单可取消
 curl -s -X POST http://localhost:8081/demo/orders/cancel \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $token" \
   -d "{\"orderId\":\"{orderId}\"}"
 
 # 查台账

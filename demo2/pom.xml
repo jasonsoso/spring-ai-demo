@@ -39,6 +39,7 @@
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <hutool.version>5.8.35</hutool.version>
         <mapstruct.version>1.6.3</mapstruct.version>
+        <transmittable-thread-local.version>2.14.5</transmittable-thread-local.version>
     </properties>
 
     <repositories>
@@ -366,6 +367,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>transmittable-thread-local</artifactId>
+            <version>${transmittable-thread-local.version}</version>
         </dependency>
         <!-- RocketMQ Remoting 客户端（framework.rocketmq） -->
         <dependency>

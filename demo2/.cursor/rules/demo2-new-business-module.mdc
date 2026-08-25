@@ -1,0 +1,49 @@
+---
+description: 新建 demo2 业务模块（会员/商品/门店等）的检查清单与 Prompt 模板
+alwaysApply: false
+---
+
+# 新建 demo2 业务模块
+
+用户要求新增 `{module}`（member/product/store 等）时，**先对照 order 再写代码**。
+
+## 实施前（必做）
+
+1. 在 `demo2/docs/superpowers/specs/` 写 `{date}-{module}-design.md`：包结构、HTTP 表、领域行为、异常码
+2. 列出全部 `{Action}CmdExe` 与 ReqVO/ResVO 清单
+3. 确认是否依赖 framework（delay/lock/id），SPI 放 `app.listener` 或 `app.support`
+
+## 目录清单（按需裁剪）
+
+```
+{module}/app/controller/{Module}Controller.java
+{module}/app/executor/*CmdExe.java
+{module}/app/vo/req/*ReqVO.java
+{module}/app/vo/res/*ResVO.java
+{module}/app/convert/{Module}VoConvert.java
+{module}/service/common/*Status.java
+{module}/service/core/domain/{Entity}.java
+{module}/service/core/{Module}DomainService.java
+{module}/service/core/{Module}DomainException.java
+{module}/service/infrastructure/dao/entity/{Entity}DO.java
+{module}/service/infrastructure/dao/mapper/{Entity}Mapper.java
+{module}/service/infrastructure/repository/{Entity}Repository.java
+{module}/service/infrastructure/repository/convert/{Entity}DoConvert.java
+src/test/java/.../{Module}CmdExeTest.java
+```
+
+## 给 Agent 的标准 Prompt 片段
+
+```
+在 demo2 新增 {module} 模块，严格遵循：
+- @demo2-business-ddd 规则
+- 参照 com.jason.demo.demo2.order 的分包与 CmdExe 模式
+- HTTP: POST /demo/{modules}/... + JSON Body
+- 先输出 spec 摘要（包结构 + 接口表 + 领域行为），确认后再实现
+```
+
+## 完成后
+
+- 补单元测试（CmdExe、Repository、关键 domain 行为）
+- spec 状态改为「已实现」，必要时写 archive 文档
+- 若改 Demo 前端：同步 `static/` 与 README curl 示例

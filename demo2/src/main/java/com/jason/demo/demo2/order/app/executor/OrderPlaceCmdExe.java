@@ -3,6 +3,7 @@ package com.jason.demo.demo2.order.app.executor;
 import com.jason.demo.demo2.framework.delay.DelayTaskService;
 import com.jason.demo.demo2.framework.delay.DelayTaskType;
 import com.jason.demo.demo2.framework.delay.config.DelayProperties;
+import com.jason.demo.demo2.framework.auth.context.LoginContextHolder;
 import com.jason.demo.demo2.framework.id.SnowflakeIdGenerator;
 import com.jason.demo.demo2.order.app.vo.OrderPlaceResult;
 import com.jason.demo.demo2.order.service.core.OrderDomainService;
@@ -35,8 +36,9 @@ public class OrderPlaceCmdExe {
 
     @Transactional
     public OrderPlaceResult execute(BigDecimal amount, Duration delay) {
+        long memberId = LoginContextHolder.require().memberId();
         long orderId = idGenerator.nextId();
-        Order order = Order.create(orderId, amount, LocalDateTime.now());
+        Order order = Order.create(orderId, memberId, amount, LocalDateTime.now());
         orderDomainService.place(order);
 
         Duration effectiveDelay = delay == null ? delayProperties.getDefaultDelay() : delay;

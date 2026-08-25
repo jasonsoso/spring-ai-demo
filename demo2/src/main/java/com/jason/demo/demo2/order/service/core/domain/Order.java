@@ -9,12 +9,13 @@ import java.time.LocalDateTime;
 
 public class Order extends OrderDO {
 
-    public static Order create(long orderId, BigDecimal amount, LocalDateTime now) {
+    public static Order create(long orderId, long memberId, BigDecimal amount, LocalDateTime now) {
         if (amount == null || amount.signum() <= 0) {
             throw new OrderDomainException(OrderDomainException.Code.BAD_REQUEST, "amount must be positive");
         }
         Order order = new Order();
         order.setOrderId(orderId);
+        order.setMemberId(memberId);
         order.setStatus(OrderStatus.PENDING_PAY.name());
         order.setAmount(amount);
         order.setCreatedAt(now);
@@ -28,6 +29,7 @@ public class Order extends OrderDO {
         }
         Order order = new Order();
         order.setOrderId(source.getOrderId());
+        order.setMemberId(source.getMemberId());
         order.setStatus(source.getStatus());
         order.setAmount(source.getAmount());
         order.setCreatedAt(source.getCreatedAt());

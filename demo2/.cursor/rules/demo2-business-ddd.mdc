@@ -1,0 +1,52 @@
+---
+description: demo2 业务模块 DDD 分包与命名（以 order 为样板）
+globs: demo2/src/main/java/com/jason/demo/demo2/**/*
+alwaysApply: false
+---
+
+# demo2 业务模块 DDD
+
+新代码放在 `com.jason.demo.demo2.{module}`，**参照 `order` 模块**，不要恢复扁平 Controller+Service 单包。
+
+## 分层与依赖
+
+```
+app → service.core → service.infrastructure
+```
+
+- **app**: Controller（只做校验/调 CmdExe/VO 转换）、executor（*CmdExe）、listener/job、vo/req|res、convert（*VoConvert）
+- **service.core**: domain（聚合根 `extends *DO`）、*DomainService、*DomainException
+- **service.infrastructure**: dao.entity（*DO）、dao.mapper、repository（*Repository）、convert（*DoConvert）
+- **service.common**: 状态枚举等
+
+禁止：Controller/CmdExe 直接注入 Mapper；domain 依赖 app；infrastructure 依赖 app。
+
+## 命名
+
+| 类型 | 模式 | 示例 |
+|------|------|------|
+| 表对象 | `{Entity}DO` | `OrderDO` |
+| 领域对象 | `{Entity}` | `Order` |
+| 用例执行器 | `{Action}CmdExe` | `OrderPlaceCmdExe` |
+| 请求/响应 | `{Action}ReqVO` / `{Action}ResVO` | `PayOrderReqVO` |
+| 仓储 | `{Entity}Repository` | `OrderRepository` |
+| 领域异常 | `{Module}DomainException` | `OrderDomainException` |
+
+创建类用例可用 `{Module}Place*`（如 `orderPlace`）；其余动作用简短动词（pay/get/cancel）。
+
+## 职责边界
+
+- **领域规则**写在 `domain` 方法（如 `pay()`、`cancel()`），不在 Controller
+- **编排**（事务、发 MQ、注册延时、调多个仓储）在 **CmdExe**
+- **并发安全**：Repository 状态更新用 `WHERE status = 期望态` 条件更新，失败抛 CONFLICT
+- **转换**：对外 VO 用 MapStruct `*VoConvert`；DO↔Domain 用 `*DoConvert`
+
+## HTTP（Demo API）
+
+- 全部 `POST`，`Content-Type: application/json`，**无路径变量**
+- 路径：`/demo/{modules}/{action}`（如 `/demo/orders/orderPlace`）
+- Controller 捕获 `{Module}DomainException` 映射 400/404/409
+
+## 参考实现
+
+以 `com.jason.demo.demo2.order` 为准；设计细节见 `demo2/docs/superpowers/specs/2026-08-23-order-ddd-package-refactor-design.md`。

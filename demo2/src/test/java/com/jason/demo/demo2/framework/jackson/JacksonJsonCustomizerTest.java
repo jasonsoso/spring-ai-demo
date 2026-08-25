@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.framework.jackson;
 
+import com.jason.demo.demo2.framework.auth.model.AuthSession;
 import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -56,6 +58,23 @@ class JacksonJsonCustomizerTest {
         assertTrue(json.contains("\"a\":\"9.9\""));
         assertTrue(json.contains("\"b\":\"1\""));
         assertTrue(json.contains("\"c\":\"100\""));
+    }
+
+    @Test
+    void localDateTimeAndInstant_roundTripAfterCustomization() {
+        AuthSession session = new AuthSession(
+                "token-1",
+                2092219072866418688L,
+                "1380825198888",
+                null,
+                LocalDateTime.of(2026, 8, 25, 20, 6, 41),
+                86400L);
+
+        AuthSession restored = jsonMapper.readValue(jsonMapper.writeValueAsString(session), AuthSession.class);
+
+        assertEquals(session.memberId(), restored.memberId());
+        assertEquals(session.phone(), restored.phone());
+        assertEquals(session.loginAt(), restored.loginAt());
     }
 
     @Test

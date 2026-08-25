@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.order.app.executor;
 
+import com.jason.demo.demo2.framework.auth.context.LoginContextHolder;
 import com.jason.demo.demo2.order.service.core.OrderDomainService;
 import com.jason.demo.demo2.order.service.core.domain.Order;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ public class OrderGetCmdExe {
     }
 
     public Order execute(long orderId) {
-        return orderDomainService.requireOrder(orderId);
+        long memberId = LoginContextHolder.require().memberId();
+        return orderDomainService.requireOrder(orderId, memberId);
     }
 }

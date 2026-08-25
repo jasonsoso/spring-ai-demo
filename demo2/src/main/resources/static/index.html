@@ -24,7 +24,7 @@
     <link rel="stylesheet" href="/css/tabs/embabel.css">
     <link rel="stylesheet" href="/css/tabs/agentscope.css">
     <link rel="stylesheet" href="/css/tabs/rocketmq.css">
-    <link rel="stylesheet" href="/css/tabs/order-delay.css">
+    <link rel="stylesheet" href="/css/tabs/member.css">
 </head>
 <body>
 <div class="app-container">
@@ -54,7 +54,7 @@
         <button class="tab-btn" data-tab="embabel" onclick="switchTab('embabel')">🔀 Embabel 自动选路</button>
         <button class="tab-btn" data-tab="agentscope" onclick="switchTab('agentscope')">🧭 AgentScope Harness</button>
         <button class="tab-btn" data-tab="rocketmq" onclick="switchTab('rocketmq')">🚀 RocketMQ 消息</button>
-        <button class="tab-btn" data-tab="order-delay" onclick="switchTab('order-delay')">⏱️ 订单超时取消</button>
+        <button class="tab-btn" data-tab="member" onclick="switchTab('member')">👤 会员 C 端 Demo</button>
     </div>
 
     <!-- ========== 聊天 Tab ========== -->
@@ -1358,46 +1358,72 @@
         </div>
     </div>
 
-    <!-- ========== 订单超时取消 Tab ========== -->
-    <div id="tab-order-delay" class="tab-content">
-        <div class="order-delay-header">
-            <h1>订单超时取消 Demo</h1>
-            <p>通用延时任务：主路径默认 RocketMQ（可切 Redisson）+ MySQL 台账扫描兜底（需 MySQL 表；Redisson/锁需 Redis）</p>
+    <!-- ========== 会员 C 端 Demo Tab ========== -->
+    <div id="tab-member" class="tab-content">
+        <div class="member-demo-header">
+            <h1>会员 C 端 Demo</h1>
+            <p>手机号密码登录 + Redis 登录态 + 订单接口鉴权演示</p>
         </div>
-        <div class="order-delay-body">
-            <div class="card">
-                <div class="card-title">🧾 创建 / 支付 / 查询</div>
-                <div class="card-body">
-                    <div class="form-row">
-                        <label>金额</label>
-                        <input type="number" id="orderDelayAmount" value="9.9" step="0.01" min="0.01">
+        <div class="member-demo-body">
+            <section class="member-phone" aria-label="会员手机端演示">
+                <div class="member-phone-screen">
+                    <div class="member-phone-status">
+                        <span>Demo2 商城</span>
+                        <span>● 在线</span>
                     </div>
-                    <div class="form-row">
-                        <label>超时</label>
-                        <input type="text" id="orderDelaySeconds" value="10s" placeholder="如 10s / 30s">
-                    </div>
-                    <div class="form-row">
-                        <label>orderId</label>
-                        <input type="text" id="orderDelayOrderId" placeholder="创建后自动填入；也可手动填">
-                    </div>
-                    <div class="form-row">
-                        <label></label>
-                        <div class="order-delay-actions">
-                            <button class="btn btn-primary" onclick="orderDelayCreate()">创建待支付订单</button>
-                            <button class="btn btn-primary" onclick="orderDelayPay()">模拟支付</button>
-                            <button class="btn" onclick="orderDelayCancel()">取消订单</button>
-                            <button class="btn" onclick="orderDelayRefresh()">刷新订单+台账</button>
+                    <div class="member-phone-page" id="memberPhonePage"></div>
+                    <nav class="member-bottom-nav" aria-label="会员页面导航">
+                        <button type="button" onclick="memberSwitchMobileTab('home')" id="memberNavHome">⌂<span>首页</span></button>
+                        <button type="button" onclick="memberSwitchMobileTab('orders')" id="memberNavOrders">▤<span>订单</span></button>
+                        <button type="button" onclick="memberSwitchMobileTab('me')" id="memberNavMe">◉<span>我的</span></button>
+                    </nav>
+                </div>
+            </section>
+            <section class="member-side-panel">
+                <div class="card">
+                    <div class="card-title">当前登录态</div>
+                    <div class="card-body">
+                        <div id="memberSessionBox" class="result-box member-session-box">未登录</div>
+                        <div class="member-side-actions">
+                            <button type="button" class="btn" onclick="memberLoadProfile()">访问个人中心接口</button>
+                            <button type="button" class="btn" onclick="memberDeleteSession()">删除 Redis 登录态</button>
                         </div>
                     </div>
-                    <div id="orderDelayResult" class="result-box">结果会显示在这里</div>
                 </div>
-            </div>
-            <div class="card">
-                <div class="card-title">📋 操作日志</div>
-                <div class="card-body">
-                    <div id="orderDelayLog" class="result-box order-delay-log">操作日志</div>
+                <div class="card">
+                    <div class="card-title">🧾 创建 / 支付 / 查询</div>
+                    <div class="card-body">
+                        <div class="form-row">
+                            <label>金额</label>
+                            <input type="number" id="memberOrderAmount" value="9.9" step="0.01" min="0.01">
+                        </div>
+                        <div class="form-row">
+                            <label>超时</label>
+                            <input type="text" id="memberOrderDelay" value="60s" placeholder="如 10s / 30s">
+                        </div>
+                        <div class="form-row">
+                            <label>orderId</label>
+                            <input type="text" id="memberOrderId" placeholder="创建后自动填入；也可手动填">
+                        </div>
+                        <div class="form-row">
+                            <label></label>
+                            <div class="member-order-actions">
+                                <button type="button" class="btn btn-primary" onclick="memberOrderCreate()">创建待支付订单</button>
+                                <button type="button" class="btn btn-primary" onclick="memberOrderPay()">模拟支付</button>
+                                <button type="button" class="btn" onclick="memberOrderCancel()">取消订单</button>
+                                <button type="button" class="btn" onclick="memberOrderRefresh()">刷新订单+台账</button>
+                            </div>
+                        </div>
+                        <div id="memberOrderResult" class="result-box member-order-result">结果会显示在这里</div>
+                    </div>
                 </div>
-            </div>
+                <div class="card">
+                    <div class="card-title">操作日志</div>
+                    <div class="card-body">
+                        <div id="memberLog" class="result-box member-log">操作日志</div>
+                    </div>
+                </div>
+            </section>
         </div>
     </div>
 
@@ -1429,6 +1455,6 @@
 <script src="/js/tabs/embabel.js"></script>
 <script src="/js/tabs/agentscope.js"></script>
 <script src="/js/tabs/rocketmq.js"></script>
-<script src="/js/tabs/order-delay.js"></script>
+<script src="/js/tabs/member.js"></script>
 </body>
 </html>

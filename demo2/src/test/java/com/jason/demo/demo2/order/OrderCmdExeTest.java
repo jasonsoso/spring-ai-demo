@@ -4,13 +4,17 @@ import com.jason.demo.demo2.framework.delay.DelayTaskService;
 import com.jason.demo.demo2.framework.delay.DelayTaskType;
 import com.jason.demo.demo2.framework.delay.config.DelayProperties;
 import com.jason.demo.demo2.framework.id.SnowflakeIdGenerator;
-import com.jason.demo.demo2.order.app.vo.OrderPlaceResult;
+import com.jason.demo.demo2.framework.auth.context.LoginContextHolder;
+import com.jason.demo.demo2.framework.auth.context.LoginPrincipal;
 import com.jason.demo.demo2.order.app.executor.OrderCancelCmdExe;
+import com.jason.demo.demo2.order.app.executor.OrderGetCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderPaySuccessCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderPlaceCmdExe;
+import com.jason.demo.demo2.order.app.vo.OrderPlaceResult;
 import com.jason.demo.demo2.order.service.common.OrderStatus;
 import com.jason.demo.demo2.order.service.core.OrderDomainService;
 import com.jason.demo.demo2.order.service.core.domain.Order;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +46,12 @@ class OrderCmdExeTest {
     void setUp() {
         delayProperties = new DelayProperties();
         delayProperties.setDefaultDelay(Duration.ofSeconds(30));
+        LoginContextHolder.set(new LoginPrincipal(9001L, "13888999999", "t1"));
+    }
+
+    @AfterEach
+    void tearDown() {
+        LoginContextHolder.clear();
     }
 
     @Test
@@ -57,6 +67,7 @@ class OrderCmdExeTest {
         assertEquals(77L, result.getTaskId());
         assertEquals(OrderStatus.PENDING_PAY.name(), result.getStatus());
         verify(orderDomainService).place(argThat(o -> o.getOrderId() == 55L
+                && o.getMemberId() == 9001L
                 && OrderStatus.PENDING_PAY.name().equals(o.getStatus())));
         verify(delayTaskService).schedule(DelayTaskType.ORDER_CANCEL, "55", null, Duration.ofSeconds(10));
     }
@@ -64,26 +75,38 @@ class OrderCmdExeTest {
     @Test
     void pay_cancelsDelayTask() {
         Order paid = order(55L, OrderStatus.PAID);
-        when(orderDomainService.requireOrder(55L)).thenReturn(paid);
+        when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(paid);
         OrderPaySuccessCmdExe exe = new OrderPaySuccessCmdExe(orderDomainService, delayTaskService);
 
         Order result = exe.execute(55L);
 
         assertEquals(OrderStatus.PAID.name(), result.getStatus());
-        verify(orderDomainService).payOrder(55L);
+        verify(orderDomainService).payOrder(55L, 9001L);
         verify(delayTaskService).cancelByBizKey(DelayTaskType.ORDER_CANCEL, "55");
+    }
+
+    @Test
+    void get_usesCurrentMemberOwnership() {
+        Order order = order(55L, OrderStatus.PENDING_PAY);
+        when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(order);
+        OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService);
+
+        Order result = exe.execute(55L);
+
+        assertEquals(55L, result.getOrderId());
+        verify(orderDomainService).requireOrder(55L, 9001L);
     }
 
     @Test
     void cancel_cancelsDelayTask() {
         Order cancelled = order(55L, OrderStatus.CANCELLED);
-        when(orderDomainService.requireOrder(55L)).thenReturn(cancelled);
+        when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(cancelled);
         OrderCancelCmdExe exe = new OrderCancelCmdExe(orderDomainService, delayTaskService);
 
         Order result = exe.execute(55L);
 
         assertEquals(OrderStatus.CANCELLED.name(), result.getStatus());
-        verify(orderDomainService).manualCancel(55L);
+        verify(orderDomainService).manualCancel(55L, 9001L);
         verify(delayTaskService).cancelByBizKey(DelayTaskType.ORDER_CANCEL, "55");
     }
 

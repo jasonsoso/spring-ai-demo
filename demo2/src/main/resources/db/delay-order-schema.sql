@@ -1,14 +1,16 @@
 -- demo2 延时任务 + 订单超时取消
 -- 库：spring_ai_agent2
--- 新建环境可直接执行本脚本；已有表请再执行下方「同步注释」段，或整段重跑（IF NOT EXISTS 不会改已有表结构）
+-- 新建环境可直接执行本脚本；已有 demo_order 表的环境请手动执行 member-module-migration.sql
 
 CREATE TABLE IF NOT EXISTS demo_order (
     order_id    BIGINT        NOT NULL COMMENT '订单ID（雪花）',
+    member_id   BIGINT        NOT NULL COMMENT '下单会员ID（雪花）',
     status      VARCHAR(32)   NOT NULL COMMENT '订单状态：PENDING_PAY/PAID/CANCELLED',
     amount      DECIMAL(12,2) NOT NULL COMMENT '订单金额',
     created_at  DATETIME(3)   NOT NULL COMMENT '创建时间',
     updated_at  DATETIME(3)   NOT NULL COMMENT '更新时间',
     PRIMARY KEY (order_id),
+    INDEX idx_demo_order_member (member_id),
     INDEX idx_demo_order_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='演示订单表（超时未支付自动取消）';
 
@@ -28,3 +30,17 @@ CREATE TABLE IF NOT EXISTS delay_task (
     INDEX idx_delay_task_due (status, execute_at),
     INDEX idx_delay_task_biz (task_type, biz_key, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='延时任务台账（调度事实，扫描兜底）';
+
+CREATE TABLE IF NOT EXISTS demo_member (
+    id             BIGINT       NOT NULL AUTO_INCREMENT COMMENT '数据库自增主键',
+    member_id      BIGINT       NOT NULL COMMENT '会员业务ID（雪花）',
+    phone          VARCHAR(32)  NOT NULL COMMENT '手机号',
+    password_hash  VARCHAR(255) NOT NULL COMMENT '密码哈希',
+    avatar_url     VARCHAR(512) NULL COMMENT '头像URL',
+    status         VARCHAR(32)  NOT NULL COMMENT '会员状态：NORMAL/DISABLED',
+    created_at     DATETIME(3)  NOT NULL COMMENT '创建时间',
+    updated_at     DATETIME(3)  NOT NULL COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_demo_member_member_id (member_id),
+    UNIQUE KEY uk_demo_member_phone (phone)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='演示会员表';

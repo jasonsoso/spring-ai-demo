@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.order.app.controller;
 
+import com.jason.demo.demo2.framework.auth.annotation.LoginRequired;
 import com.jason.demo.demo2.order.app.convert.OrderVoConvert;
 import com.jason.demo.demo2.order.app.executor.OrderCancelCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderGetCmdExe;
@@ -49,6 +50,7 @@ public class OrderController {
         this.orderVoConvert = orderVoConvert;
     }
 
+    @LoginRequired
     @PostMapping("/orderPlace")
     public OrderPlaceResVO orderPlace(@RequestBody OrderPlaceReqVO request) {
         if (request == null || request.getAmount() == null) {
@@ -62,6 +64,7 @@ public class OrderController {
         }
     }
 
+    @LoginRequired
     @PostMapping("/pay")
     public PayOrderResVO pay(@RequestBody PayOrderReqVO request) {
         long orderId = requireOrderId(request == null ? null : request.getOrderId());
@@ -73,6 +76,7 @@ public class OrderController {
         }
     }
 
+    @LoginRequired
     @PostMapping("/get")
     public GetOrderResVO get(@RequestBody GetOrderReqVO request) {
         long orderId = requireOrderId(request == null ? null : request.getOrderId());
@@ -83,6 +87,7 @@ public class OrderController {
         }
     }
 
+    @LoginRequired
     @PostMapping("/cancel")
     public CancelOrderResVO cancel(@RequestBody CancelOrderReqVO request) {
         long orderId = requireOrderId(request == null ? null : request.getOrderId());

@@ -17,18 +17,18 @@ public class OrderDomainService {
         orderRepository.insert(order);
     }
 
-    public Order requireOrder(long orderId) {
-        return orderRepository.findById(orderId)
+    public Order requireOrder(long orderId, long memberId) {
+        return orderRepository.findByIdAndMemberId(orderId, memberId)
                 .orElseThrow(() -> new OrderDomainException(
                         OrderDomainException.Code.NOT_FOUND,
                         "order not found"));
     }
 
-    public void payOrder(long orderId) {
-        Order order = requireOrder(orderId);
+    public void payOrder(long orderId, long memberId) {
+        Order order = requireOrder(orderId, memberId);
         order.pay();
-        if (!orderRepository.markPaid(orderId)) {
-            Order latest = requireOrder(orderId);
+        if (!orderRepository.markPaid(orderId, memberId)) {
+            Order latest = requireOrder(orderId, memberId);
             throw new OrderDomainException(
                     OrderDomainException.Code.CONFLICT,
                     "cannot pay order in status " + latest.getStatus());
@@ -46,15 +46,15 @@ public class OrderDomainService {
         return orderRepository.markCancelled(orderId);
     }
 
-    public void manualCancel(long orderId) {
-        Order order = requireOrder(orderId);
+    public void manualCancel(long orderId, long memberId) {
+        Order order = requireOrder(orderId, memberId);
         if (!order.cancel()) {
             throw new OrderDomainException(
                     OrderDomainException.Code.CONFLICT,
                     "cannot cancel order in status " + order.getStatus());
         }
-        if (!orderRepository.markCancelled(orderId)) {
-            Order latest = requireOrder(orderId);
+        if (!orderRepository.markCancelled(orderId, memberId)) {
+            Order latest = requireOrder(orderId, memberId);
             throw new OrderDomainException(
                     OrderDomainException.Code.CONFLICT,
                     "cannot cancel order in status " + latest.getStatus());

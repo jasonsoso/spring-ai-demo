@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-23  
 **项目**: spring-ai-demo / demo2  
-**状态**: 已确认，待实现  
+**状态**: 已实现（样板模块，见 archive/2026-08-23-order-ddd-package-refactor.md）  
 
 ---
 
