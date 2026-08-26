@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-25
 **项目**: spring-ai-demo / demo2
-**状态**: 待实现
+**状态**: 已实现（见 archive/2026-08-25-unified-json-result.md）
 
 ---
 
@@ -64,7 +64,7 @@ framework/web/
     ├── ErrorCode.java
     ├── BusinessException.java
     ├── CommonErrorCode.java
-    └── GlobalExceptionHandler.java
+    └── Demo2GlobalExceptionHandler.java
 
 order/service/common/
 └── OrderErrorCode.java
@@ -201,7 +201,7 @@ new BusinessException(10999, "unexpected error")
 
 ```java
 @RestControllerAdvice
-public class GlobalExceptionHandler {
+public class Demo2GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     @ResponseStatus(HttpStatus.OK)
@@ -381,7 +381,7 @@ async function memberRequest(url, body) {
 | `AuthSessionServiceTest` | 改断言 `BusinessException(CommonErrorCode.UNAUTHORIZED)` |
 | `LoginRequiredInterceptorTest` | 同上 |
 | `LoginContextHolderTest` | 同上 |
-| 新增 `GlobalExceptionHandlerTest` | 验证 `BusinessException` → `JsonResult` |
+| 新增 `Demo2GlobalExceptionHandlerTest` | 验证 `BusinessException` → `JsonResult` |
 | 新增 `JsonResultsTest`（可选） | 验证 `ok/fail` 工厂 |
 
 验收标准：
@@ -400,7 +400,7 @@ async function memberRequest(url, body) {
 2. Controller 返回 `JsonResult<T>`，只做校验 + 调 CmdExe + `JsonResults.ok`
 3. CmdExe 注入 `{Module}VoConvert`，返回 `*ResVO`（Controller 不依赖 VoConvert）
 4. 领域/应用层抛 `BusinessException({Module}ErrorCode.xxx)`
-5. **无需修改** `GlobalExceptionHandler`
+5. **无需修改** `Demo2GlobalExceptionHandler`
 6. 前端对接时以 `code === 0` 判断成功
 
 ---

@@ -1,6 +1,6 @@
 # Unified JsonResult & BusinessException Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Unify `order` and `member` API responses as `JsonResult<T>` with segmented numeric error codes, replace `*DomainException` with global `BusinessException` handling, move `*VoConvert` into CmdExe, and update `member.js` to treat `code === 0` as success.
 
@@ -130,7 +130,7 @@ public DeleteSessionResVO deleteSession(String token);
 - Consumes: none.
 - Produces: `ErrorCode`, `CommonErrorCode`, `BusinessException`, `JsonResult`, `JsonResults`.
 
-- [ ] **Step 1: Write failing JsonResultsTest**
+- [x] **Step 1: Write failing JsonResultsTest**
 
 ```java
 package com.jason.demo.demo2.framework.web.result;
@@ -172,12 +172,12 @@ class JsonResultsTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd demo2 && mvn -q test -Dtest=JsonResultsTest`
 Expected: FAIL — classes not found.
 
-- [ ] **Step 3: Implement framework web core**
+- [x] **Step 3: Implement framework web core**
 
 `ErrorCode.java`:
 
@@ -257,12 +257,12 @@ public final class JsonResults {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd demo2 && mvn -q test -Dtest=JsonResultsTest`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/framework/web/ \
@@ -284,7 +284,7 @@ git commit -m "feat(demo2): add JsonResult, JsonResults, and BusinessException c
 - Consumes: Task 1 types.
 - Produces: `OrderErrorCode`, `MemberErrorCode`, `GlobalExceptionHandler`.
 
-- [ ] **Step 1: Write failing GlobalExceptionHandlerTest**
+- [x] **Step 1: Write failing GlobalExceptionHandlerTest**
 
 ```java
 package com.jason.demo.demo2.framework.web.exception;
@@ -323,12 +323,12 @@ class GlobalExceptionHandlerTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd demo2 && mvn -q test -Dtest=GlobalExceptionHandlerTest`
 Expected: FAIL
 
-- [ ] **Step 3: Implement error enums and handler**
+- [x] **Step 3: Implement error enums and handler**
 
 `OrderErrorCode.java` — all codes from spec §4.3 (`ORDER_NOT_FOUND(30001,...)` … `INVALID_DELAY(30006,...)`).
 
@@ -357,12 +357,12 @@ public class GlobalExceptionHandler {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd demo2 && mvn -q test -Dtest=GlobalExceptionHandlerTest`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/framework/web/exception/GlobalExceptionHandler.java \
@@ -388,7 +388,7 @@ git commit -m "feat(demo2): add module error codes and global BusinessException 
 - Consumes: `BusinessException`, `CommonErrorCode`.
 - Produces: auth classes throw `BusinessException` instead of `ResponseStatusException`.
 
-- [ ] **Step 1: Update AuthHttpSupport**
+- [x] **Step 1: Update AuthHttpSupport**
 
 Replace `ResponseStatusException` factories with:
 
@@ -406,11 +406,11 @@ Map call sites per spec §4.5:
 - `"missing token"` / `"invalid token"` → `invalidToken()`
 - `"login expired"` / `"login required"` / `"invalid session"` → `unauthorized()`
 
-- [ ] **Step 2: Update AuthSessionService and LoginContextHolder**
+- [x] **Step 2: Update AuthSessionService and LoginContextHolder**
 
 Replace `throw AuthHttpSupport.unauthorized(...)` with the new static methods (no string messages needed — use enum desc).
 
-- [ ] **Step 3: Update auth tests**
+- [x] **Step 3: Update auth tests**
 
 Replace `ResponseStatusException` assertions:
 
@@ -421,12 +421,12 @@ assertEquals(CommonErrorCode.UNAUTHORIZED.getCode(), ex.getCode());
 
 Apply same pattern in `LoginContextHolderTest` and `LoginRequiredInterceptorTest`.
 
-- [ ] **Step 4: Run auth tests**
+- [x] **Step 4: Run auth tests**
 
 Run: `cd demo2 && mvn -q test -Dtest=AuthSessionServiceTest,LoginContextHolderTest,LoginRequiredInterceptorTest`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/framework/auth/ \
@@ -454,7 +454,7 @@ git commit -m "refactor(demo2): migrate auth failures to BusinessException"
 - Consumes: `BusinessException`, `OrderErrorCode`, `MemberErrorCode`.
 - Produces: domain/service classes throw `BusinessException`.
 
-- [ ] **Step 1: Update MemberDomainServiceTest for BusinessException**
+- [x] **Step 1: Update MemberDomainServiceTest for BusinessException**
 
 ```java
 BusinessException ex = assertThrows(BusinessException.class,
@@ -462,7 +462,7 @@ BusinessException ex = assertThrows(BusinessException.class,
 assertEquals(MemberErrorCode.PHONE_ALREADY_REGISTERED.getCode(), ex.getCode());
 ```
 
-- [ ] **Step 2: Replace throws in order domain**
+- [x] **Step 2: Replace throws in order domain**
 
 Examples:
 
@@ -479,7 +479,7 @@ throw new BusinessException(OrderErrorCode.ORDER_STATUS_CONFLICT,
 throw new BusinessException(OrderErrorCode.INVALID_DELAY, "invalid delay: " + raw);
 ```
 
-- [ ] **Step 3: Replace throws in member domain**
+- [x] **Step 3: Replace throws in member domain**
 
 ```java
 // Member.java
@@ -497,14 +497,14 @@ throw new BusinessException(MemberErrorCode.PASSWORD_REQUIRED);
 throw new BusinessException(MemberErrorCode.PASSWORD_ERROR);
 ```
 
-- [ ] **Step 4: Delete OrderDomainException and MemberDomainException**
+- [x] **Step 4: Delete OrderDomainException and MemberDomainException**
 
-- [ ] **Step 5: Run domain tests**
+- [x] **Step 5: Run domain tests**
 
 Run: `cd demo2 && mvn -q test -Dtest=MemberDomainServiceTest`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/order/ \
@@ -528,7 +528,7 @@ git commit -m "refactor(demo2): replace domain exceptions with BusinessException
 - Consumes: `OrderVoConvert`, existing domain services.
 - Produces: CmdExe methods return `*ResVO`.
 
-- [ ] **Step 1: Update OrderCmdExeTest imports and assertions**
+- [x] **Step 1: Update OrderCmdExeTest imports and assertions**
 
 Change `OrderPlaceResult` assertions to `OrderPlaceResVO`:
 
@@ -554,20 +554,20 @@ when(orderVoConvert.toPlaceRes(any())).thenAnswer(inv -> {
 });
 ```
 
-- [ ] **Step 2: Refactor OrderPlaceCmdExe**
+- [x] **Step 2: Refactor OrderPlaceCmdExe**
 
 Inject `OrderVoConvert`; keep internal `OrderPlaceResult` assembly; return `orderVoConvert.toPlaceRes(result)`.
 
-- [ ] **Step 3: Refactor pay/get/cancel executors**
+- [x] **Step 3: Refactor pay/get/cancel executors**
 
 Each injects `OrderVoConvert` and returns `PayOrderResVO` / `GetOrderResVO` / `CancelOrderResVO`.
 
-- [ ] **Step 4: Run order CmdExe tests**
+- [x] **Step 4: Run order CmdExe tests**
 
 Run: `cd demo2 && mvn -q test -Dtest=OrderCmdExeTest`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/order/app/executor/ \
@@ -595,7 +595,7 @@ git commit -m "refactor(demo2): move order VoConvert into CmdExe"
   - `LogoutMemberResVO logout()`
   - `DeleteSessionResVO deleteSession(String token)`
 
-- [ ] **Step 1: Split MemberLogoutCmdExe into two explicit methods**
+- [x] **Step 1: Split MemberLogoutCmdExe into two explicit methods**
 
 ```java
 public LogoutMemberResVO logout() {
@@ -612,18 +612,18 @@ public DeleteSessionResVO deleteSession(String token) {
 }
 ```
 
-- [ ] **Step 2: Inject MemberVoConvert into register/login/getProfile executors**
+- [x] **Step 2: Inject MemberVoConvert into register/login/getProfile executors**
 
 Return `*ResVO` via MapStruct at end of `execute`.
 
-- [ ] **Step 3: Update MemberCmdExeTest return types**
+- [x] **Step 3: Update MemberCmdExeTest return types**
 
-- [ ] **Step 4: Run member CmdExe tests**
+- [x] **Step 4: Run member CmdExe tests**
 
 Run: `cd demo2 && mvn -q test -Dtest=MemberCmdExeTest`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/member/app/executor/ \
@@ -645,7 +645,7 @@ git commit -m "refactor(demo2): move member VoConvert into CmdExe"
 - Consumes: Task 5/6 CmdExe return types, `JsonResults`, `BusinessException`, `CommonErrorCode`.
 - Produces: HTTP APIs returning `JsonResult<*ResVO>`.
 
-- [ ] **Step 1: Refactor OrderController**
+- [x] **Step 1: Refactor OrderController**
 
 Remove `OrderVoConvert` field and all try-catch blocks. Example:
 
@@ -662,18 +662,18 @@ public JsonResult<OrderPlaceResVO> orderPlace(@RequestBody OrderPlaceReqVO reque
 
 Apply to `/pay`, `/get`, `/cancel` — replace `requireOrderId` throws with `BusinessException(CommonErrorCode.PARAM_MISSING, "orderId is required")`.
 
-- [ ] **Step 2: Refactor MemberController**
+- [x] **Step 2: Refactor MemberController**
 
 Remove `MemberVoConvert`. Use `memberLogoutCmdExe.logout()` and `deleteSession(token)`.
 
-- [ ] **Step 3: Delete OrderHttpSupport and MemberHttpSupport**
+- [x] **Step 3: Delete OrderHttpSupport and MemberHttpSupport**
 
-- [ ] **Step 4: Compile**
+- [x] **Step 4: Compile**
 
 Run: `cd demo2 && mvn -q -DskipTests compile`
 Expected: BUILD SUCCESS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/order/app/controller/ \
@@ -691,9 +691,9 @@ git commit -m "feat(demo2): return JsonResult from order and member controllers"
 **Interfaces:**
 - Consumes: API responses `{ code, message, data }`.
 
-- [ ] **Step 1: Add memberRequest helper** (per spec §7.1)
+- [x] **Step 1: Add memberRequest helper** (per spec §7.1)
 
-- [ ] **Step 2: Migrate memberRegister, memberLogin, memberLoadProfile**
+- [x] **Step 2: Migrate memberRegister, memberLogin, memberLoadProfile**
 
 Login example:
 
@@ -705,13 +705,13 @@ memberProfile = data;
 
 For `memberLoadProfile`, on catch check if message indicates auth failure and clear profile.
 
-- [ ] **Step 3: Migrate memberLogout and memberDeleteSession**
+- [x] **Step 3: Migrate memberLogout and memberDeleteSession**
 
-- [ ] **Step 4: Migrate memberOrderCreate/Pay/Cancel/Refresh**
+- [x] **Step 4: Migrate memberOrderCreate/Pay/Cancel/Refresh**
 
 Use `memberRequest` for order APIs; read `data.orderId`, `data.taskId`. Keep `/demo/delay-tasks` fetch unchanged in `memberOrderRefresh`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/resources/static/js/tabs/member.js
@@ -725,19 +725,19 @@ git commit -m "feat(demo2): adapt member demo JS to JsonResult responses"
 **Files:**
 - Modify: `demo2/docs/superpowers/specs/2026-08-25-unified-json-result-design.md` — status → 已实现
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 Run: `cd demo2 && mvn test`
 Expected: all tests PASS
 
-- [ ] **Step 2: Manual smoke test checklist**
+- [x] **Step 2: Manual smoke test checklist**
 
 1. 注册 → 登录 → 个人中心
 2. 创建订单 → 支付 → 刷新 → 取消
 3. 故意输错密码 → 日志显示 `密码错误`，HTTP 200
 4. 删除 Redis session → 访问受保护接口 → 显示 `未登录或登录已失效`
 
-- [ ] **Step 3: Update spec status and commit**
+- [x] **Step 3: Update spec status and commit**
 
 ```bash
 git add demo2/docs/superpowers/specs/2026-08-25-unified-json-result-design.md
