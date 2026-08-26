@@ -45,13 +45,17 @@ app → service.core → service.infrastructure
 
 - 领域规则写在 `domain` 方法（`pay()` / `cancel()` 等），不在 Controller
 - 编排与 VO 转换（事务、发 MQ、注册延时、调多个仓储、`*VoConvert` → `*ResVO`）在 **CmdExe**
+- Controller 入参必须 `@Valid @RequestBody`；校验规则只写在 ReqVO（Jakarta Validation），**禁止**手写 `requireXxx` / 入参判空
+- 校验失败由 `Demo2GlobalExceptionHandler` 映射：`NotNull`/`NotBlank`/`NotEmpty` → `PARAM_MISSING(10002)`，其余 → `BAD_REQUEST(10001)`；HTTP 仍为 200
+- 业务模块 Controller 必须 `@Tag` + 方法 `@Operation`；ReqVO/ResVO 类与字段必须 `@Schema`（与校验 required 对齐）；统一包装见 `JsonResult` Schema
+- 可选延时字符串用 framework `@DelayFormat`（与 `DelayFormats` / `OrderDelayParser` 同规则）
 - 并发安全：Repository 状态更新用 `WHERE status = 期望态` 条件更新，失败抛 CONFLICT
 - 转换：对外 VO 用 MapStruct `*VoConvert`（在 CmdExe 调用）；DO↔Domain 用 `*DoConvert`
 
 ### 异常与响应（统一 JsonResult）
 
 - 业务失败抛 `BusinessException({Module}ErrorCodeEnum.xxx)`，**不要**自定义 `*DomainException`
-- 全局 `Demo2GlobalExceptionHandler` 捕获 `BusinessException` 与兜底 `Exception`，HTTP 始终 200，前端以 `code === 0` 判定成功
+- 全局 `Demo2GlobalExceptionHandler` 捕获 `BusinessException`、Bean Validation 异常（`MethodArgumentNotValidException` / `BindException` / `ConstraintViolationException`）与兜底 `Exception`，HTTP 始终 200，前端以 `code === 0` 判定成功
 - Controller 返回 `JsonResult<T>`，用 `JsonResults.ok(...)` 包装
 - 错误码分段：`0` 成功 / `1xxxx` 通用 / `2xxxx` 会员 / `3xxxx` 订单 / `4xxxx` 商品（`ProductErrorCodeEnum`）
 

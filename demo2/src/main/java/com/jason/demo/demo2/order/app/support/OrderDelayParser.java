@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.order.app.support;
 
+import com.jason.demo.demo2.framework.validation.DelayFormats;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
 import com.jason.demo.demo2.order.service.common.OrderErrorCodeEnum;
 
@@ -14,26 +15,7 @@ public final class OrderDelayParser {
         if (raw == null || raw.isBlank()) {
             return null;
         }
-        String value = raw.trim();
-        try {
-            if (value.startsWith("P") || value.startsWith("p")) {
-                return Duration.parse(value);
-            }
-            if (value.endsWith("ms")) {
-                return Duration.ofMillis(Long.parseLong(value.substring(0, value.length() - 2)));
-            }
-            if (value.endsWith("s")) {
-                return Duration.ofSeconds(Long.parseLong(value.substring(0, value.length() - 1)));
-            }
-            if (value.endsWith("m")) {
-                return Duration.ofMinutes(Long.parseLong(value.substring(0, value.length() - 1)));
-            }
-            if (value.endsWith("h")) {
-                return Duration.ofHours(Long.parseLong(value.substring(0, value.length() - 1)));
-            }
-            return Duration.parse(value);
-        } catch (Exception e) {
-            throw new BusinessException(OrderErrorCodeEnum.INVALID_DELAY, "invalid delay: " + raw);
-        }
+        return DelayFormats.tryParse(raw)
+                .orElseThrow(() -> new BusinessException(OrderErrorCodeEnum.INVALID_DELAY, "invalid delay: " + raw));
     }
 }

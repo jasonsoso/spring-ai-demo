@@ -13,7 +13,7 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("Demo2 AI API")
-                        .description("Spring AI 聊天、Embedding 与 RAG 接口文档")
+                        .description("Spring AI 与业务 Demo API（会员/订单/商品）；统一 JsonResult 包装")
                         .version("v1.0"));
     }
 }

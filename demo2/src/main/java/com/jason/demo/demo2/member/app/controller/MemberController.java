@@ -1,8 +1,6 @@
 package com.jason.demo.demo2.member.app.controller;
 
 import com.jason.demo.demo2.framework.auth.annotation.LoginRequired;
-import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
 import com.jason.demo.demo2.framework.web.result.JsonResult;
 import com.jason.demo.demo2.framework.web.result.JsonResults;
 import com.jason.demo.demo2.member.app.executor.MemberGetProfileCmdExe;
@@ -17,11 +15,15 @@ import com.jason.demo.demo2.member.app.vo.res.GetMemberProfileResVO;
 import com.jason.demo.demo2.member.app.vo.res.LoginMemberResVO;
 import com.jason.demo.demo2.member.app.vo.res.LogoutMemberResVO;
 import com.jason.demo.demo2.member.app.vo.res.RegisterMemberResVO;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "会员")
 @RestController
 @RequestMapping("/demo/members")
 public class MemberController {
@@ -42,42 +44,37 @@ public class MemberController {
         this.memberGetProfileCmdExe = memberGetProfileCmdExe;
     }
 
+    @Operation(summary = "注册", description = "手机号注册会员")
     @PostMapping("/register")
-    public JsonResult<RegisterMemberResVO> register(@RequestBody RegisterMemberReqVO request) {
-        String phone = requireText(request == null ? null : request.getPhone(), "phone").trim();
-        String password = requireText(request == null ? null : request.getPassword(), "password");
-        return JsonResults.ok(memberRegisterCmdExe.execute(phone, password, request.getAvatarUrl()));
+    public JsonResult<RegisterMemberResVO> register(@Valid @RequestBody RegisterMemberReqVO request) {
+        return JsonResults.ok(memberRegisterCmdExe.execute(
+                request.getPhone().trim(), request.getPassword(), request.getAvatarUrl()));
     }
 
+    @Operation(summary = "登录", description = "手机号密码登录，返回 token")
     @PostMapping("/login")
-    public JsonResult<LoginMemberResVO> login(@RequestBody LoginMemberReqVO request) {
-        String phone = requireText(request == null ? null : request.getPhone(), "phone").trim();
-        String password = requireText(request == null ? null : request.getPassword(), "password");
-        return JsonResults.ok(memberLoginCmdExe.execute(phone, password));
+    public JsonResult<LoginMemberResVO> login(@Valid @RequestBody LoginMemberReqVO request) {
+        return JsonResults.ok(memberLoginCmdExe.execute(
+                request.getPhone().trim(), request.getPassword()));
     }
 
     @LoginRequired
+    @Operation(summary = "登出", description = "注销当前登录会话。无请求体。")
     @PostMapping("/logout")
     public JsonResult<LogoutMemberResVO> logout() {
         return JsonResults.ok(memberLogoutCmdExe.logout());
     }
 
     @LoginRequired
+    @Operation(summary = "会员资料", description = "查询当前登录会员资料。无请求体。")
     @PostMapping("/getProfile")
     public JsonResult<GetMemberProfileResVO> getProfile() {
         return JsonResults.ok(memberGetProfileCmdExe.execute());
     }
 
+    @Operation(summary = "删除会话", description = "按 token 删除指定会话（调试用）")
     @PostMapping("/deleteSession")
-    public JsonResult<DeleteSessionResVO> deleteSession(@RequestBody DeleteSessionReqVO request) {
-        String token = requireText(request == null ? null : request.getToken(), "token");
-        return JsonResults.ok(memberLogoutCmdExe.deleteSession(token));
-    }
-
-    private static String requireText(String value, String fieldName) {
-        if (value == null || value.isBlank()) {
-            throw new BusinessException(CommonErrorCodeEnum.PARAM_MISSING, fieldName + " is required");
-        }
-        return value;
+    public JsonResult<DeleteSessionResVO> deleteSession(@Valid @RequestBody DeleteSessionReqVO request) {
+        return JsonResults.ok(memberLogoutCmdExe.deleteSession(request.getToken()));
     }
 }

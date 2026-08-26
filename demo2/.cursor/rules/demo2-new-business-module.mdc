@@ -12,6 +12,9 @@ alwaysApply: false
 1. 在 `demo2/docs/superpowers/specs/` 写 `{date}-{module}-design.md`：包结构、HTTP 表、领域行为、异常码
 2. 列出全部 `{Action}CmdExe` 与 ReqVO/ResVO 清单
 3. 确认是否依赖 framework（delay/lock/id），SPI 放 `app.listener` 或 `app.support`
+4. ReqVO：Jakarta Validation（必填/格式）；Controller：`@Valid`；禁止手写判空
+5. Controller `@Tag`/`@Operation`；全部 Req/Res VO 字段 `@Schema`
+6. 无 Body 接口在 `@Operation` 注明「无请求体」
 
 ## 目录清单（按需裁剪）
 

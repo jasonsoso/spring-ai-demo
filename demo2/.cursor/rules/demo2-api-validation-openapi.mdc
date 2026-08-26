@@ -1,0 +1,32 @@
+---
+description: demo2 业务 API 入参校验与 OpenAPI/Scalar 注解约定
+globs: demo2/src/main/java/com/jason/demo/demo2/{member,order,product}/app/**/*.java,demo2/src/main/java/com/jason/demo/demo2/framework/web/**/*.java,demo2/src/main/java/com/jason/demo/demo2/framework/validation/**/*.java
+alwaysApply: false
+---
+
+# 业务 API 校验与 OpenAPI
+
+## 校验
+
+- 带 JSON Body 的接口：`@Valid @RequestBody`
+- 规则写在 ReqVO：`@NotNull`/`@NotBlank`/`@Size`/`@Pattern`/`@DecimalMin`/`@Digits`/`@Min`/`@URL`/`@DelayFormat`
+- 嵌套对象字段加 `@Valid` 级联
+- 禁止 Controller 手写判空；业务错误仍用 `BusinessException`
+
+## 错误码
+
+- 缺参（NotNull/NotBlank/NotEmpty）→ 10002
+- 格式/范围 → 10001
+- HTTP 200 + JsonResult
+
+## OpenAPI / Scalar
+
+- Controller：`@Tag`；方法：`@Operation`
+- VO 类与字段：`@Schema(description, example, requiredMode)`
+- `JsonResult` 已在 framework 标注 code/message/data
+- 调试入口：`/scalar`
+
+## 范围
+
+- 强制：member/order/product 及后续业务模块
+- 不强制：AI/agentscope 等演示 Controller

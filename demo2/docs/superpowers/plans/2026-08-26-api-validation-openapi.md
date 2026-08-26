@@ -93,7 +93,7 @@ public final class ValidationExceptionMapper {
 - Consumes: 无
 - Produces: `DelayFormats.tryParse(String) → Optional<Duration>`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```java
 package com.jason.demo.demo2.framework.validation;
@@ -137,7 +137,7 @@ class DelayFormatsTest {
 }
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run（在 `demo2` 目录）:
 
@@ -147,7 +147,7 @@ mvn -q -Dtest=DelayFormatsTest test
 
 Expected: 编译失败或测试失败（类不存在）。
 
-- [ ] **Step 3: 实现 DelayFormats**
+- [x] **Step 3: 实现 DelayFormats**
 
 从现有 `OrderDelayParser` 抽出解析逻辑（**不抛业务异常**）：
 
@@ -193,7 +193,7 @@ public final class DelayFormats {
 
 注意：对 blank，`tryParse` 返回 empty（表示「无延时」）。Validator 会把 blank 视为**合法**（可选字段）；OrderDelayParser 对 blank 返回 `null` Duration。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 ```bash
 mvn -q -Dtest=DelayFormatsTest test
@@ -201,7 +201,7 @@ mvn -q -Dtest=DelayFormatsTest test
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/framework/validation/DelayFormats.java \
@@ -222,7 +222,7 @@ git commit -m "feat(demo2): extract DelayFormats shared delay parser"
 - Consumes: `DelayFormats.tryParse`
 - Produces: `@DelayFormat` + `DelayFormatValidator`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```java
 package com.jason.demo.demo2.framework.validation;
@@ -262,7 +262,7 @@ class DelayFormatValidatorTest {
 }
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```bash
 mvn -q -Dtest=DelayFormatValidatorTest test
@@ -270,7 +270,7 @@ mvn -q -Dtest=DelayFormatValidatorTest test
 
 Expected: FAIL（类不存在）
 
-- [ ] **Step 3: 实现注解与 Validator**
+- [x] **Step 3: 实现注解与 Validator**
 
 `DelayFormat.java`:
 
@@ -320,7 +320,7 @@ public class DelayFormatValidator implements ConstraintValidator<DelayFormat, St
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 ```bash
 mvn -q -Dtest=DelayFormatValidatorTest,DelayFormatsTest test
@@ -328,7 +328,7 @@ mvn -q -Dtest=DelayFormatValidatorTest,DelayFormatsTest test
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/framework/validation/DelayFormat.java \
@@ -348,7 +348,7 @@ git commit -m "feat(demo2): add @DelayFormat bean validation constraint"
 - Consumes: `DelayFormats.tryParse`
 - Produces: 对外签名不变 `parseDelay(String) → Duration`（blank→null；非法仍抛 `INVALID_DELAY`）
 
-- [ ] **Step 1: 改写 OrderDelayParser**
+- [x] **Step 1: 改写 OrderDelayParser**
 
 ```java
 package com.jason.demo.demo2.order.app.support;
@@ -374,7 +374,7 @@ public final class OrderDelayParser {
 }
 ```
 
-- [ ] **Step 2: 跑相关测试（若有）与 DelayFormats 测试**
+- [x] **Step 2: 跑相关测试（若有）与 DelayFormats 测试**
 
 ```bash
 mvn -q -Dtest=DelayFormatsTest,DelayFormatValidatorTest,Order*Test test
@@ -382,7 +382,7 @@ mvn -q -Dtest=DelayFormatsTest,DelayFormatValidatorTest,Order*Test test
 
 Expected: PASS（无 OrderDelayParser 专测也可；勿破坏既有 order 测试）
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/order/app/support/OrderDelayParser.java
@@ -403,7 +403,7 @@ git commit -m "refactor(demo2): OrderDelayParser delegates to DelayFormats"
 - Consumes: `CommonErrorCodeEnum.PARAM_MISSING` / `BAD_REQUEST`，`JsonResults.fail`
 - Produces: `ValidationExceptionMapper.fromBindingResult` / `fromConstraintViolations`；Handler 三个新方法
 
-- [ ] **Step 1: 写 ValidationExceptionMapper 失败测试**
+- [x] **Step 1: 写 ValidationExceptionMapper 失败测试**
 
 ```java
 package com.jason.demo.demo2.framework.web.exception;
@@ -459,7 +459,7 @@ class ValidationExceptionMapperTest {
 }
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 ```bash
 mvn -q -Dtest=ValidationExceptionMapperTest test
@@ -467,7 +467,7 @@ mvn -q -Dtest=ValidationExceptionMapperTest test
 
 Expected: FAIL
 
-- [ ] **Step 3: 实现 ValidationExceptionMapper**
+- [x] **Step 3: 实现 ValidationExceptionMapper**
 
 ```java
 package com.jason.demo.demo2.framework.web.exception;
@@ -548,7 +548,7 @@ public final class ValidationExceptionMapper {
 }
 ```
 
-- [ ] **Step 4: 扩展 Demo2GlobalExceptionHandler**
+- [x] **Step 4: 扩展 Demo2GlobalExceptionHandler**
 
 在现有 `BusinessException` / `Exception` 处理之间插入：
 
@@ -596,7 +596,7 @@ void handleMethodArgumentNotValid_delegatesToMapper() {
 
 （若不想构造 `MethodArgumentNotValidException`，测 `handleBindException` / `handleConstraintViolation` 即可。）
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 ```bash
 mvn -q -Dtest=ValidationExceptionMapperTest,Demo2GlobalExceptionHandlerTest test
@@ -604,7 +604,7 @@ mvn -q -Dtest=ValidationExceptionMapperTest,Demo2GlobalExceptionHandlerTest test
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/framework/web/exception/ValidationExceptionMapper.java \
@@ -626,7 +626,7 @@ git commit -m "feat(demo2): map bean validation failures to JsonResult 10001/100
 - Consumes: 无
 - Produces: 带 `@Schema` 的 `JsonResult`
 
-- [ ] **Step 1: 更新 JsonResult**
+- [x] **Step 1: 更新 JsonResult**
 
 ```java
 package com.jason.demo.demo2.framework.web.result;
@@ -649,13 +649,13 @@ public class JsonResult<T> {
 }
 ```
 
-- [ ] **Step 2: 更新 OpenApiConfig description（可选但本任务一并做）**
+- [x] **Step 2: 更新 OpenApiConfig description（可选但本任务一并做）**
 
 ```java
 .description("Spring AI 与业务 Demo API（会员/订单/商品）；统一 JsonResult 包装")
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/framework/web/result/JsonResult.java \
@@ -679,7 +679,7 @@ git commit -m "docs(demo2): annotate JsonResult and refresh OpenAPI info"
 - Consumes: `@Valid`、全局校验异常处理
 - Produces: 商品 API 文档与校验完备；删除 `PRODUCT_ID_REQUIRED`
 
-- [ ] **Step 1: 更新 GetProductReqVO**
+- [x] **Step 1: 更新 GetProductReqVO**
 
 ```java
 package com.jason.demo.demo2.product.app.vo.req;
@@ -700,13 +700,13 @@ public class GetProductReqVO {
 }
 ```
 
-- [ ] **Step 2: 更新 ResVO Schema**
+- [x] **Step 2: 更新 ResVO Schema**
 
 `ProductListItemResVO`：类与字段均加 `@Schema`（productId/productName/subtitle/coverUrl/sellPrice/marketPrice/availableStock/sellStock）。  
 `ProductListResVO`：`items` 列表说明。  
 `ProductDetailResVO`：`detailContent` 说明（继承字段已在父类标注）。
 
-- [ ] **Step 3: 重写 ProductController**
+- [x] **Step 3: 重写 ProductController**
 
 ```java
 package com.jason.demo.demo2.product.app.controller;
@@ -753,11 +753,11 @@ public class ProductController {
 }
 ```
 
-- [ ] **Step 4: 删除 PRODUCT_ID_REQUIRED**
+- [x] **Step 4: 删除 PRODUCT_ID_REQUIRED**
 
 从 `ProductErrorCodeEnum` 删除枚举常量 `PRODUCT_ID_REQUIRED(40006, ...)`。全仓库搜索确认无引用。
 
-- [ ] **Step 5: 编译与相关测试**
+- [x] **Step 5: 编译与相关测试**
 
 ```bash
 mvn -q -Dtest=ProductCmdExeTest,ProductStockDomainServiceTest,ProductStockLogRepositoryTest test
@@ -765,7 +765,7 @@ mvn -q -Dtest=ProductCmdExeTest,ProductStockDomainServiceTest,ProductStockLogRep
 
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/product/
@@ -786,7 +786,7 @@ git commit -m "feat(demo2): add validation and OpenAPI annotations to product AP
 - Consumes: `@DelayFormat`、`ValidationExceptionMapper`
 - Produces: 订单 API 校验与文档完备
 
-- [ ] **Step 1: 更新 ReqVO**
+- [x] **Step 1: 更新 ReqVO**
 
 `OrderPlaceReqVO`:
 
@@ -829,9 +829,9 @@ private Long orderId;
 
 （各类加对应 `@Schema(description = "...")`。）
 
-- [ ] **Step 2: ResVO 全部字段补 `@Schema`**
+- [x] **Step 2: ResVO 全部字段补 `@Schema`**
 
-- [ ] **Step 3: 重写 OrderController**
+- [x] **Step 3: 重写 OrderController**
 
 去掉 `requireOrderId` 与 amount 手写判空；方法签名示例：
 
@@ -875,7 +875,7 @@ public class OrderController {
 
 删除私有方法 `requireOrderId` 及相关 `BusinessException`/`CommonErrorCodeEnum` 入参校验 import（若不再使用）。
 
-- [ ] **Step 4: 测试**
+- [x] **Step 4: 测试**
 
 ```bash
 mvn -q -Dtest=Order*Test,DelayFormat*Test,DelayFormatsTest test
@@ -883,7 +883,7 @@ mvn -q -Dtest=Order*Test,DelayFormat*Test,DelayFormatsTest test
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/order/app/
@@ -903,7 +903,7 @@ git commit -m "feat(demo2): add validation and OpenAPI annotations to order API"
 - Consumes: 标准 Jakarta 约束 + Hibernate `@URL`
 - Produces: 会员 API 校验与文档完备
 
-- [ ] **Step 1: 更新 ReqVO**
+- [x] **Step 1: 更新 ReqVO**
 
 `RegisterMemberReqVO`:
 
@@ -947,11 +947,11 @@ public class RegisterMemberReqVO {
 private String token;
 ```
 
-- [ ] **Step 2: ResVO 补 `@Schema`**
+- [x] **Step 2: ResVO 补 `@Schema`**
 
 覆盖：`RegisterMemberResVO`、`LoginMemberResVO`、`LogoutMemberResVO`、`GetMemberProfileResVO`、`DeleteSessionResVO`。
 
-- [ ] **Step 3: 重写 MemberController**
+- [x] **Step 3: 重写 MemberController**
 
 去掉 `requireText`；保留业务 trim（校验通过后）：
 
@@ -998,7 +998,7 @@ public class MemberController {
 }
 ```
 
-- [ ] **Step 4: 测试**
+- [x] **Step 4: 测试**
 
 ```bash
 mvn -q -Dtest=Member*Test test
@@ -1006,7 +1006,7 @@ mvn -q -Dtest=Member*Test test
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add demo2/src/main/java/com/jason/demo/demo2/member/app/
@@ -1026,7 +1026,7 @@ git commit -m "feat(demo2): add validation and OpenAPI annotations to member API
 - Consumes: 本 spec 已确认约定
 - Produces: 长期强制规则文本
 
-- [ ] **Step 1: 更新 CLAUDE.md**
+- [x] **Step 1: 更新 CLAUDE.md**
 
 在「职责边界」增加：
 
@@ -1039,7 +1039,7 @@ git commit -m "feat(demo2): add validation and OpenAPI annotations to member API
 
 在「异常与响应」补充一句：全局处理器还捕获 `MethodArgumentNotValidException` / `BindException` / `ConstraintViolationException`。
 
-- [ ] **Step 2: 更新 demo2-new-business-module.mdc**
+- [x] **Step 2: 更新 demo2-new-business-module.mdc**
 
 在「实施前」或「完成后」清单增加：
 
@@ -1049,7 +1049,7 @@ git commit -m "feat(demo2): add validation and OpenAPI annotations to member API
 6. 无 Body 接口在 `@Operation` 注明「无请求体」
 ```
 
-- [ ] **Step 3: 新建 demo2-api-validation-openapi.mdc**
+- [x] **Step 3: 新建 demo2-api-validation-openapi.mdc**
 
 ```markdown
 ---
@@ -1082,7 +1082,7 @@ alwaysApply: false
 - 不强制：AI/agentscope 等演示 Controller
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add demo2/CLAUDE.md \
@@ -1103,7 +1103,7 @@ git commit -m "docs(demo2): codify API validation and OpenAPI conventions"
 - Consumes: Tasks 1–9 产物
 - Produces: 可合并的完成态
 
-- [ ] **Step 1: 全量相关单测**
+- [x] **Step 1: 全量相关单测**
 
 ```bash
 mvn -q -Dtest=DelayFormatsTest,DelayFormatValidatorTest,ValidationExceptionMapperTest,Demo2GlobalExceptionHandlerTest,Product*Test,Order*Test,Member*Test test
@@ -1111,7 +1111,7 @@ mvn -q -Dtest=DelayFormatsTest,DelayFormatValidatorTest,ValidationExceptionMappe
 
 Expected: PASS
 
-- [ ] **Step 2: 手工 / curl 冒烟（应用已启动时）**
+- [x] **Step 2: 手工 / curl 冒烟（应用已启动时）**
 
 ```bash
 # 缺 productId → 10002
@@ -1128,11 +1128,11 @@ Expected: 响应 `code` 分别为 `10002`、`10001`；HTTP 200。
 
 Scalar：打开 `http://localhost:8081/scalar`，确认 Tag「会员」「订单」「商品」及字段说明。
 
-- [ ] **Step 3: Spec 状态改为已实现**
+- [x] **Step 3: Spec 状态改为已实现**
 
 将设计文档头部 `**状态**: 待实现` 改为 `**状态**: 已实现`，并可加一句指向本 plan。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add demo2/docs/superpowers/specs/2026-08-26-api-validation-openapi-design.md \
