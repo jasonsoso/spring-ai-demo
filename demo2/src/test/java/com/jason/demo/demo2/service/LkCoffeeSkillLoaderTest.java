@@ -3,16 +3,12 @@ package com.jason.demo.demo2.service;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
-@TestPropertySource(properties = {
-        "agent.lkcoffee.skill=classpath:/.claude/skills/my-coffee/SKILL.md",
-        "agent.lkcoffee.enabled=false",
-        "app.mcp.client.init-on-startup=false"
-})
+@ActiveProfiles("test")
 class LkCoffeeSkillLoaderTest {
 
     @Autowired

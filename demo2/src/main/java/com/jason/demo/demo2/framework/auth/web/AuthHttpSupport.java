@@ -1,14 +1,18 @@
 package com.jason.demo.demo2.framework.auth.web;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import com.jason.demo.demo2.framework.web.exception.BusinessException;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
 
 public final class AuthHttpSupport {
 
     private AuthHttpSupport() {
     }
 
-    public static ResponseStatusException unauthorized(String message) {
-        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, message);
+    public static BusinessException unauthorized() {
+        return new BusinessException(CommonErrorCode.UNAUTHORIZED);
+    }
+
+    public static BusinessException invalidToken() {
+        return new BusinessException(CommonErrorCode.INVALID_TOKEN);
     }
 }

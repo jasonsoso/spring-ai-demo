@@ -250,32 +250,75 @@ public class GlobalExceptionHandler {
 { "code": 10003, "message": "未登录或登录已失效", "data": null }
 ```
 
-### 6.3 Controller
+### 6.3 App 层职责：Controller 与 CmdExe
 
-**之前：**
+**原则：Controller 不依赖 `*VoConvert`，VO 转换下沉到 CmdExe。**
+
+| 层 | 职责 | 禁止 |
+|----|------|------|
+| **Controller** | 入参校验、调用 CmdExe、`JsonResults.ok(...)` 包装 | 注入/调用 `*VoConvert`；领域编排 |
+| **CmdExe** | 用例编排、注入 `*VoConvert`、返回 `*ResVO` | 直接处理 HTTP |
+
+**之前（Controller 做转换）：**
 
 ```java
 public OrderPlaceResVO orderPlace(@RequestBody OrderPlaceReqVO request) {
-    try {
-        return orderVoConvert.toPlaceRes(...);
-    } catch (OrderDomainException e) {
-        throw OrderHttpSupport.toHttpException(e);
-    }
+    return orderVoConvert.toPlaceRes(orderPlaceCmdExe.execute(...));
 }
 ```
 
-**之后：**
+**之后（CmdExe 返回 ResVO，Controller 只包装）：**
 
 ```java
+// OrderController — 无 OrderVoConvert 依赖
 public JsonResult<OrderPlaceResVO> orderPlace(@RequestBody OrderPlaceReqVO request) {
     if (request == null || request.getAmount() == null) {
         throw new BusinessException(CommonErrorCode.PARAM_MISSING, "amount is required");
     }
-    return JsonResults.ok(orderVoConvert.toPlaceRes(...));
+    Duration delay = OrderDelayParser.parseDelay(request.getDelay());
+    return JsonResults.ok(orderPlaceCmdExe.execute(request.getAmount(), delay));
+}
+
+// OrderPlaceCmdExe — 注入 VoConvert，返回 ResVO
+@Service
+public class OrderPlaceCmdExe {
+    private final OrderVoConvert orderVoConvert;
+    // ...
+
+    public OrderPlaceResVO execute(BigDecimal amount, Duration delay) {
+        // ... 领域编排 ...
+        return orderVoConvert.toPlaceRes(result);
+    }
 }
 ```
 
-涉及 Controller：
+**CmdExe 改造清单：**
+
+| CmdExe | 当前返回 | 改造后返回 |
+|--------|----------|------------|
+| `OrderPlaceCmdExe` | `OrderPlaceResult` | `OrderPlaceResVO`（内部转换后返回） |
+| `OrderPaySuccessCmdExe` | `Order` | `PayOrderResVO` |
+| `OrderGetCmdExe` | `Order` | `GetOrderResVO` |
+| `OrderCancelCmdExe` | `Order` | `CancelOrderResVO` |
+| `MemberRegisterCmdExe` | `Member` | `RegisterMemberResVO` |
+| `MemberLoginCmdExe` | `AuthSession` | `LoginMemberResVO` |
+| `MemberGetProfileCmdExe` | `Member` | `GetMemberProfileResVO` |
+| `MemberLogoutCmdExe` | `boolean` | `LogoutMemberResVO` / `DeleteSessionResVO`（按调用场景或拆分方法） |
+
+`OrderPlaceResult` 等中间对象可保留为 CmdExe 内部私有编排结构，不再暴露给 Controller。
+
+**MemberController 示例：**
+
+```java
+// 无 MemberVoConvert 依赖
+public JsonResult<LoginMemberResVO> login(@RequestBody LoginMemberReqVO request) {
+    String phone = requireText(request == null ? null : request.getPhone(), "phone").trim();
+    String password = requireText(request == null ? null : request.getPassword(), "password");
+    return JsonResults.ok(memberLoginCmdExe.execute(phone, password));
+}
+```
+
+涉及 Controller（均移除 `*VoConvert` 注入）：
 
 - `OrderController`（4 个接口）
 - `MemberController`（5 个接口）
@@ -354,10 +397,11 @@ async function memberRequest(url, body) {
 新增业务模块（如商品）步骤：
 
 1. 在 `{module}/service/common/` 新增 `{Module}ErrorCode`（4xxxx 段）
-2. Controller 返回 `JsonResult<T>`，成功用 `JsonResults.ok`
-3. 领域/应用层抛 `BusinessException({Module}ErrorCode.xxx)`
-4. **无需修改** `GlobalExceptionHandler`
-5. 前端对接时以 `code === 0` 判断成功
+2. Controller 返回 `JsonResult<T>`，只做校验 + 调 CmdExe + `JsonResults.ok`
+3. CmdExe 注入 `{Module}VoConvert`，返回 `*ResVO`（Controller 不依赖 VoConvert）
+4. 领域/应用层抛 `BusinessException({Module}ErrorCode.xxx)`
+5. **无需修改** `GlobalExceptionHandler`
+6. 前端对接时以 `code === 0` 判断成功
 
 ---
 

@@ -1,7 +1,7 @@
 package com.jason.demo.demo2.order.app.support;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import com.jason.demo.demo2.framework.web.exception.BusinessException;
+import com.jason.demo.demo2.order.service.common.OrderErrorCode;
 
 import java.time.Duration;
 
@@ -33,7 +33,7 @@ public final class OrderDelayParser {
             }
             return Duration.parse(value);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid delay: " + raw);
+            throw new BusinessException(OrderErrorCode.INVALID_DELAY, "invalid delay: " + raw);
         }
     }
 }

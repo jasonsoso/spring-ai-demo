@@ -43,7 +43,7 @@ public class AuthSessionService {
     public AuthSession requireSession(String token) {
         String raw = redis.opsForValue().get(buildSessionKey(token));
         if (raw == null || raw.isBlank()) {
-            throw AuthHttpSupport.unauthorized("login expired");
+            throw AuthHttpSupport.unauthorized();
         }
         AuthSession stored = fromJson(raw);
         return new AuthSession(
@@ -78,7 +78,7 @@ public class AuthSessionService {
         try {
             return jsonMapper.readValue(raw, AuthSession.class);
         } catch (JacksonException e) {
-            throw AuthHttpSupport.unauthorized("invalid session");
+            throw AuthHttpSupport.unauthorized();
         }
     }
 }

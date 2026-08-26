@@ -46,14 +46,14 @@ public class LoginRequiredInterceptor implements HandlerInterceptor {
     private static String resolveToken(HttpServletRequest request) {
         String authorization = request.getHeader("Authorization");
         if (authorization == null || authorization.isBlank()) {
-            throw AuthHttpSupport.unauthorized("missing token");
+            throw AuthHttpSupport.invalidToken();
         }
         if (!authorization.startsWith(BEARER_PREFIX)) {
-            throw AuthHttpSupport.unauthorized("invalid token");
+            throw AuthHttpSupport.invalidToken();
         }
         String token = authorization.substring(BEARER_PREFIX.length()).trim();
         if (token.isBlank()) {
-            throw AuthHttpSupport.unauthorized("invalid token");
+            throw AuthHttpSupport.invalidToken();
         }
         return token;
     }

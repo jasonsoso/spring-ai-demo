@@ -11,7 +11,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.method.HandlerMethod;
-import org.springframework.web.server.ResponseStatusException;
+import com.jason.demo.demo2.framework.web.exception.BusinessException;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
 
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
@@ -56,11 +57,11 @@ class LoginRequiredInterceptorTest {
     void missingTokenReturns401() throws Exception {
         LoginRequiredInterceptor interceptor = new LoginRequiredInterceptor(mock(AuthSessionService.class));
 
-        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+        BusinessException ex = assertThrows(BusinessException.class,
                 () -> interceptor.preHandle(mock(HttpServletRequest.class), mock(HttpServletResponse.class),
                         handler("protectedEndpoint")));
 
-        assertEquals(401, ex.getStatusCode().value());
+        assertEquals(CommonErrorCode.INVALID_TOKEN.getCode(), ex.getCode());
     }
 
     @Test

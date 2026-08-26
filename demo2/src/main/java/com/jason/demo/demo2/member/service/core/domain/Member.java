@@ -1,7 +1,8 @@
 package com.jason.demo.demo2.member.service.core.domain;
 
+import com.jason.demo.demo2.framework.web.exception.BusinessException;
+import com.jason.demo.demo2.member.service.common.MemberErrorCode;
 import com.jason.demo.demo2.member.service.common.MemberStatus;
-import com.jason.demo.demo2.member.service.core.MemberDomainException;
 import com.jason.demo.demo2.member.service.infrastructure.dao.entity.MemberDO;
 
 import java.time.LocalDateTime;
@@ -10,10 +11,10 @@ public class Member extends MemberDO {
 
     public static Member create(long memberId, String phone, String passwordHash, String avatarUrl, LocalDateTime now) {
         if (phone == null || phone.isBlank()) {
-            throw new MemberDomainException(MemberDomainException.Code.BAD_REQUEST, "phone is required");
+            throw new BusinessException(MemberErrorCode.PHONE_REQUIRED);
         }
         if (passwordHash == null || passwordHash.isBlank()) {
-            throw new MemberDomainException(MemberDomainException.Code.BAD_REQUEST, "passwordHash is required");
+            throw new BusinessException(MemberErrorCode.PASSWORD_REQUIRED);
         }
         Member member = new Member();
         member.setMemberId(memberId);
@@ -44,7 +45,7 @@ public class Member extends MemberDO {
 
     public void requireCanLogin() {
         if (!MemberStatus.NORMAL.name().equals(getStatus())) {
-            throw new MemberDomainException(MemberDomainException.Code.CONFLICT, "member cannot login");
+            throw new BusinessException(MemberErrorCode.MEMBER_CANNOT_LOGIN);
         }
     }
 }

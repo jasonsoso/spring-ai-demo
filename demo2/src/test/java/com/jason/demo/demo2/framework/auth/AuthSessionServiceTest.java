@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.types.Expiration;
-import org.springframework.web.server.ResponseStatusException;
+import com.jason.demo.demo2.framework.web.exception.BusinessException;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
@@ -82,9 +83,9 @@ class AuthSessionServiceTest {
     void requireSessionThrowsWhenMissing() {
         when(values.get("demo2:auth:session:gone")).thenReturn(null);
 
-        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> service.requireSession("gone"));
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.requireSession("gone"));
 
-        assertEquals(401, ex.getStatusCode().value());
+        assertEquals(CommonErrorCode.UNAUTHORIZED.getCode(), ex.getCode());
     }
 
     @Test

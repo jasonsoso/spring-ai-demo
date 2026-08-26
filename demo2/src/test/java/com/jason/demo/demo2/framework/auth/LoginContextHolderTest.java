@@ -4,7 +4,8 @@ import com.jason.demo.demo2.framework.auth.context.LoginContextHolder;
 import com.jason.demo.demo2.framework.auth.context.LoginPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.server.ResponseStatusException;
+import com.jason.demo.demo2.framework.web.exception.BusinessException;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -31,7 +32,7 @@ class LoginContextHolderTest {
 
     @Test
     void requireThrowsWhenMissing() {
-        ResponseStatusException ex = assertThrows(ResponseStatusException.class, LoginContextHolder::require);
-        assertEquals(401, ex.getStatusCode().value());
+        BusinessException ex = assertThrows(BusinessException.class, LoginContextHolder::require);
+        assertEquals(CommonErrorCode.UNAUTHORIZED.getCode(), ex.getCode());
     }
 }

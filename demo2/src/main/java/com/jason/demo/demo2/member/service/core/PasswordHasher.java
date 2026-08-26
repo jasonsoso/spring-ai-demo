@@ -1,5 +1,7 @@
 package com.jason.demo.demo2.member.service.core;
 
+import com.jason.demo.demo2.framework.web.exception.BusinessException;
+import com.jason.demo.demo2.member.service.common.MemberErrorCode;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKeyFactory;
@@ -18,7 +20,7 @@ public class PasswordHasher {
 
     public String hash(String password) {
         if (password == null || password.isBlank()) {
-            throw new MemberDomainException(MemberDomainException.Code.BAD_REQUEST, "password is required");
+            throw new BusinessException(MemberErrorCode.PASSWORD_REQUIRED);
         }
         byte[] salt = new byte[16];
         RANDOM.nextBytes(salt);

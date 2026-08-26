@@ -1,7 +1,8 @@
 package com.jason.demo.demo2.order.service.core.domain;
 
 import com.jason.demo.demo2.order.service.common.OrderStatus;
-import com.jason.demo.demo2.order.service.core.OrderDomainException;
+import com.jason.demo.demo2.framework.web.exception.BusinessException;
+import com.jason.demo.demo2.order.service.common.OrderErrorCode;
 import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO;
 
 import java.math.BigDecimal;
@@ -11,7 +12,7 @@ public class Order extends OrderDO {
 
     public static Order create(long orderId, long memberId, BigDecimal amount, LocalDateTime now) {
         if (amount == null || amount.signum() <= 0) {
-            throw new OrderDomainException(OrderDomainException.Code.BAD_REQUEST, "amount must be positive");
+            throw new BusinessException(OrderErrorCode.AMOUNT_INVALID);
         }
         Order order = new Order();
         order.setOrderId(orderId);
@@ -39,8 +40,7 @@ public class Order extends OrderDO {
 
     public void pay() {
         if (!OrderStatus.PENDING_PAY.name().equals(getStatus())) {
-            throw new OrderDomainException(
-                    OrderDomainException.Code.CONFLICT,
+            throw new BusinessException(OrderErrorCode.ORDER_STATUS_CONFLICT,
                     "cannot pay order in status " + getStatus());
         }
         setStatus(OrderStatus.PAID.name());

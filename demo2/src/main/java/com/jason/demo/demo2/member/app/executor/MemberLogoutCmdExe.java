@@ -1,6 +1,9 @@
 package com.jason.demo.demo2.member.app.executor;
 
+import com.jason.demo.demo2.framework.auth.context.LoginContextHolder;
 import com.jason.demo.demo2.framework.auth.service.AuthSessionService;
+import com.jason.demo.demo2.member.app.vo.res.DeleteSessionResVO;
+import com.jason.demo.demo2.member.app.vo.res.LogoutMemberResVO;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -12,7 +15,16 @@ public class MemberLogoutCmdExe {
         this.authSessionService = authSessionService;
     }
 
-    public boolean execute(String token) {
-        return authSessionService.deleteSession(token);
+    public LogoutMemberResVO logout() {
+        String token = LoginContextHolder.require().token();
+        LogoutMemberResVO response = new LogoutMemberResVO();
+        response.setSuccess(authSessionService.deleteSession(token));
+        return response;
+    }
+
+    public DeleteSessionResVO deleteSession(String token) {
+        DeleteSessionResVO response = new DeleteSessionResVO();
+        response.setSuccess(authSessionService.deleteSession(token));
+        return response;
     }
 }

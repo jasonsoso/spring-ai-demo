@@ -65,6 +65,24 @@ async function memberPost(url, body) {
     });
 }
 
+async function memberRequest(url, body) {
+    const res = await memberPost(url, body);
+    let result;
+    try {
+        result = JSON.parse(await res.text());
+    } catch (e) {
+        throw new Error('响应解析失败');
+    }
+    if (result.code !== 0) {
+        throw new Error(result.message || '请求失败');
+    }
+    return result.data;
+}
+
+function memberIsAuthError(message) {
+    return message === '未登录或登录已失效' || message === 'token 无效';
+}
+
 function memberSwitchMobileTab(tab) {
     if (!['home', 'orders', 'me'].includes(tab)) {
         return;
@@ -155,28 +173,21 @@ async function memberRegister() {
     const input = memberAuthInput();
     const avatarUrl = document.getElementById('memberAvatarInput').value.trim();
     try {
-        const res = await memberPost('/demo/members/register', {
+        const data = await memberRequest('/demo/members/register', {
             phone: input.phone,
             password: input.password,
             avatarUrl: avatarUrl
         });
-        const text = await res.text();
-        memberAppendLog((res.ok ? '注册成功：' : '注册失败：') + text);
+        memberAppendLog('注册成功：' + JSON.stringify(data));
     } catch (e) {
-        memberAppendLog('注册请求失败：' + e.message);
+        memberAppendLog('注册失败：' + e.message);
     }
 }
 
 async function memberLogin() {
     const input = memberAuthInput();
     try {
-        const res = await memberPost('/demo/members/login', input);
-        const text = await res.text();
-        if (!res.ok) {
-            memberAppendLog('登录失败：' + text);
-            return;
-        }
-        const data = JSON.parse(text);
+        const data = await memberRequest('/demo/members/login', input);
         memberToken = data.token;
         memberProfile = data;
         memberSessionDeleted = false;
@@ -184,7 +195,7 @@ async function memberLogin() {
         memberAppendLog('登录成功：' + data.phone);
         memberRender();
     } catch (e) {
-        memberAppendLog('登录请求失败：' + e.message);
+        memberAppendLog('登录失败：' + e.message);
     }
 }
 
@@ -194,27 +205,25 @@ async function memberLoadProfile() {
         return;
     }
     try {
-        const res = await memberPost('/demo/members/getProfile', {});
-        const text = await res.text();
-        memberAppendLog('个人中心（HTTP ' + res.status + '）：' + text);
-        if (res.ok) {
-            memberProfile = JSON.parse(text);
-            memberSessionDeleted = false;
-        } else if (res.status === 401) {
+        memberProfile = await memberRequest('/demo/members/getProfile', {});
+        memberSessionDeleted = false;
+        memberAppendLog('个人中心：' + JSON.stringify(memberProfile));
+        memberRender();
+    } catch (e) {
+        memberAppendLog('个人中心失败：' + e.message);
+        if (memberIsAuthError(e.message)) {
             memberProfile = null;
         }
         memberRender();
-    } catch (e) {
-        memberAppendLog('个人中心请求失败：' + e.message);
     }
 }
 
 async function memberLogout() {
     try {
-        const res = await memberPost('/demo/members/logout', {});
-        memberAppendLog('退出登录（HTTP ' + res.status + '）：' + await res.text());
+        const data = await memberRequest('/demo/members/logout', {});
+        memberAppendLog('退出登录：' + JSON.stringify(data));
     } catch (e) {
-        memberAppendLog('退出登录请求失败：' + e.message);
+        memberAppendLog('退出登录失败：' + e.message);
     } finally {
         memberToken = '';
         memberProfile = null;
@@ -230,15 +239,12 @@ async function memberDeleteSession() {
         return;
     }
     try {
-        const res = await memberPost('/demo/members/deleteSession', { token: memberToken });
-        const text = await res.text();
-        memberAppendLog('删除 Redis 登录态（HTTP ' + res.status + '）：' + text);
-        if (res.ok) {
-            memberSessionDeleted = true;
-            memberRenderSession();
-        }
+        const data = await memberRequest('/demo/members/deleteSession', { token: memberToken });
+        memberAppendLog('删除 Redis 登录态：' + JSON.stringify(data));
+        memberSessionDeleted = true;
+        memberRenderSession();
     } catch (e) {
-        memberAppendLog('删除 Redis 登录态请求失败：' + e.message);
+        memberAppendLog('删除 Redis 登录态失败：' + e.message);
     }
 }
 
@@ -257,18 +263,10 @@ async function memberOrderCreate() {
     resultBox.className = 'result-box member-order-result loading';
     resultBox.textContent = '创建订单中...';
     try {
-        const res = await memberPost('/demo/orders/orderPlace', {
+        const data = await memberRequest('/demo/orders/orderPlace', {
             amount: Number(amount),
             delay: delay
         });
-        const text = await res.text();
-        const data = JSON.parse(text);
-        if (!res.ok) {
-            resultBox.className = 'result-box member-order-result error';
-            resultBox.textContent = '创建失败：' + text;
-            memberAppendLog('创建订单失败：' + text);
-            return;
-        }
         memberOrderLastOrderId = String(data.orderId);
         memberOrderLastTaskId = String(data.taskId);
         document.getElementById('memberOrderId').value = memberOrderLastOrderId;
@@ -278,8 +276,8 @@ async function memberOrderCreate() {
             + ' delay=' + delay);
     } catch (e) {
         resultBox.className = 'result-box member-order-result error';
-        resultBox.textContent = '请求失败：' + e.message;
-        memberAppendLog('创建订单请求失败：' + e.message);
+        resultBox.textContent = '创建失败：' + e.message;
+        memberAppendLog('创建订单失败：' + e.message);
     }
 }
 
@@ -297,21 +295,14 @@ async function memberOrderPay() {
     resultBox.className = 'result-box member-order-result loading';
     resultBox.textContent = '支付中...';
     try {
-        const res = await memberPost('/demo/orders/pay', { orderId: orderId });
-        const text = await res.text();
-        if (!res.ok) {
-            resultBox.className = 'result-box member-order-result error';
-            resultBox.textContent = '支付失败：' + text;
-            memberAppendLog('支付失败（HTTP ' + res.status + '）：' + text);
-            return;
-        }
+        const data = await memberRequest('/demo/orders/pay', { orderId: orderId });
         resultBox.className = 'result-box member-order-result';
-        resultBox.textContent = text;
+        resultBox.textContent = JSON.stringify(data, null, 2);
         memberAppendLog('已支付 orderId=' + orderId);
     } catch (e) {
         resultBox.className = 'result-box member-order-result error';
-        resultBox.textContent = '请求失败：' + e.message;
-        memberAppendLog('模拟支付请求失败：' + e.message);
+        resultBox.textContent = '支付失败：' + e.message;
+        memberAppendLog('支付失败：' + e.message);
     }
 }
 
@@ -329,16 +320,9 @@ async function memberOrderCancel() {
     resultBox.className = 'result-box member-order-result loading';
     resultBox.textContent = '取消中...';
     try {
-        const res = await memberPost('/demo/orders/cancel', { orderId: orderId });
-        const text = await res.text();
-        if (!res.ok) {
-            resultBox.className = 'result-box member-order-result error';
-            resultBox.textContent = '取消失败：' + text;
-            memberAppendLog('取消失败（HTTP ' + res.status + '）：' + text);
-            return;
-        }
+        const data = await memberRequest('/demo/orders/cancel', { orderId: orderId });
         resultBox.className = 'result-box member-order-result';
-        resultBox.textContent = text;
+        resultBox.textContent = JSON.stringify(data, null, 2);
         memberAppendLog('已取消 orderId=' + orderId);
     } catch (e) {
         resultBox.className = 'result-box member-order-result error';
@@ -361,14 +345,11 @@ async function memberOrderRefresh() {
     resultBox.className = 'result-box member-order-result loading';
     resultBox.textContent = '查询中...';
     try {
-        const [orderRes, taskRes] = await Promise.all([
-            memberPost('/demo/orders/get', { orderId: orderId }),
-            fetch('/demo/delay-tasks?bizKey=' + encodeURIComponent(orderId))
-        ]);
-        const orderText = await orderRes.text();
+        const orderData = await memberRequest('/demo/orders/get', { orderId: orderId });
+        const taskRes = await fetch('/demo/delay-tasks?bizKey=' + encodeURIComponent(orderId));
         const taskText = await taskRes.text();
-        resultBox.className = orderRes.ok ? 'result-box member-order-result' : 'result-box member-order-result error';
-        resultBox.textContent = '订单：\n' + orderText + '\n\n台账：\n' + taskText;
+        resultBox.className = 'result-box member-order-result';
+        resultBox.textContent = '订单：\n' + JSON.stringify(orderData, null, 2) + '\n\n台账：\n' + taskText;
         memberAppendLog('刷新 orderId=' + orderId);
     } catch (e) {
         resultBox.className = 'result-box member-order-result error';
@@ -387,7 +368,7 @@ function memberRenderSession() {
         return;
     }
     box.textContent =
-        '状态=' + (memberSessionDeleted ? 'Redis session 已删除（token 保留用于验证 401）' : '已持有 token') +
+        '状态=' + (memberSessionDeleted ? 'Redis session 已删除（token 保留用于验证未登录）' : '已持有 token') +
         '\nTTL=24h（app.auth.session-ttl 可配置）' +
         '\ntoken=' + memberToken +
         '\nRedis key=demo2:auth:session:' + memberToken +

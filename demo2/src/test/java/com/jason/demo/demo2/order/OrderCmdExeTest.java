@@ -1,16 +1,21 @@
 package com.jason.demo.demo2.order;
 
+import com.jason.demo.demo2.framework.auth.context.LoginContextHolder;
+import com.jason.demo.demo2.framework.auth.context.LoginPrincipal;
 import com.jason.demo.demo2.framework.delay.DelayTaskService;
 import com.jason.demo.demo2.framework.delay.DelayTaskType;
 import com.jason.demo.demo2.framework.delay.config.DelayProperties;
 import com.jason.demo.demo2.framework.id.SnowflakeIdGenerator;
-import com.jason.demo.demo2.framework.auth.context.LoginContextHolder;
-import com.jason.demo.demo2.framework.auth.context.LoginPrincipal;
+import com.jason.demo.demo2.order.app.convert.OrderVoConvert;
 import com.jason.demo.demo2.order.app.executor.OrderCancelCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderGetCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderPaySuccessCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderPlaceCmdExe;
 import com.jason.demo.demo2.order.app.vo.OrderPlaceResult;
+import com.jason.demo.demo2.order.app.vo.res.CancelOrderResVO;
+import com.jason.demo.demo2.order.app.vo.res.GetOrderResVO;
+import com.jason.demo.demo2.order.app.vo.res.OrderPlaceResVO;
+import com.jason.demo.demo2.order.app.vo.res.PayOrderResVO;
 import com.jason.demo.demo2.order.service.common.OrderStatus;
 import com.jason.demo.demo2.order.service.core.OrderDomainService;
 import com.jason.demo.demo2.order.service.core.domain.Order;
@@ -26,7 +31,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +47,8 @@ class OrderCmdExeTest {
     private DelayTaskService delayTaskService;
     @Mock
     private SnowflakeIdGenerator idGenerator;
+    @Mock
+    private OrderVoConvert orderVoConvert;
 
     private DelayProperties delayProperties;
 
@@ -59,9 +69,20 @@ class OrderCmdExeTest {
         when(idGenerator.nextId()).thenReturn(55L);
         when(delayTaskService.schedule(eq(DelayTaskType.ORDER_CANCEL), eq("55"), isNull(), any()))
                 .thenReturn(77L);
-        OrderPlaceCmdExe exe = new OrderPlaceCmdExe(orderDomainService, delayTaskService, idGenerator, delayProperties);
+        when(orderVoConvert.toPlaceRes(any(OrderPlaceResult.class))).thenAnswer(invocation -> {
+            OrderPlaceResult result = invocation.getArgument(0);
+            OrderPlaceResVO vo = new OrderPlaceResVO();
+            vo.setOrderId(result.getOrderId());
+            vo.setTaskId(result.getTaskId());
+            vo.setStatus(result.getStatus());
+            vo.setAmount(result.getAmount());
+            vo.setDelay(result.getDelay() == null ? null : result.getDelay().toString());
+            return vo;
+        });
+        OrderPlaceCmdExe exe = new OrderPlaceCmdExe(
+                orderDomainService, delayTaskService, idGenerator, delayProperties, orderVoConvert);
 
-        OrderPlaceResult result = exe.execute(new BigDecimal("9.90"), Duration.ofSeconds(10));
+        OrderPlaceResVO result = exe.execute(new BigDecimal("9.90"), Duration.ofSeconds(10));
 
         assertEquals(55L, result.getOrderId());
         assertEquals(77L, result.getTaskId());
@@ -76,9 +97,10 @@ class OrderCmdExeTest {
     void pay_cancelsDelayTask() {
         Order paid = order(55L, OrderStatus.PAID);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(paid);
-        OrderPaySuccessCmdExe exe = new OrderPaySuccessCmdExe(orderDomainService, delayTaskService);
+        when(orderVoConvert.toPayRes(paid)).thenReturn(payRes(paid));
+        OrderPaySuccessCmdExe exe = new OrderPaySuccessCmdExe(orderDomainService, delayTaskService, orderVoConvert);
 
-        Order result = exe.execute(55L);
+        PayOrderResVO result = exe.execute(55L);
 
         assertEquals(OrderStatus.PAID.name(), result.getStatus());
         verify(orderDomainService).payOrder(55L, 9001L);
@@ -89,9 +111,10 @@ class OrderCmdExeTest {
     void get_usesCurrentMemberOwnership() {
         Order order = order(55L, OrderStatus.PENDING_PAY);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(order);
-        OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService);
+        when(orderVoConvert.toGetRes(order)).thenReturn(getRes(order));
+        OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
 
-        Order result = exe.execute(55L);
+        GetOrderResVO result = exe.execute(55L);
 
         assertEquals(55L, result.getOrderId());
         verify(orderDomainService).requireOrder(55L, 9001L);
@@ -101,9 +124,10 @@ class OrderCmdExeTest {
     void cancel_cancelsDelayTask() {
         Order cancelled = order(55L, OrderStatus.CANCELLED);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(cancelled);
-        OrderCancelCmdExe exe = new OrderCancelCmdExe(orderDomainService, delayTaskService);
+        when(orderVoConvert.toCancelRes(cancelled)).thenReturn(cancelRes(cancelled));
+        OrderCancelCmdExe exe = new OrderCancelCmdExe(orderDomainService, delayTaskService, orderVoConvert);
 
-        Order result = exe.execute(55L);
+        CancelOrderResVO result = exe.execute(55L);
 
         assertEquals(OrderStatus.CANCELLED.name(), result.getStatus());
         verify(orderDomainService).manualCancel(55L, 9001L);
@@ -118,5 +142,27 @@ class OrderCmdExeTest {
         order.setCreatedAt(LocalDateTime.now());
         order.setUpdatedAt(LocalDateTime.now());
         return order;
+    }
+
+    private static PayOrderResVO payRes(Order order) {
+        PayOrderResVO vo = new PayOrderResVO();
+        vo.setOrderId(order.getOrderId());
+        vo.setStatus(order.getStatus());
+        return vo;
+    }
+
+    private static GetOrderResVO getRes(Order order) {
+        GetOrderResVO vo = new GetOrderResVO();
+        vo.setOrderId(order.getOrderId());
+        vo.setStatus(order.getStatus());
+        vo.setAmount(order.getAmount());
+        return vo;
+    }
+
+    private static CancelOrderResVO cancelRes(Order order) {
+        CancelOrderResVO vo = new CancelOrderResVO();
+        vo.setOrderId(order.getOrderId());
+        vo.setStatus(order.getStatus());
+        return vo;
     }
 }

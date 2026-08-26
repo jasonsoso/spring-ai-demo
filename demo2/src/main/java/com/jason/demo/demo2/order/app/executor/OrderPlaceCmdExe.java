@@ -1,11 +1,13 @@
 package com.jason.demo.demo2.order.app.executor;
 
+import com.jason.demo.demo2.framework.auth.context.LoginContextHolder;
 import com.jason.demo.demo2.framework.delay.DelayTaskService;
 import com.jason.demo.demo2.framework.delay.DelayTaskType;
 import com.jason.demo.demo2.framework.delay.config.DelayProperties;
-import com.jason.demo.demo2.framework.auth.context.LoginContextHolder;
 import com.jason.demo.demo2.framework.id.SnowflakeIdGenerator;
+import com.jason.demo.demo2.order.app.convert.OrderVoConvert;
 import com.jason.demo.demo2.order.app.vo.OrderPlaceResult;
+import com.jason.demo.demo2.order.app.vo.res.OrderPlaceResVO;
 import com.jason.demo.demo2.order.service.core.OrderDomainService;
 import com.jason.demo.demo2.order.service.core.domain.Order;
 import org.springframework.stereotype.Service;
@@ -22,20 +24,23 @@ public class OrderPlaceCmdExe {
     private final DelayTaskService delayTaskService;
     private final SnowflakeIdGenerator idGenerator;
     private final DelayProperties delayProperties;
+    private final OrderVoConvert orderVoConvert;
 
     public OrderPlaceCmdExe(
             OrderDomainService orderDomainService,
             DelayTaskService delayTaskService,
             SnowflakeIdGenerator idGenerator,
-            DelayProperties delayProperties) {
+            DelayProperties delayProperties,
+            OrderVoConvert orderVoConvert) {
         this.orderDomainService = orderDomainService;
         this.delayTaskService = delayTaskService;
         this.idGenerator = idGenerator;
         this.delayProperties = delayProperties;
+        this.orderVoConvert = orderVoConvert;
     }
 
     @Transactional
-    public OrderPlaceResult execute(BigDecimal amount, Duration delay) {
+    public OrderPlaceResVO execute(BigDecimal amount, Duration delay) {
         long memberId = LoginContextHolder.require().memberId();
         long orderId = idGenerator.nextId();
         Order order = Order.create(orderId, memberId, amount, LocalDateTime.now());
@@ -54,6 +59,6 @@ public class OrderPlaceCmdExe {
         result.setAmount(order.getAmount());
         result.setTaskId(taskId);
         result.setDelay(effectiveDelay);
-        return result;
+        return orderVoConvert.toPlaceRes(result);
     }
 }

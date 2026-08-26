@@ -21,7 +21,7 @@ public final class LoginContextHolder {
     public static LoginPrincipal require() {
         LoginPrincipal principal = HOLDER.get();
         if (principal == null) {
-            throw AuthHttpSupport.unauthorized("login required");
+            throw AuthHttpSupport.unauthorized();
         }
         return principal;
     }

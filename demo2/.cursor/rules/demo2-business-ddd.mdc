@@ -14,12 +14,12 @@ alwaysApply: false
 app → service.core → service.infrastructure
 ```
 
-- **app**: Controller（只做校验/调 CmdExe/VO 转换）、executor（*CmdExe）、listener/job、vo/req|res、convert（*VoConvert）
+- **app**: Controller（只做校验/调 CmdExe/`JsonResults` 包装）、executor（*CmdExe，含 VO 转换）、listener/job、vo/req|res、convert（*VoConvert）
 - **service.core**: domain（聚合根 `extends *DO`）、*DomainService、*DomainException
 - **service.infrastructure**: dao.entity（*DO）、dao.mapper、repository（*Repository）、convert（*DoConvert）
 - **service.common**: 状态枚举等
 
-禁止：Controller/CmdExe 直接注入 Mapper；domain 依赖 app；infrastructure 依赖 app。
+禁止：Controller 注入 `*VoConvert`；Controller/CmdExe 直接注入 Mapper；domain 依赖 app；infrastructure 依赖 app。
 
 ## 命名
 
@@ -37,15 +37,15 @@ app → service.core → service.infrastructure
 ## 职责边界
 
 - **领域规则**写在 `domain` 方法（如 `pay()`、`cancel()`），不在 Controller
-- **编排**（事务、发 MQ、注册延时、调多个仓储）在 **CmdExe**
+- **编排与 VO 转换**（事务、发 MQ、注册延时、调多个仓储、`*VoConvert` → `*ResVO`）在 **CmdExe**
 - **并发安全**：Repository 状态更新用 `WHERE status = 期望态` 条件更新，失败抛 CONFLICT
-- **转换**：对外 VO 用 MapStruct `*VoConvert`；DO↔Domain 用 `*DoConvert`
+- **转换**：对外 VO 用 MapStruct `*VoConvert`（在 **CmdExe** 调用）；DO↔Domain 用 `*DoConvert`
 
 ## HTTP（Demo API）
 
 - 全部 `POST`，`Content-Type: application/json`，**无路径变量**
 - 路径：`/demo/{modules}/{action}`（如 `/demo/orders/orderPlace`）
-- Controller 捕获 `{Module}DomainException` 映射 400/404/409
+- 统一返回 `JsonResult<T>`，业务失败抛 `BusinessException`（见 `2026-08-25-unified-json-result-design.md`）
 
 ## 参考实现
 
