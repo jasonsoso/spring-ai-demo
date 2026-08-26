@@ -3,10 +3,19 @@ const MEMBER_TOKEN_STORAGE_KEY = 'demo2MemberToken';
 let memberToken = localStorage.getItem(MEMBER_TOKEN_STORAGE_KEY) || '';
 let memberProfile = null;
 let memberMobileTab = 'home';
+let memberMobileView = 'home';
+let memberSelectedProductId = '';
 let memberSessionDeleted = false;
 let memberOrderLastOrderId = '';
 let memberOrderLastTaskId = '';
 let memberToastTimer = null;
+let memberHomeRenderSeq = 0;
+let memberDetailRenderSeq = 0;
+
+/** 雪花 ID：后端 Long 经 Jackson 序列化为字符串，前端始终按 string 传递 */
+function memberSnowflakeId(value) {
+    return value == null || value === '' ? '' : String(value);
+}
 
 function memberDefaultAvatar() {
     return 'data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -143,6 +152,9 @@ function memberSwitchMobileTab(tab) {
         return;
     }
     memberMobileTab = tab;
+    if (tab === 'home') {
+        memberMobileView = 'home';
+    }
     memberRender();
 }
 
@@ -155,7 +167,11 @@ function memberRender() {
     document.getElementById('memberNavOrders').classList.toggle('active', memberMobileTab === 'orders');
     document.getElementById('memberNavMe').classList.toggle('active', memberMobileTab === 'me');
     if (memberMobileTab === 'home') {
-        memberRenderHome();
+        if (memberMobileView === 'detail') {
+            memberRenderDetail();
+        } else {
+            memberRenderHome();
+        }
     } else if (memberMobileTab === 'orders') {
         memberRenderOrders();
     } else {
@@ -164,15 +180,116 @@ function memberRender() {
     memberRenderSession();
 }
 
-function memberRenderHome() {
-    document.getElementById('memberPhonePage').innerHTML =
-        '<h2>首页</h2>' +
-        '<div class="member-home-banner"><strong>今日精选</strong><span>静态商品演示 · 右侧面板可下单/支付/取消</span></div>' +
-        '<div class="member-products">' +
-        '<div class="member-product-card"><span class="member-product-icon">☕</span><div><strong>拿铁</strong><p>经典浓郁，口感顺滑</p></div><span class="member-product-price">¥18</span></div>' +
-        '<div class="member-product-card"><span class="member-product-icon">🥥</span><div><strong>生椰拿铁</strong><p>椰香清甜，清爽不腻</p></div><span class="member-product-price">¥20</span></div>' +
-        '<div class="member-product-card"><span class="member-product-icon">🍰</span><div><strong>芝士蛋糕</strong><p>绵密芝士，下午茶推荐</p></div><span class="member-product-price">¥16</span></div>' +
-        '</div>';
+function memberHomeBannerHtml() {
+    return '<div class="member-home-banner"><strong>今日精选</strong>'
+        + '<span>商品来自接口 · 右侧面板可下单/支付/取消</span></div>';
+}
+
+function memberProductEmoji(name) {
+    const icons = { '拿铁': '☕', '生椰拿铁': '🥥', '芝士蛋糕': '🍰' };
+    return icons[name] || '🛍️';
+}
+
+function memberProductIconHtml(name, coverUrl) {
+    if (coverUrl) {
+        return '<img class="member-product-icon member-product-icon-img" alt="" src="'
+            + memberEscapeHtml(coverUrl) + '">';
+    }
+    return '<span class="member-product-icon">' + memberProductEmoji(name) + '</span>';
+}
+
+function memberDetailCoverHtml(name, coverUrl) {
+    if (coverUrl) {
+        return '<img class="member-detail-cover" alt="' + memberEscapeHtml(name) + '" src="'
+            + memberEscapeHtml(coverUrl) + '">';
+    }
+    return '<div class="member-detail-cover-fallback">' + memberProductEmoji(name) + '</div>';
+}
+
+function memberProductCardHtml(item) {
+    const productId = memberSnowflakeId(item.productId);
+    const sold = Number(item.sellStock) > 0
+        ? '<span class="member-product-sold">已售 ' + memberEscapeHtml(item.sellStock) + '</span>'
+        : '';
+    return '<div class="member-product-card" data-product-id="' + memberEscapeHtml(productId) + '" onclick="memberOpenProduct(this.dataset.productId)">'
+        + memberProductIconHtml(item.productName, item.coverUrl)
+        + '<div class="member-product-info"><strong>' + memberEscapeHtml(item.productName) + '</strong>'
+        + '<p>' + memberEscapeHtml(item.subtitle || '') + '</p>' + sold + '</div>'
+        + '<span class="member-product-price">¥' + memberEscapeHtml(item.sellPrice) + '</span></div>';
+}
+
+async function memberRenderHome() {
+    const page = document.getElementById('memberPhonePage');
+    const seq = ++memberHomeRenderSeq;
+    page.innerHTML = '<h2>首页</h2>' + memberHomeBannerHtml()
+        + '<div class="member-products loading">加载商品中...</div>';
+    try {
+        const data = await memberRequest('/demo/products/listProducts', {}, { silent: true });
+        if (seq !== memberHomeRenderSeq || memberMobileTab !== 'home' || memberMobileView !== 'home') {
+            return;
+        }
+        const items = (data && data.items) ? data.items : [];
+        page.innerHTML = '<h2>首页</h2>' + memberHomeBannerHtml()
+            + '<div class="member-products">'
+            + (items.length ? items.map(memberProductCardHtml).join('') : '<div class="member-empty-state">暂无商品</div>')
+            + '</div>';
+    } catch (e) {
+        if (seq !== memberHomeRenderSeq || memberMobileTab !== 'home' || memberMobileView !== 'home') {
+            return;
+        }
+        page.innerHTML = '<h2>首页</h2>' + memberHomeBannerHtml()
+            + '<div class="member-products error">商品加载失败</div>';
+    }
+}
+
+function memberOpenProduct(productId) {
+    memberHomeRenderSeq++;
+    memberSelectedProductId = memberSnowflakeId(productId);
+    memberMobileView = 'detail';
+    memberRender();
+}
+
+function memberBackHome() {
+    memberMobileView = 'home';
+    memberSelectedProductId = '';
+    memberRender();
+}
+
+async function memberRenderDetail() {
+    const page = document.getElementById('memberPhonePage');
+    const seq = ++memberDetailRenderSeq;
+    page.innerHTML = '<button type="button" class="member-back-btn" onclick="memberBackHome()">← 返回</button>'
+        + '<div class="member-detail loading">加载中...</div>';
+    if (!memberSelectedProductId) {
+        memberBackHome();
+        return;
+    }
+    try {
+        const item = await memberRequest('/demo/products/getProduct',
+            { productId: memberSelectedProductId }, { silent: true });
+        if (seq !== memberDetailRenderSeq || memberMobileView !== 'detail') {
+            return;
+        }
+        const sold = Number(item.sellStock) > 0
+            ? '<p class="member-detail-sold">已售 ' + memberEscapeHtml(item.sellStock) + '</p>' : '';
+        const stock = '<p class="member-detail-stock">库存 ' + memberEscapeHtml(item.availableStock) + '</p>';
+        page.innerHTML = '<button type="button" class="member-back-btn" onclick="memberBackHome()">← 返回</button>'
+            + '<div class="member-detail">'
+            + '<div class="member-detail-hero">' + memberDetailCoverHtml(item.productName, item.coverUrl) + '</div>'
+            + '<h2>' + memberEscapeHtml(item.productName) + '</h2>'
+            + '<p class="member-detail-subtitle">' + memberEscapeHtml(item.subtitle || '') + '</p>'
+            + '<p class="member-detail-price">¥' + memberEscapeHtml(item.sellPrice) + '</p>'
+            + sold + stock
+            + '<div class="member-detail-content">' + memberEscapeHtml(item.detailContent || '') + '</div>'
+            + '<button type="button" class="btn member-detail-buy" disabled title="订单模块后续接入">立即购买</button>'
+            + '</div>';
+    } catch (e) {
+        if (seq !== memberDetailRenderSeq || memberMobileView !== 'detail') {
+            return;
+        }
+        page.innerHTML = '<button type="button" class="member-back-btn" onclick="memberBackHome()">← 返回</button>'
+            + '<div class="member-detail error">商品详情加载失败</div>';
+    }
 }
 
 function memberRenderOrders() {
@@ -285,8 +402,8 @@ async function memberOrderCreate() {
             amount: Number(amount),
             delay: delay
         });
-        memberOrderLastOrderId = String(data.orderId);
-        memberOrderLastTaskId = String(data.taskId);
+        memberOrderLastOrderId = memberSnowflakeId(data.orderId);
+        memberOrderLastTaskId = memberSnowflakeId(data.taskId);
         document.getElementById('memberOrderId').value = memberOrderLastOrderId;
         resultBox.className = 'result-box member-order-result';
         resultBox.textContent = JSON.stringify(data, null, 2);

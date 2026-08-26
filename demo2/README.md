@@ -1367,6 +1367,26 @@ curl -s -X POST http://localhost:8081/demo/orders/cancel \
 curl -s "http://localhost:8081/demo/delay-tasks?bizKey={orderId}"
 ```
 
+**商品 C 端 Demo（`product` / `/demo/products`）：**
+
+- 依赖 MySQL 表 `demo_product`、`demo_product_stock`、`demo_product_stock_log`
+- 执行 `src/main/resources/db/product-module-schema.sql`（含 DDL + 3 件 seed 商品）
+- Spec / Plan / **归档**：`docs/superpowers/specs/2026-08-26-product-module-design.md`、`docs/superpowers/plans/2026-08-26-product-module.md`、`docs/superpowers/archive/2026-08-26-product-module.md`
+- C 端入口：首页 Tab「会员 Demo」→ 商品列表 / 详情（`member.js`）；**无需登录**
+- 本阶段仅读接口；库存写操作由 `ProductStockDomainService` 供订单模块内部调用，订单改造后续做
+
+```bash
+# 商品列表（上架商品 + 可售库存 / 已售）
+curl -s -X POST http://localhost:8081/demo/products/listProducts \
+  -H "Content-Type: application/json" \
+  -d "{}"
+
+# 商品详情（productId 为雪花 ID，JSON 中为字符串）
+curl -s -X POST http://localhost:8081/demo/products/getProduct \
+  -H "Content-Type: application/json" \
+  -d "{\"productId\":\"2085550503315509001\"}"
+```
+
 **分布式后端（`PostgresDistributedStore` / 共享 Workspace）：**
 
 - 开关：`app.agentscope.distributed.enabled`（本地默认 `true`；测试 `false`）
@@ -3136,7 +3156,10 @@ demo2/
 │   └── archive/
 │       ├── 2026-07-06-lkcoffee-mcp.md        # 瑞幸点单功能归档
 │       ├── 2026-07-08-elevenlabs-voice-chat.md # ElevenLabs 语音对话归档
-│       └── 2026-07-16-embabel-quizzard.md    # Embabel Quizzard 出题归档
+│       ├── 2026-07-16-embabel-quizzard.md    # Embabel Quizzard 出题归档
+│       ├── 2026-08-23-order-ddd-package-refactor.md # 订单 DDD 分包样板归档
+│       ├── 2026-08-25-unified-json-result.md # 统一 JsonResult 归档
+│       └── 2026-08-26-product-module.md      # 商品模块归档
 └── pom.xml
 ```
 
@@ -3258,6 +3281,7 @@ MCP Client 连接本机 MCP Server（`http://localhost:8081/mcp`，Streamable HT
 - **瑞幸 MCP 点单**：Streamable HTTP 双远程 MCP（瑞幸 + 高德）+ 官方 My Coffee Skill 内嵌 System Prompt，见 §10.1 与 `docs/superpowers/archive/2026-07-06-lkcoffee-mcp.md`
 - **ElevenLabs 语音对话**：TTS（`spring-ai-starter-model-elevenlabs`）+ 自封装 Scribe STT + 分句流式朗读，见 §10.2 与 `docs/superpowers/archive/2026-07-08-elevenlabs-voice-chat.md`
 - **Embabel 自动选路 + Quizzard**：`embabel-agent` 2.0.0-SNAPSHOT Closed 模式三 Agent；jsoup 抓文 + Action 链出题，见 §10.3 与 `docs/superpowers/archive/2026-07-16-embabel-quizzard.md`
+- **商品模块**：三表 + C 端 list/get + `ProductStockDomainService` 预占/实扣/释放，见快速开始「商品 C 端 Demo」与 `docs/superpowers/archive/2026-08-26-product-module.md`
 - **Micrometer + OpenTelemetry**：Boot 4 内置，通过 `spring-boot-starter-opentelemetry` 接入；Spring AI 自动暴露 `gen_ai.*` 指标
 
 详细设计见 `docs/superpowers/specs/` 目录。

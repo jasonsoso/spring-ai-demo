@@ -44,7 +44,7 @@
 | 通用 | `1xxxx` | `CommonErrorCode`（如 `UNAUTHORIZED=10003`、`INVALID_TOKEN=10004`） |
 | 会员 | `2xxxx` | `MemberErrorCode`（如 `PASSWORD_ERROR=20003`） |
 | 订单 | `3xxxx` | `OrderErrorCode`（如 `ORDER_NOT_FOUND=30001`） |
-| 商品 | `4xxxx` | 预留 |
+| 商品 | `4xxxx` | `ProductErrorCodeEnum`（如 `PRODUCT_NOT_FOUND=40001`） |
 
 ---
 

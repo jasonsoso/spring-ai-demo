@@ -1,0 +1,32 @@
+package com.jason.demo.demo2.product.service.common;
+
+import com.jason.demo.demo2.framework.web.exception.ErrorCode;
+
+public enum ProductErrorCodeEnum implements ErrorCode {
+
+    PRODUCT_NOT_FOUND(40001, "商品不存在"),
+    PRODUCT_OFF_SHELF(40002, "商品已下架"),
+    STOCK_INSUFFICIENT(40003, "可售库存不足"),
+    RESERVE_LOG_NOT_FOUND(40004, "无待释放的预占流水"),
+    STOCK_CONFLICT(40005, "库存状态冲突"),
+    PRODUCT_ID_REQUIRED(40006, "productId 不能为空"),
+    STOCK_NOT_FOUND(40007, "库存记录不存在");
+
+    private final int code;
+    private final String desc;
+
+    ProductErrorCodeEnum(int code, String desc) {
+        this.code = code;
+        this.desc = desc;
+    }
+
+    @Override
+    public int getCode() {
+        return code;
+    }
+
+    @Override
+    public String getDesc() {
+        return desc;
+    }
+}
