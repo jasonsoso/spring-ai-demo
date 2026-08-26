@@ -6,6 +6,7 @@ let memberMobileTab = 'home';
 let memberSessionDeleted = false;
 let memberOrderLastOrderId = '';
 let memberOrderLastTaskId = '';
+let memberToastTimer = null;
 
 function memberDefaultAvatar() {
     return 'data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -49,6 +50,49 @@ function memberAppendLog(message) {
     box.scrollTop = box.scrollHeight;
 }
 
+function memberEnsureToast() {
+    const screen = document.querySelector('.member-phone-screen');
+    if (!screen) {
+        return null;
+    }
+    let toast = document.getElementById('memberToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'memberToast';
+        toast.className = 'member-toast';
+        toast.innerHTML = '<span class="member-toast-icon" aria-hidden="true">!</span>'
+            + '<span class="member-toast-text"></span>';
+        toast.addEventListener('click', memberHideToast);
+        screen.appendChild(toast);
+    }
+    return toast;
+}
+
+function memberHideToast() {
+    const toast = document.getElementById('memberToast');
+    if (toast) {
+        toast.classList.remove('show');
+    }
+    if (memberToastTimer) {
+        clearTimeout(memberToastTimer);
+        memberToastTimer = null;
+    }
+}
+
+function memberShowError(message) {
+    const toast = memberEnsureToast();
+    const text = message || '请求失败';
+    if (!toast) {
+        return;
+    }
+    toast.querySelector('.member-toast-text').textContent = text;
+    toast.classList.add('show');
+    if (memberToastTimer) {
+        clearTimeout(memberToastTimer);
+    }
+    memberToastTimer = setTimeout(memberHideToast, 2800);
+}
+
 function memberHeaders() {
     const headers = { 'Content-Type': 'application/json' };
     if (memberToken) {
@@ -65,16 +109,27 @@ async function memberPost(url, body) {
     });
 }
 
-async function memberRequest(url, body) {
+async function memberRequest(url, body, options) {
+    const silent = options && options.silent;
     const res = await memberPost(url, body);
     let result;
     try {
         result = JSON.parse(await res.text());
     } catch (e) {
-        throw new Error('响应解析失败');
+        const message = '响应解析失败';
+        if (!silent) {
+            memberShowError(message);
+        }
+        throw new Error(message);
     }
     if (result.code !== 0) {
-        throw new Error(result.message || '请求失败');
+        const message = result.message || '请求失败';
+        if (!silent) {
+            memberShowError(message);
+        }
+        const error = new Error(message);
+        error.code = result.code;
+        throw error;
     }
     return result.data;
 }
@@ -139,64 +194,28 @@ function memberRenderMe() {
         : '<div><h3>你好，你还没登录</h3><p>点击此区域登录/注册</p></div>';
     const form = loggedIn
         ? '<button type="button" class="btn" style="margin-top:16px;width:100%;" onclick="memberLogout()">退出登录</button>'
-        : '<div class="member-auth-form">' +
-          '<input id="memberPhoneInput" value="13888999999" placeholder="手机号" autocomplete="username">' +
-          '<input id="memberPasswordInput" value="pwd123456" placeholder="密码" type="password" autocomplete="current-password">' +
-          '<input id="memberAvatarInput" placeholder="头像 URL（可选）">' +
-          '<button type="button" class="btn" onclick="memberRegister()">注册</button>' +
-          '<button type="button" class="btn btn-primary" onclick="memberLogin()">登录</button>' +
-          '</div>';
+        : '';
+    const cardClass = loggedIn ? 'member-user-card member-user-card--logged-in' : 'member-user-card';
+    const cardClick = loggedIn ? '' : ' onclick="memberOpenAuth()"';
     document.getElementById('memberPhonePage').innerHTML =
         '<h2>我的</h2>' +
-        '<div class="member-user-card" onclick="memberFocusLogin()">' +
+        '<div class="' + cardClass + '"' + cardClick + '>' +
         '<img class="member-avatar" alt="会员头像" src="' + memberEscapeHtml(avatar) + '">' +
         summary +
         '</div>' +
         form;
 }
 
-function memberFocusLogin() {
-    const input = document.getElementById('memberPhoneInput');
-    if (input) {
-        input.focus();
-    }
+function memberOpenAuth() {
+    MemberAuth.open({ mode: 'login' });
 }
 
-function memberAuthInput() {
-    return {
-        phone: document.getElementById('memberPhoneInput').value.trim(),
-        password: document.getElementById('memberPasswordInput').value
-    };
-}
-
-async function memberRegister() {
-    const input = memberAuthInput();
-    const avatarUrl = document.getElementById('memberAvatarInput').value.trim();
-    try {
-        const data = await memberRequest('/demo/members/register', {
-            phone: input.phone,
-            password: input.password,
-            avatarUrl: avatarUrl
-        });
-        memberAppendLog('注册成功：' + JSON.stringify(data));
-    } catch (e) {
-        memberAppendLog('注册失败：' + e.message);
+function memberRequireLogin() {
+    if (memberToken) {
+        return true;
     }
-}
-
-async function memberLogin() {
-    const input = memberAuthInput();
-    try {
-        const data = await memberRequest('/demo/members/login', input);
-        memberToken = data.token;
-        memberProfile = data;
-        memberSessionDeleted = false;
-        localStorage.setItem(MEMBER_TOKEN_STORAGE_KEY, memberToken);
-        memberAppendLog('登录成功：' + data.phone);
-        memberRender();
-    } catch (e) {
-        memberAppendLog('登录失败：' + e.message);
-    }
+    MemberAuth.open({ mode: 'login' });
+    return false;
 }
 
 async function memberLoadProfile() {
@@ -205,7 +224,7 @@ async function memberLoadProfile() {
         return;
     }
     try {
-        memberProfile = await memberRequest('/demo/members/getProfile', {});
+        memberProfile = await memberRequest('/demo/members/getProfile', {}, { silent: true });
         memberSessionDeleted = false;
         memberAppendLog('个人中心：' + JSON.stringify(memberProfile));
         memberRender();
@@ -253,8 +272,7 @@ function memberOrderResultBox() {
 }
 
 async function memberOrderCreate() {
-    if (!memberToken) {
-        memberAppendLog('创建订单失败：请先登录');
+    if (!memberRequireLogin()) {
         return;
     }
     const amount = document.getElementById('memberOrderAmount').value.trim();
@@ -282,8 +300,7 @@ async function memberOrderCreate() {
 }
 
 async function memberOrderPay() {
-    if (!memberToken) {
-        memberAppendLog('模拟支付失败：请先登录');
+    if (!memberRequireLogin()) {
         return;
     }
     const orderId = document.getElementById('memberOrderId').value.trim() || memberOrderLastOrderId;
@@ -307,8 +324,7 @@ async function memberOrderPay() {
 }
 
 async function memberOrderCancel() {
-    if (!memberToken) {
-        memberAppendLog('取消订单失败：请先登录');
+    if (!memberRequireLogin()) {
         return;
     }
     const orderId = document.getElementById('memberOrderId').value.trim() || memberOrderLastOrderId;
@@ -332,8 +348,7 @@ async function memberOrderCancel() {
 }
 
 async function memberOrderRefresh() {
-    if (!memberToken) {
-        memberAppendLog('刷新订单失败：请先登录');
+    if (!memberRequireLogin()) {
         return;
     }
     const orderId = document.getElementById('memberOrderId').value.trim() || memberOrderLastOrderId;

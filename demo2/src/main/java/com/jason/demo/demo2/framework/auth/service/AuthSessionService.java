@@ -4,12 +4,13 @@ import com.jason.demo.demo2.framework.auth.configuration.AuthProperties;
 import com.jason.demo.demo2.framework.auth.model.AuthSession;
 import com.jason.demo.demo2.framework.auth.web.AuthHttpSupport;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.types.Expiration;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -36,7 +37,12 @@ public class AuthSessionService {
                 properties.getSessionTtl().toSeconds());
         String key = buildSessionKey(token);
         String json = toJson(session);
-        redis.opsForValue().set(key, json, Expiration.from(properties.getSessionTtl()));
+        // 不用 opsForValue().set(key, value, Expiration)：部分 Boot4/Lettuce 下
+        // DefaultedRedisConnection#set 会无限递归（StackOverflowError），改走 Lua（见 SnowflakeNodeAllocator）。
+        DefaultRedisScript<String> script = new DefaultRedisScript<>(
+                "return redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[2]))",
+                String.class);
+        redis.execute(script, List.of(key), json, String.valueOf(properties.getSessionTtl().toSeconds()));
         return session;
     }
 

@@ -8,17 +8,19 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.data.redis.core.types.Expiration;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
 import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -54,10 +56,11 @@ class AuthSessionServiceTest {
         assertEquals("13888999999", session.phone());
         assertEquals("https://example.com/a.png", session.avatarUrl());
         assertEquals(86400L, session.expiresInSeconds());
-        verify(values).set(
-                eq("demo2:auth:session:" + session.token()),
+        verify(redis).execute(
+                any(DefaultRedisScript.class),
+                eq(List.of("demo2:auth:session:" + session.token())),
                 anyString(),
-                eq(Expiration.from(Duration.ofHours(24))));
+                eq("86400"));
     }
 
     @Test
