@@ -1,6 +1,6 @@
 ---
-description: demo2 Java 通用编码约定（枚举命名、日志）
-globs: demo2/src/main/java/**/*.java
+description: demo2 Java 通用编码约定（枚举命名、日志、Mapper SQL）
+globs: demo2/src/main/java/**/*.java,demo2/src/main/resources/mapper/**/*.xml
 alwaysApply: false
 ---
 
@@ -14,6 +14,15 @@ alwaysApply: false
 - 框架通用错误码：`CommonErrorCodeEnum`
 
 禁止：`OrderStatus`、`MemberErrorCode`、`CommonErrorCode` 等不带 `Enum` 后缀的枚举名。
+
+## Mapper SQL
+
+自定义 SQL **写在 `xxxMapper.xml`**，不要用 `@Select` / `@Insert` / `@Update` / `@Delete` 把 SQL 写在 Mapper 接口上。
+
+- 接口只声明方法（可用 `@Param`）
+- XML 放 `src/main/resources/mapper/{module}/{Entity}Mapper.xml`
+- `namespace` 必须等于 Mapper 接口全限定名
+- 仅 BaseMapper CRUD、无需自定义 SQL 时，可以不建 XML
 
 ## 日志
 

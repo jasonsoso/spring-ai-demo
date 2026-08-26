@@ -17,6 +17,8 @@ app → service.core → service.infrastructure
 | `app` | controller（只做校验 + 调 CmdExe + `JsonResults` 包装）、executor（`*CmdExe`，含 VO 转换）、listener/job、vo/req\|res、convert（`*VoConvert`） |
 | `service.core` | domain（聚合根 `extends *DO`）、`*DomainService` |
 | `service.infrastructure` | dao.entity（`*DO`）、dao.mapper、repository（`*Repository`）、convert（`*DoConvert`） |
+
+自定义 SQL 写在 `src/main/resources/mapper/{module}/{Entity}Mapper.xml`，Mapper 接口只声明方法。禁止 `@Select` / `@Insert` / `@Update` / `@Delete` 注解 SQL。
 | `service.common` | 状态枚举 `{Entity}StatusEnum`、错误码 `{Module}ErrorCodeEnum`（实现 `ErrorCode`） |
 
 禁止：Controller 注入 `*VoConvert`；Controller/CmdExe 直接注入 Mapper；domain 依赖 app；infrastructure 依赖 app。

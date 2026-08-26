@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jason.demo.demo2.product.service.infrastructure.dao.mapper.ProductStockMapper">
+
+    <update id="reserve">
+        UPDATE demo_product_stock
+        SET stock = stock - #{qty},
+            withhold_stock = withhold_stock + #{qty},
+            updated_at = NOW(3)
+        WHERE product_id = #{productId}
+          AND stock >= #{qty}
+    </update>
+
+    <update id="confirm">
+        UPDATE demo_product_stock
+        SET actual_stock = actual_stock - #{qty},
+            withhold_stock = withhold_stock - #{qty},
+            sell_stock = sell_stock + #{qty},
+            updated_at = NOW(3)
+        WHERE product_id = #{productId}
+          AND withhold_stock >= #{qty}
+    </update>
+
+    <update id="release">
+        UPDATE demo_product_stock
+        SET stock = stock + #{qty},
+            withhold_stock = withhold_stock - #{qty},
+            updated_at = NOW(3)
+        WHERE product_id = #{productId}
+          AND withhold_stock >= #{qty}
+    </update>
+
+</mapper>

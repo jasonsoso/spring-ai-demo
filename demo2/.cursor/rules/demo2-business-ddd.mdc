@@ -17,6 +17,7 @@ app → service.core → service.infrastructure
 - **app**: Controller（只做校验/调 CmdExe/`JsonResults` 包装）、executor（*CmdExe，含 VO 转换）、listener/job、vo/req|res、convert（*VoConvert）
 - **service.core**: domain（聚合根 `extends *DO`）、*DomainService
 - **service.infrastructure**: dao.entity（*DO）、dao.mapper、repository（*Repository）、convert（*DoConvert）
+- 自定义 SQL 写在 `src/main/resources/mapper/{module}/{Entity}Mapper.xml`，禁止 `@Select`/`@Update` 等注解 SQL
 - **service.common**: `{Entity}StatusEnum`、`{Module}ErrorCodeEnum` 等枚举（类名必须以 `Enum` 结尾）
 
 禁止：Controller 注入 `*VoConvert`；Controller/CmdExe 直接注入 Mapper；domain 依赖 app；infrastructure 依赖 app。

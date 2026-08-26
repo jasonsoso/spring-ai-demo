@@ -30,6 +30,7 @@ alwaysApply: false
 {module}/service/core/{Module}DomainException.java
 {module}/service/infrastructure/dao/entity/{Entity}DO.java
 {module}/service/infrastructure/dao/mapper/{Entity}Mapper.java
+src/main/resources/mapper/{module}/{Entity}Mapper.xml  # 自定义 SQL，禁止注解 SQL
 {module}/service/infrastructure/repository/{Entity}Repository.java
 {module}/service/infrastructure/repository/convert/{Entity}DoConvert.java
 src/test/java/.../{Module}CmdExeTest.java
