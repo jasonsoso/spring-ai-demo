@@ -12,7 +12,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.method.HandlerMethod;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
 
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
@@ -61,7 +61,7 @@ class LoginRequiredInterceptorTest {
                 () -> interceptor.preHandle(mock(HttpServletRequest.class), mock(HttpServletResponse.class),
                         handler("protectedEndpoint")));
 
-        assertEquals(CommonErrorCode.INVALID_TOKEN.getCode(), ex.getCode());
+        assertEquals(CommonErrorCodeEnum.INVALID_TOKEN.getCode(), ex.getCode());
     }
 
     @Test

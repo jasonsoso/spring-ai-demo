@@ -5,7 +5,7 @@ import com.jason.demo.demo2.framework.auth.service.AuthSessionService;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
 import com.jason.demo.demo2.member.app.convert.MemberVoConvert;
 import com.jason.demo.demo2.member.app.vo.res.LoginMemberResVO;
-import com.jason.demo.demo2.member.service.common.MemberErrorCode;
+import com.jason.demo.demo2.member.service.common.MemberErrorCodeEnum;
 import com.jason.demo.demo2.member.service.core.MemberDomainService;
 import com.jason.demo.demo2.member.service.core.PasswordHasher;
 import com.jason.demo.demo2.member.service.core.domain.Member;
@@ -33,7 +33,7 @@ public class MemberLoginCmdExe {
     public LoginMemberResVO execute(String phone, String password) {
         Member member = memberDomainService.requireLoginMember(phone);
         if (!passwordHasher.matches(password, member.getPasswordHash())) {
-            throw new BusinessException(MemberErrorCode.PASSWORD_ERROR);
+            throw new BusinessException(MemberErrorCodeEnum.PASSWORD_ERROR);
         }
         AuthSession session = authSessionService.createSession(
                 member.getMemberId(), member.getPhone(), member.getAvatarUrl());

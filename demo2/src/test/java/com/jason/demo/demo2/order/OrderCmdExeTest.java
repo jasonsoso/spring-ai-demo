@@ -11,12 +11,11 @@ import com.jason.demo.demo2.order.app.executor.OrderCancelCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderGetCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderPaySuccessCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderPlaceCmdExe;
-import com.jason.demo.demo2.order.app.vo.OrderPlaceResult;
 import com.jason.demo.demo2.order.app.vo.res.CancelOrderResVO;
 import com.jason.demo.demo2.order.app.vo.res.GetOrderResVO;
 import com.jason.demo.demo2.order.app.vo.res.OrderPlaceResVO;
 import com.jason.demo.demo2.order.app.vo.res.PayOrderResVO;
-import com.jason.demo.demo2.order.service.common.OrderStatus;
+import com.jason.demo.demo2.order.service.common.OrderStatusEnum;
 import com.jason.demo.demo2.order.service.core.OrderDomainService;
 import com.jason.demo.demo2.order.service.core.domain.Order;
 import org.junit.jupiter.api.AfterEach;
@@ -69,47 +68,38 @@ class OrderCmdExeTest {
         when(idGenerator.nextId()).thenReturn(55L);
         when(delayTaskService.schedule(eq(DelayTaskType.ORDER_CANCEL), eq("55"), isNull(), any()))
                 .thenReturn(77L);
-        when(orderVoConvert.toPlaceRes(any(OrderPlaceResult.class))).thenAnswer(invocation -> {
-            OrderPlaceResult result = invocation.getArgument(0);
-            OrderPlaceResVO vo = new OrderPlaceResVO();
-            vo.setOrderId(result.getOrderId());
-            vo.setTaskId(result.getTaskId());
-            vo.setStatus(result.getStatus());
-            vo.setAmount(result.getAmount());
-            vo.setDelay(result.getDelay() == null ? null : result.getDelay().toString());
-            return vo;
-        });
         OrderPlaceCmdExe exe = new OrderPlaceCmdExe(
-                orderDomainService, delayTaskService, idGenerator, delayProperties, orderVoConvert);
+                orderDomainService, delayTaskService, idGenerator, delayProperties);
 
         OrderPlaceResVO result = exe.execute(new BigDecimal("9.90"), Duration.ofSeconds(10));
 
         assertEquals(55L, result.getOrderId());
         assertEquals(77L, result.getTaskId());
-        assertEquals(OrderStatus.PENDING_PAY.name(), result.getStatus());
+        assertEquals(OrderStatusEnum.PENDING_PAY.name(), result.getStatus());
+        assertEquals("PT10S", result.getDelay());
         verify(orderDomainService).place(argThat(o -> o.getOrderId() == 55L
                 && o.getMemberId() == 9001L
-                && OrderStatus.PENDING_PAY.name().equals(o.getStatus())));
+                && OrderStatusEnum.PENDING_PAY.name().equals(o.getStatus())));
         verify(delayTaskService).schedule(DelayTaskType.ORDER_CANCEL, "55", null, Duration.ofSeconds(10));
     }
 
     @Test
     void pay_cancelsDelayTask() {
-        Order paid = order(55L, OrderStatus.PAID);
+        Order paid = order(55L, OrderStatusEnum.PAID);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(paid);
         when(orderVoConvert.toPayRes(paid)).thenReturn(payRes(paid));
         OrderPaySuccessCmdExe exe = new OrderPaySuccessCmdExe(orderDomainService, delayTaskService, orderVoConvert);
 
         PayOrderResVO result = exe.execute(55L);
 
-        assertEquals(OrderStatus.PAID.name(), result.getStatus());
+        assertEquals(OrderStatusEnum.PAID.name(), result.getStatus());
         verify(orderDomainService).payOrder(55L, 9001L);
         verify(delayTaskService).cancelByBizKey(DelayTaskType.ORDER_CANCEL, "55");
     }
 
     @Test
     void get_usesCurrentMemberOwnership() {
-        Order order = order(55L, OrderStatus.PENDING_PAY);
+        Order order = order(55L, OrderStatusEnum.PENDING_PAY);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(order);
         when(orderVoConvert.toGetRes(order)).thenReturn(getRes(order));
         OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
@@ -122,19 +112,19 @@ class OrderCmdExeTest {
 
     @Test
     void cancel_cancelsDelayTask() {
-        Order cancelled = order(55L, OrderStatus.CANCELLED);
+        Order cancelled = order(55L, OrderStatusEnum.CANCELLED);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(cancelled);
         when(orderVoConvert.toCancelRes(cancelled)).thenReturn(cancelRes(cancelled));
         OrderCancelCmdExe exe = new OrderCancelCmdExe(orderDomainService, delayTaskService, orderVoConvert);
 
         CancelOrderResVO result = exe.execute(55L);
 
-        assertEquals(OrderStatus.CANCELLED.name(), result.getStatus());
+        assertEquals(OrderStatusEnum.CANCELLED.name(), result.getStatus());
         verify(orderDomainService).manualCancel(55L, 9001L);
         verify(delayTaskService).cancelByBizKey(DelayTaskType.ORDER_CANCEL, "55");
     }
 
-    private static Order order(long orderId, OrderStatus status) {
+    private static Order order(long orderId, OrderStatusEnum status) {
         Order order = new Order();
         order.setOrderId(orderId);
         order.setStatus(status.name());

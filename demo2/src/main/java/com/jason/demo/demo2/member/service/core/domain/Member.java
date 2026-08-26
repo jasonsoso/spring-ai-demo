@@ -1,8 +1,8 @@
 package com.jason.demo.demo2.member.service.core.domain;
 
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.member.service.common.MemberErrorCode;
-import com.jason.demo.demo2.member.service.common.MemberStatus;
+import com.jason.demo.demo2.member.service.common.MemberErrorCodeEnum;
+import com.jason.demo.demo2.member.service.common.MemberStatusEnum;
 import com.jason.demo.demo2.member.service.infrastructure.dao.entity.MemberDO;
 
 import java.time.LocalDateTime;
@@ -11,17 +11,17 @@ public class Member extends MemberDO {
 
     public static Member create(long memberId, String phone, String passwordHash, String avatarUrl, LocalDateTime now) {
         if (phone == null || phone.isBlank()) {
-            throw new BusinessException(MemberErrorCode.PHONE_REQUIRED);
+            throw new BusinessException(MemberErrorCodeEnum.PHONE_REQUIRED);
         }
         if (passwordHash == null || passwordHash.isBlank()) {
-            throw new BusinessException(MemberErrorCode.PASSWORD_REQUIRED);
+            throw new BusinessException(MemberErrorCodeEnum.PASSWORD_REQUIRED);
         }
         Member member = new Member();
         member.setMemberId(memberId);
         member.setPhone(phone.trim());
         member.setPasswordHash(passwordHash);
         member.setAvatarUrl(avatarUrl == null || avatarUrl.isBlank() ? null : avatarUrl.trim());
-        member.setStatus(MemberStatus.NORMAL.name());
+        member.setStatus(MemberStatusEnum.NORMAL.name());
         member.setCreatedAt(now);
         member.setUpdatedAt(now);
         return member;
@@ -44,8 +44,8 @@ public class Member extends MemberDO {
     }
 
     public void requireCanLogin() {
-        if (!MemberStatus.NORMAL.name().equals(getStatus())) {
-            throw new BusinessException(MemberErrorCode.MEMBER_CANNOT_LOGIN);
+        if (!MemberStatusEnum.NORMAL.name().equals(getStatus())) {
+            throw new BusinessException(MemberErrorCodeEnum.MEMBER_CANNOT_LOGIN);
         }
     }
 }

@@ -10,7 +10,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
@@ -88,7 +88,7 @@ class AuthSessionServiceTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.requireSession("gone"));
 
-        assertEquals(CommonErrorCode.UNAUTHORIZED.getCode(), ex.getCode());
+        assertEquals(CommonErrorCodeEnum.UNAUTHORIZED.getCode(), ex.getCode());
     }
 
     @Test

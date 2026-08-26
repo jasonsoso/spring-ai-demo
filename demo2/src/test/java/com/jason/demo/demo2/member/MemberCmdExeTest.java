@@ -12,7 +12,7 @@ import com.jason.demo.demo2.member.app.executor.MemberRegisterCmdExe;
 import com.jason.demo.demo2.member.app.vo.res.GetMemberProfileResVO;
 import com.jason.demo.demo2.member.app.vo.res.LoginMemberResVO;
 import com.jason.demo.demo2.member.app.vo.res.RegisterMemberResVO;
-import com.jason.demo.demo2.member.service.common.MemberStatus;
+import com.jason.demo.demo2.member.service.common.MemberStatusEnum;
 import com.jason.demo.demo2.member.service.core.MemberDomainService;
 import com.jason.demo.demo2.member.service.core.PasswordHasher;
 import com.jason.demo.demo2.member.service.core.domain.Member;
@@ -64,7 +64,7 @@ class MemberCmdExeTest {
         assertEquals(9001L, member.getMemberId());
         assertEquals("13888999999", member.getPhone());
         assertEquals("https://example.com/a.png", member.getAvatarUrl());
-        assertEquals(MemberStatus.NORMAL.name(), member.getStatus());
+        assertEquals(MemberStatusEnum.NORMAL.name(), member.getStatus());
         verify(domainService).register(org.mockito.ArgumentMatchers.argThat(m -> m.getMemberId() == 9001L));
     }
 
@@ -113,7 +113,7 @@ class MemberCmdExeTest {
         member.setPhone("13888999999");
         member.setPasswordHash("hashed");
         member.setAvatarUrl("https://example.com/a.png");
-        member.setStatus(MemberStatus.NORMAL.name());
+        member.setStatus(MemberStatusEnum.NORMAL.name());
         return member;
     }
 

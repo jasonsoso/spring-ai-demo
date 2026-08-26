@@ -2,7 +2,7 @@ package com.jason.demo.demo2.member.app.controller;
 
 import com.jason.demo.demo2.framework.auth.annotation.LoginRequired;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
 import com.jason.demo.demo2.framework.web.result.JsonResult;
 import com.jason.demo.demo2.framework.web.result.JsonResults;
 import com.jason.demo.demo2.member.app.executor.MemberGetProfileCmdExe;
@@ -76,7 +76,7 @@ public class MemberController {
 
     private static String requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new BusinessException(CommonErrorCode.PARAM_MISSING, fieldName + " is required");
+            throw new BusinessException(CommonErrorCodeEnum.PARAM_MISSING, fieldName + " is required");
         }
         return value;
     }

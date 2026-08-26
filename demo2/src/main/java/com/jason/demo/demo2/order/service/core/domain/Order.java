@@ -1,8 +1,8 @@
 package com.jason.demo.demo2.order.service.core.domain;
 
-import com.jason.demo.demo2.order.service.common.OrderStatus;
+import com.jason.demo.demo2.order.service.common.OrderStatusEnum;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.order.service.common.OrderErrorCode;
+import com.jason.demo.demo2.order.service.common.OrderErrorCodeEnum;
 import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO;
 
 import java.math.BigDecimal;
@@ -12,12 +12,12 @@ public class Order extends OrderDO {
 
     public static Order create(long orderId, long memberId, BigDecimal amount, LocalDateTime now) {
         if (amount == null || amount.signum() <= 0) {
-            throw new BusinessException(OrderErrorCode.AMOUNT_INVALID);
+            throw new BusinessException(OrderErrorCodeEnum.AMOUNT_INVALID);
         }
         Order order = new Order();
         order.setOrderId(orderId);
         order.setMemberId(memberId);
-        order.setStatus(OrderStatus.PENDING_PAY.name());
+        order.setStatus(OrderStatusEnum.PENDING_PAY.name());
         order.setAmount(amount);
         order.setCreatedAt(now);
         order.setUpdatedAt(now);
@@ -39,19 +39,19 @@ public class Order extends OrderDO {
     }
 
     public void pay() {
-        if (!OrderStatus.PENDING_PAY.name().equals(getStatus())) {
-            throw new BusinessException(OrderErrorCode.ORDER_STATUS_CONFLICT,
+        if (!OrderStatusEnum.PENDING_PAY.name().equals(getStatus())) {
+            throw new BusinessException(OrderErrorCodeEnum.ORDER_STATUS_CONFLICT,
                     "cannot pay order in status " + getStatus());
         }
-        setStatus(OrderStatus.PAID.name());
+        setStatus(OrderStatusEnum.PAID.name());
         setUpdatedAt(LocalDateTime.now());
     }
 
     public boolean cancel() {
-        if (!OrderStatus.PENDING_PAY.name().equals(getStatus())) {
+        if (!OrderStatusEnum.PENDING_PAY.name().equals(getStatus())) {
             return false;
         }
-        setStatus(OrderStatus.CANCELLED.name());
+        setStatus(OrderStatusEnum.CANCELLED.name());
         setUpdatedAt(LocalDateTime.now());
         return true;
     }

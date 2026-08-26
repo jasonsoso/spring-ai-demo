@@ -1,7 +1,7 @@
 package com.jason.demo.demo2.framework.auth.web;
 
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
 
 public final class AuthHttpSupport {
 
@@ -9,10 +9,10 @@ public final class AuthHttpSupport {
     }
 
     public static BusinessException unauthorized() {
-        return new BusinessException(CommonErrorCode.UNAUTHORIZED);
+        return new BusinessException(CommonErrorCodeEnum.UNAUTHORIZED);
     }
 
     public static BusinessException invalidToken() {
-        return new BusinessException(CommonErrorCode.INVALID_TOKEN);
+        return new BusinessException(CommonErrorCodeEnum.INVALID_TOKEN);
     }
 }

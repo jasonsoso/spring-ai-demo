@@ -2,7 +2,7 @@ package com.jason.demo.demo2.order.app.controller;
 
 import com.jason.demo.demo2.framework.auth.annotation.LoginRequired;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
 import com.jason.demo.demo2.framework.web.result.JsonResult;
 import com.jason.demo.demo2.framework.web.result.JsonResults;
 import com.jason.demo.demo2.order.app.executor.OrderCancelCmdExe;
@@ -49,7 +49,7 @@ public class OrderController {
     @PostMapping("/orderPlace")
     public JsonResult<OrderPlaceResVO> orderPlace(@RequestBody OrderPlaceReqVO request) {
         if (request == null || request.getAmount() == null) {
-            throw new BusinessException(CommonErrorCode.PARAM_MISSING, "amount is required");
+            throw new BusinessException(CommonErrorCodeEnum.PARAM_MISSING, "amount is required");
         }
         Duration delay = OrderDelayParser.parseDelay(request.getDelay());
         return JsonResults.ok(orderPlaceCmdExe.execute(request.getAmount(), delay));
@@ -78,7 +78,7 @@ public class OrderController {
 
     private static long requireOrderId(Long orderId) {
         if (orderId == null) {
-            throw new BusinessException(CommonErrorCode.PARAM_MISSING, "orderId is required");
+            throw new BusinessException(CommonErrorCodeEnum.PARAM_MISSING, "orderId is required");
         }
         return orderId;
     }

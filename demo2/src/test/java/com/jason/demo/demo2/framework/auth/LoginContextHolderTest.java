@@ -5,7 +5,7 @@ import com.jason.demo.demo2.framework.auth.context.LoginPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -33,6 +33,6 @@ class LoginContextHolderTest {
     @Test
     void requireThrowsWhenMissing() {
         BusinessException ex = assertThrows(BusinessException.class, LoginContextHolder::require);
-        assertEquals(CommonErrorCode.UNAUTHORIZED.getCode(), ex.getCode());
+        assertEquals(CommonErrorCodeEnum.UNAUTHORIZED.getCode(), ex.getCode());
     }
 }

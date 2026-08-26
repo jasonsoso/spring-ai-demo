@@ -1,7 +1,7 @@
 package com.jason.demo.demo2.member.service.core;
 
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.member.service.common.MemberErrorCode;
+import com.jason.demo.demo2.member.service.common.MemberErrorCodeEnum;
 import com.jason.demo.demo2.member.service.core.domain.Member;
 import com.jason.demo.demo2.member.service.infrastructure.repository.MemberRepository;
 import org.junit.jupiter.api.Test;
@@ -33,7 +33,7 @@ class MemberDomainServiceTest {
                 BusinessException.class,
                 () -> service.register(member));
 
-        assertEquals(MemberErrorCode.PHONE_ALREADY_REGISTERED.getCode(), exception.getCode());
+        assertEquals(MemberErrorCodeEnum.PHONE_ALREADY_REGISTERED.getCode(), exception.getCode());
         assertEquals("手机号已注册", exception.getMessage());
     }
 

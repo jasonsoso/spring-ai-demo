@@ -2,7 +2,7 @@ package com.jason.demo.demo2.order.service.infrastructure.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.jason.demo.demo2.order.service.common.OrderStatus;
+import com.jason.demo.demo2.order.service.common.OrderStatusEnum;
 import com.jason.demo.demo2.order.service.core.domain.Order;
 import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO;
 import com.jason.demo.demo2.order.service.infrastructure.dao.mapper.OrderMapper;
@@ -43,8 +43,8 @@ public class OrderRepository {
         int rows = orderMapper.update(null, new LambdaUpdateWrapper<OrderDO>()
                 .eq(OrderDO::getOrderId, orderId)
                 .eq(OrderDO::getMemberId, memberId)
-                .eq(OrderDO::getStatus, OrderStatus.PENDING_PAY.name())
-                .set(OrderDO::getStatus, OrderStatus.PAID.name())
+                .eq(OrderDO::getStatus, OrderStatusEnum.PENDING_PAY.name())
+                .set(OrderDO::getStatus, OrderStatusEnum.PAID.name())
                 .set(OrderDO::getUpdatedAt, now));
         return rows > 0;
     }
@@ -54,8 +54,8 @@ public class OrderRepository {
         int rows = orderMapper.update(null, new LambdaUpdateWrapper<OrderDO>()
                 .eq(OrderDO::getOrderId, orderId)
                 .eq(OrderDO::getMemberId, memberId)
-                .eq(OrderDO::getStatus, OrderStatus.PENDING_PAY.name())
-                .set(OrderDO::getStatus, OrderStatus.CANCELLED.name())
+                .eq(OrderDO::getStatus, OrderStatusEnum.PENDING_PAY.name())
+                .set(OrderDO::getStatus, OrderStatusEnum.CANCELLED.name())
                 .set(OrderDO::getUpdatedAt, now));
         return rows > 0;
     }
@@ -64,8 +64,8 @@ public class OrderRepository {
         LocalDateTime now = LocalDateTime.now();
         int rows = orderMapper.update(null, new LambdaUpdateWrapper<OrderDO>()
                 .eq(OrderDO::getOrderId, orderId)
-                .eq(OrderDO::getStatus, OrderStatus.PENDING_PAY.name())
-                .set(OrderDO::getStatus, OrderStatus.CANCELLED.name())
+                .eq(OrderDO::getStatus, OrderStatusEnum.PENDING_PAY.name())
+                .set(OrderDO::getStatus, OrderStatusEnum.CANCELLED.name())
                 .set(OrderDO::getUpdatedAt, now));
         return rows > 0;
     }

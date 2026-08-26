@@ -1,6 +1,6 @@
 package com.jason.demo.demo2.framework.web.result;
 
-import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
 import com.jason.demo.demo2.framework.web.exception.ErrorCode;
 
 public final class JsonResults {
@@ -10,8 +10,8 @@ public final class JsonResults {
 
     public static <T> JsonResult<T> ok(T data) {
         JsonResult<T> result = new JsonResult<>();
-        result.setCode(CommonErrorCode.SUCCESS.getCode());
-        result.setMessage(CommonErrorCode.SUCCESS.getDesc());
+        result.setCode(CommonErrorCodeEnum.SUCCESS.getCode());
+        result.setMessage(CommonErrorCodeEnum.SUCCESS.getDesc());
         result.setData(data);
         return result;
     }

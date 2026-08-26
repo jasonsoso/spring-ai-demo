@@ -1,6 +1,6 @@
 package com.jason.demo.demo2.framework.web.result;
 
-import com.jason.demo.demo2.framework.web.exception.CommonErrorCode;
+import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,10 +19,10 @@ class JsonResultsTest {
 
     @Test
     void fail_fromErrorCode() {
-        JsonResult<Void> result = JsonResults.fail(CommonErrorCode.UNAUTHORIZED);
+        JsonResult<Void> result = JsonResults.fail(CommonErrorCodeEnum.UNAUTHORIZED);
 
         assertEquals(10003, result.getCode());
-        assertEquals("未登录或登录已失效", result.getMessage());
+        assertEquals(CommonErrorCodeEnum.UNAUTHORIZED.getDesc(), result.getMessage());
         assertNull(result.getData());
     }
 

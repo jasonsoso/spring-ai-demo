@@ -1,7 +1,7 @@
 package com.jason.demo.demo2.order.app.support;
 
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.order.service.common.OrderErrorCode;
+import com.jason.demo.demo2.order.service.common.OrderErrorCodeEnum;
 
 import java.time.Duration;
 
@@ -33,7 +33,7 @@ public final class OrderDelayParser {
             }
             return Duration.parse(value);
         } catch (Exception e) {
-            throw new BusinessException(OrderErrorCode.INVALID_DELAY, "invalid delay: " + raw);
+            throw new BusinessException(OrderErrorCodeEnum.INVALID_DELAY, "invalid delay: " + raw);
         }
     }
 }

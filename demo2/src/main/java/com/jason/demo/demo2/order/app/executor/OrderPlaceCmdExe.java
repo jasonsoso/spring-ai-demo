@@ -5,8 +5,6 @@ import com.jason.demo.demo2.framework.delay.DelayTaskService;
 import com.jason.demo.demo2.framework.delay.DelayTaskType;
 import com.jason.demo.demo2.framework.delay.config.DelayProperties;
 import com.jason.demo.demo2.framework.id.SnowflakeIdGenerator;
-import com.jason.demo.demo2.order.app.convert.OrderVoConvert;
-import com.jason.demo.demo2.order.app.vo.OrderPlaceResult;
 import com.jason.demo.demo2.order.app.vo.res.OrderPlaceResVO;
 import com.jason.demo.demo2.order.service.core.OrderDomainService;
 import com.jason.demo.demo2.order.service.core.domain.Order;
@@ -24,19 +22,16 @@ public class OrderPlaceCmdExe {
     private final DelayTaskService delayTaskService;
     private final SnowflakeIdGenerator idGenerator;
     private final DelayProperties delayProperties;
-    private final OrderVoConvert orderVoConvert;
 
     public OrderPlaceCmdExe(
             OrderDomainService orderDomainService,
             DelayTaskService delayTaskService,
             SnowflakeIdGenerator idGenerator,
-            DelayProperties delayProperties,
-            OrderVoConvert orderVoConvert) {
+            DelayProperties delayProperties) {
         this.orderDomainService = orderDomainService;
         this.delayTaskService = delayTaskService;
         this.idGenerator = idGenerator;
         this.delayProperties = delayProperties;
-        this.orderVoConvert = orderVoConvert;
     }
 
     @Transactional
@@ -53,12 +48,12 @@ public class OrderPlaceCmdExe {
                 null,
                 effectiveDelay);
 
-        OrderPlaceResult result = new OrderPlaceResult();
-        result.setOrderId(orderId);
-        result.setStatus(order.getStatus());
-        result.setAmount(order.getAmount());
-        result.setTaskId(taskId);
-        result.setDelay(effectiveDelay);
-        return orderVoConvert.toPlaceRes(result);
+        OrderPlaceResVO res = new OrderPlaceResVO();
+        res.setOrderId(orderId);
+        res.setStatus(order.getStatus());
+        res.setAmount(order.getAmount());
+        res.setTaskId(taskId);
+        res.setDelay(effectiveDelay.toString());
+        return res;
     }
 }

@@ -1,7 +1,7 @@
 package com.jason.demo.demo2.member.service.core;
 
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
-import com.jason.demo.demo2.member.service.common.MemberErrorCode;
+import com.jason.demo.demo2.member.service.common.MemberErrorCodeEnum;
 import com.jason.demo.demo2.member.service.core.domain.Member;
 import com.jason.demo.demo2.member.service.infrastructure.repository.MemberRepository;
 import org.springframework.dao.DuplicateKeyException;
@@ -18,24 +18,24 @@ public class MemberDomainService {
 
     public void register(Member member) {
         memberRepository.findByPhone(member.getPhone()).ifPresent(existing -> {
-            throw new BusinessException(MemberErrorCode.PHONE_ALREADY_REGISTERED);
+            throw new BusinessException(MemberErrorCodeEnum.PHONE_ALREADY_REGISTERED);
         });
         try {
             memberRepository.insert(member);
         } catch (DuplicateKeyException exception) {
-            throw new BusinessException(MemberErrorCode.PHONE_ALREADY_REGISTERED);
+            throw new BusinessException(MemberErrorCodeEnum.PHONE_ALREADY_REGISTERED);
         }
     }
 
     public Member requireLoginMember(String phone) {
         Member member = memberRepository.findByPhone(phone)
-                .orElseThrow(() -> new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(MemberErrorCodeEnum.MEMBER_NOT_FOUND));
         member.requireCanLogin();
         return member;
     }
 
     public Member requireByMemberId(long memberId) {
         return memberRepository.findByMemberId(memberId)
-                .orElseThrow(() -> new BusinessException(MemberErrorCode.MEMBER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(MemberErrorCodeEnum.MEMBER_NOT_FOUND));
     }
 }
