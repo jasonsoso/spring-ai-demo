@@ -52,7 +52,6 @@ app → service.core → service.infrastructure
 - Controller 入参必须 `@Valid @RequestBody`；校验规则只写在 ReqVO（Jakarta Validation），**禁止**手写 `requireXxx` / 入参判空
 - 校验失败由 `Demo2GlobalExceptionHandler` 映射：`NotNull`/`NotBlank`/`NotEmpty` → `PARAM_MISSING(10002)`，其余 → `BAD_REQUEST(10001)`；HTTP 仍为 200
 - 业务模块 Controller 必须 `@Tag` + 方法 `@Operation`；ReqVO/ResVO 类与字段必须 `@Schema`（与校验 required 对齐）；统一包装见 `JsonResult` Schema
-- 可选延时字符串用 framework `@DelayFormat`（与 `DelayFormats` / `OrderDelayParser` 同规则）
 - 并发安全：Repository 状态更新用 `WHERE status = 期望态` 条件更新，失败抛 CONFLICT
 - 转换：对外 VO 用 MapStruct `*VoConvert`（在 CmdExe 调用）；DO↔Domain 用 `*DoConvert`
 

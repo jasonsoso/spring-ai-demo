@@ -10,6 +10,7 @@ public enum OrderErrorCodeEnum implements ErrorCode {
     ORDER_ID_REQUIRED(30004, "orderId 不能为空"),
     @Deprecated
     AMOUNT_REQUIRED(30005, "amount 不能为空"),
+    @Deprecated
     INVALID_DELAY(30006, "delay 格式无效"),
     QTY_INVALID(30007, "qty 必须在 1~99999"),
     PRICE_CHANGED(30008, "商品售价已变动"),

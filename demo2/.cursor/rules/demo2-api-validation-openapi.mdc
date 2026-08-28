@@ -1,6 +1,6 @@
 ---
 description: demo2 业务 API 入参校验与 OpenAPI/Scalar 注解约定
-globs: demo2/src/main/java/com/jason/demo/demo2/{member,order,product}/app/**/*.java,demo2/src/main/java/com/jason/demo/demo2/framework/web/**/*.java,demo2/src/main/java/com/jason/demo/demo2/framework/validation/**/*.java
+globs: demo2/src/main/java/com/jason/demo/demo2/{member,order,product}/app/**/*.java,demo2/src/main/java/com/jason/demo/demo2/framework/web/**/*.java
 alwaysApply: false
 ---
 
@@ -9,7 +9,7 @@ alwaysApply: false
 ## 校验
 
 - 带 JSON Body 的接口：`@Valid @RequestBody`
-- 规则写在 ReqVO：`@NotNull`/`@NotBlank`/`@Size`/`@Pattern`/`@DecimalMin`/`@Digits`/`@Min`/`@URL`/`@DelayFormat`
+- 规则写在 ReqVO：`@NotNull`/`@NotBlank`/`@Size`/`@Pattern`/`@DecimalMin`/`@Digits`/`@Min`/`@URL`
 - 嵌套对象字段加 `@Valid` 级联
 - 禁止 Controller 手写判空；业务错误仍用 `BusinessException`
 

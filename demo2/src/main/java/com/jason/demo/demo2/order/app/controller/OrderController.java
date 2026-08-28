@@ -10,7 +10,6 @@ import com.jason.demo.demo2.order.app.executor.OrderListCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderPaySuccessCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderPlaceCmdExe;
 import com.jason.demo.demo2.order.app.executor.OrderPreviewCmdExe;
-import com.jason.demo.demo2.order.app.support.OrderDelayParser;
 import com.jason.demo.demo2.order.app.vo.req.CancelOrderReqVO;
 import com.jason.demo.demo2.order.app.vo.req.GetOrderReqVO;
 import com.jason.demo.demo2.order.app.vo.req.OrderListReqVO;
@@ -76,7 +75,7 @@ public class OrderController {
     @Operation(summary = "下单", description = "校验 placeToken 后预占库存并创建 SUBMIT 订单")
     @PostMapping("/orderPlace")
     public JsonResult<OrderPlaceResVO> orderPlace(@Valid @RequestBody OrderPlaceReqVO request) {
-        return JsonResults.ok(orderPlaceCmdExe.execute(request, OrderDelayParser.parseDelay(request.getDelay())));
+        return JsonResults.ok(orderPlaceCmdExe.execute(request));
     }
 
     @LoginRequired

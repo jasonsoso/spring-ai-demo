@@ -70,7 +70,7 @@ public class OrderPlaceCmdExe {
         this.orderDomainService = orderDomainService;
     }
 
-    public OrderPlaceResVO execute(OrderPlaceReqVO req, Duration delay) {
+    public OrderPlaceResVO execute(OrderPlaceReqVO req) {
         long memberId = LoginContextHolder.require().memberId();
         List<OrderLineReqVO> reqItems = req.getItems();
         List<Long> productIds = reqItems == null
@@ -89,7 +89,7 @@ public class OrderPlaceCmdExe {
             throw new BusinessException(OrderErrorCodeEnum.PLACE_TOKEN_INVALID);
         }
 
-        Duration effectiveDelay = delay == null ? delayProperties.getDefaultDelay() : delay;
+        Duration effectiveDelay = delayProperties.getDefaultDelay();
         if (!tokenStore.tryLock(token, Duration.ofSeconds(30))) {
             Optional<Long> raced = tokenStore.getResult(token);
             if (raced.isPresent()) {

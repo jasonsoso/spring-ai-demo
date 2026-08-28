@@ -83,7 +83,7 @@ class OrderPlaceCmdExeTest {
         OrderPlaceCmdExe exe = newExe();
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> exe.execute(placeReq(new BigDecimal("18.00")), Duration.ofSeconds(10)));
+                () -> exe.execute(placeReq(new BigDecimal("18.00"))));
 
         assertEquals(OrderErrorCodeEnum.PLACE_TOKEN_INVALID.getCode(), ex.getCode());
         verify(executor, never()).fireEvent(any(), any(), any());
@@ -103,7 +103,7 @@ class OrderPlaceCmdExeTest {
         OrderPlaceCmdExe exe = newExe();
 
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> exe.execute(placeReq(new BigDecimal("18.00")), Duration.ofSeconds(10)));
+                () -> exe.execute(placeReq(new BigDecimal("18.00"))));
 
         assertEquals(OrderErrorCodeEnum.PRICE_CHANGED.getCode(), ex.getCode());
         verify(executor, never()).fireEvent(any(), any(), any());
@@ -124,7 +124,7 @@ class OrderPlaceCmdExeTest {
         when(orderDomainService.requireOrderWithItems(55L, 9001L)).thenReturn(existing);
         OrderPlaceCmdExe exe = newExe();
 
-        OrderPlaceResVO res = exe.execute(placeReq(new BigDecimal("18.00")), Duration.ofSeconds(10));
+        OrderPlaceResVO res = exe.execute(placeReq(new BigDecimal("18.00")));
 
         assertEquals(55L, res.getOrderId());
         assertEquals(OrderStatusEnum.SUBMIT.name(), res.getOrderStatus());
@@ -147,23 +147,45 @@ class OrderPlaceCmdExeTest {
         when(productDomainService.requireOnShelf(PRODUCT_ID)).thenReturn(new ProductWithStock(product, stock));
         when(hotService.overlayAvail(PRODUCT_ID)).thenReturn(Optional.empty());
         when(idGenerator.nextId()).thenReturn(55L, 66L);
-        when(delayTaskService.schedule(eq(DelayTaskType.ORDER_CANCEL), eq("55"), isNull(), eq(Duration.ofSeconds(10))))
+        when(delayTaskService.schedule(eq(DelayTaskType.ORDER_CANCEL), eq("55"), isNull(), eq(Duration.ofSeconds(30))))
                 .thenReturn(77L);
         OrderPlaceCmdExe exe = newExe();
 
-        OrderPlaceResVO res = exe.execute(placeReq(new BigDecimal("18.00")), Duration.ofSeconds(10));
+        OrderPlaceResVO res = exe.execute(placeReq(new BigDecimal("18.00")));
 
         assertEquals(55L, res.getOrderId());
         assertEquals(OrderStatusEnum.SUBMIT.name(), res.getOrderStatus());
         assertEquals(PayStatusEnum.WAIT_PAY.name(), res.getPayStatus());
         assertEquals(new BigDecimal("36.00"), res.getAmount());
         assertEquals(77L, res.getTaskId());
-        assertEquals("PT10S", res.getDelay());
+        assertEquals("PT30S", res.getDelay());
         InOrder inOrder = inOrder(executor, tokenStore, delayTaskService);
         inOrder.verify(executor).fireEvent(eq(OrderStatusEnum.INIT), eq(OrderEventEnum.SUBMIT_ORDER), any());
         inOrder.verify(tokenStore).saveResult(TOKEN, 55L, Duration.ofHours(24));
-        inOrder.verify(delayTaskService).schedule(DelayTaskType.ORDER_CANCEL, "55", null, Duration.ofSeconds(10));
+        inOrder.verify(delayTaskService).schedule(DelayTaskType.ORDER_CANCEL, "55", null, Duration.ofSeconds(30));
         verify(tokenStore).unlock(TOKEN);
+    }
+
+    @Test
+    void success_usesConfiguredDefaultDelay() {
+        delayProperties.setDefaultDelay(Duration.ofSeconds(45));
+        stubPreview(new BigDecimal("18.00"));
+        when(tokenStore.tryLock(TOKEN, Duration.ofSeconds(30))).thenReturn(true);
+        when(tokenStore.getResult(TOKEN)).thenReturn(Optional.empty());
+        Product product = product(new BigDecimal("18.00"));
+        ProductStock stock = new ProductStock();
+        stock.setStock(100);
+        when(productDomainService.requireOnShelf(PRODUCT_ID)).thenReturn(new ProductWithStock(product, stock));
+        when(hotService.overlayAvail(PRODUCT_ID)).thenReturn(Optional.empty());
+        when(idGenerator.nextId()).thenReturn(55L, 66L);
+        when(delayTaskService.schedule(eq(DelayTaskType.ORDER_CANCEL), eq("55"), isNull(), eq(Duration.ofSeconds(45))))
+                .thenReturn(77L);
+        OrderPlaceCmdExe exe = newExe();
+
+        OrderPlaceResVO res = exe.execute(placeReq(new BigDecimal("18.00")));
+
+        assertEquals("PT45S", res.getDelay());
+        verify(delayTaskService).schedule(DelayTaskType.ORDER_CANCEL, "55", null, Duration.ofSeconds(45));
     }
 
     private OrderPlaceCmdExe newExe() {
