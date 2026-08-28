@@ -11,6 +11,12 @@ let memberOrderLastTaskId = '';
 let memberToastTimer = null;
 let memberHomeRenderSeq = 0;
 let memberDetailRenderSeq = 0;
+let memberPreviewRenderSeq = 0;
+let memberOrdersRenderSeq = 0;
+let memberOrderDetailRenderSeq = 0;
+let memberPreviewQty = 1;
+let memberOrderListTab = 'ALL';
+let memberPreviewData = null;
 
 /** 雪花 ID：后端 Long 经 Jackson 序列化为字符串，前端始终按 string 传递 */
 function memberSnowflakeId(value) {
@@ -152,7 +158,7 @@ function memberSwitchMobileTab(tab) {
         return;
     }
     memberMobileTab = tab;
-    if (tab === 'home') {
+    if (tab === 'home' || tab === 'orders') {
         memberMobileView = 'home';
     }
     memberRender();
@@ -167,13 +173,21 @@ function memberRender() {
     document.getElementById('memberNavOrders').classList.toggle('active', memberMobileTab === 'orders');
     document.getElementById('memberNavMe').classList.toggle('active', memberMobileTab === 'me');
     if (memberMobileTab === 'home') {
-        if (memberMobileView === 'detail') {
+        if (memberMobileView === 'preview') {
+            memberRenderPreview();
+        } else if (memberMobileView === 'orderDetail') {
+            memberRenderOrderDetail();
+        } else if (memberMobileView === 'detail') {
             memberRenderDetail();
         } else {
             memberRenderHome();
         }
     } else if (memberMobileTab === 'orders') {
-        memberRenderOrders();
+        if (memberMobileView === 'orderDetail') {
+            memberRenderOrderDetail();
+        } else {
+            memberRenderOrders();
+        }
     } else {
         memberRenderMe();
     }
@@ -255,6 +269,295 @@ function memberBackHome() {
     memberRender();
 }
 
+function memberBuyNow(productId) {
+    memberSelectedProductId = memberSnowflakeId(productId);
+    if (!memberToken) {
+        MemberAuth.open({
+            mode: 'login',
+            onSuccess: function () {
+                memberMobileView = 'preview';
+                memberPreviewQty = 1;
+                memberRender();
+            }
+        });
+        return;
+    }
+    memberMobileView = 'preview';
+    memberPreviewQty = 1;
+    memberRender();
+}
+
+function memberBackFromPreview() {
+    memberMobileView = 'detail';
+    memberRender();
+}
+
+function memberBackFromOrderDetail() {
+    if (memberMobileTab === 'orders') {
+        memberMobileView = 'home';
+        memberRender();
+        return;
+    }
+    memberMobileView = memberSelectedProductId ? 'detail' : 'home';
+    memberRender();
+}
+
+function memberPreviewQtyMax(preview) {
+    const first = preview && preview.items && preview.items[0] ? preview.items[0] : null;
+    const stock = first != null ? Number(first.availableStock) : NaN;
+    const bounded = Number.isFinite(stock) ? stock : 99999;
+    return Math.min(99999, bounded);
+}
+
+function memberOnPreviewQtyInput(el) {
+    const max = memberPreviewQtyMax(memberPreviewData);
+    let qty = parseInt(el.value, 10);
+    if (!Number.isFinite(qty) || qty < 1) {
+        qty = 1;
+    }
+    if (max >= 1 && qty > max) {
+        qty = max;
+    }
+    el.value = String(qty);
+    if (qty === memberPreviewQty) {
+        return;
+    }
+    memberPreviewQty = qty;
+    memberRenderPreview();
+}
+
+function memberPreviewViewHtml(preview) {
+    const items = preview.items || [];
+    const maxQty = memberPreviewQtyMax(preview);
+    const lines = items.map(function (row) {
+        return '<div class="member-order-card"><strong>' + memberEscapeHtml(row.productName) + '</strong>'
+            + '<p>¥' + memberEscapeHtml(row.sellPrice) + ' × ' + memberEscapeHtml(row.qty)
+            + (row.availableStock != null ? ' · 库存 ' + memberEscapeHtml(row.availableStock) : '')
+            + '</p></div>';
+    }).join('');
+    return '<button type="button" class="member-back-btn" onclick="memberBackFromPreview()">← 返回</button>'
+        + '<h2>确认订单</h2>'
+        + lines
+        + '<label class="member-preview-qty-label">数量 <input type="number" class="member-preview-qty" min="1" max="'
+        + memberEscapeHtml(maxQty) + '" value="' + memberEscapeHtml(memberPreviewQty)
+        + '" onchange="memberOnPreviewQtyInput(this)" onblur="memberOnPreviewQtyInput(this)"></label>'
+        + '<p class="member-detail-price">合计 ¥' + memberEscapeHtml(preview.amount) + '</p>'
+        + '<button type="button" class="btn btn-primary member-detail-buy" id="memberPlaceSubmit" onclick="memberPlaceOrder()">提交订单</button>';
+}
+
+async function memberRenderPreview() {
+    const page = document.getElementById('memberPhonePage');
+    const seq = ++memberPreviewRenderSeq;
+    page.innerHTML = '<button type="button" class="member-back-btn" onclick="memberBackFromPreview()">← 返回</button>'
+        + '<div class="member-detail loading">预览中...</div>';
+    if (!memberSelectedProductId) {
+        memberBackHome();
+        return;
+    }
+    try {
+        const preview = await memberRequest('/demo/orders/preview', {
+            items: [{ productId: memberSelectedProductId, qty: memberPreviewQty }]
+        });
+        if (seq !== memberPreviewRenderSeq || memberMobileView !== 'preview') {
+            return;
+        }
+        memberPreviewData = preview;
+        page.innerHTML = memberPreviewViewHtml(preview);
+    } catch (e) {
+        if (seq !== memberPreviewRenderSeq || memberMobileView !== 'preview') {
+            return;
+        }
+        page.innerHTML = '<button type="button" class="member-back-btn" onclick="memberBackFromPreview()">← 返回</button>'
+            + '<div class="member-detail error">预览失败</div>';
+    }
+}
+
+async function memberPlaceOrder() {
+    const btn = document.getElementById('memberPlaceSubmit');
+    if (btn) {
+        btn.disabled = true;
+    }
+    if (!memberPreviewData) {
+        if (btn) {
+            btn.disabled = false;
+        }
+        return;
+    }
+    try {
+        const data = await memberRequest('/demo/orders/orderPlace', {
+            placeToken: memberPreviewData.placeToken,
+            items: (memberPreviewData.items || []).map(function (row) {
+                return {
+                    productId: memberSnowflakeId(row.productId),
+                    qty: row.qty,
+                    sellPrice: row.sellPrice
+                };
+            })
+        });
+        memberOrderLastOrderId = memberSnowflakeId(data.orderId);
+        const orderIdInput = document.getElementById('memberOrderId');
+        if (orderIdInput) {
+            orderIdInput.value = memberOrderLastOrderId;
+        }
+        memberAppendLog('已下单 orderId=' + memberOrderLastOrderId);
+        memberMobileView = 'orderDetail';
+        memberRender();
+    } catch (e) {
+        if (e.code === 30008 || e.code === 30009) {
+            memberShowError('价格或凭证已失效，请刷新预览');
+            memberRenderPreview();
+            return;
+        }
+        memberAppendLog('下单失败：' + e.message);
+        if (btn) {
+            btn.disabled = false;
+        }
+    }
+}
+
+function memberOrderStatusLabel(status) {
+    if (status === 'SUBMIT') {
+        return '待支付';
+    }
+    if (status === 'COMPLETED') {
+        return '已完成';
+    }
+    if (status === 'CANCEL') {
+        return '已取消';
+    }
+    return status || '';
+}
+
+function memberFillOrderId(orderId) {
+    memberOrderLastOrderId = memberSnowflakeId(orderId);
+    const orderIdInput = document.getElementById('memberOrderId');
+    if (orderIdInput) {
+        orderIdInput.value = memberOrderLastOrderId;
+    }
+}
+
+function memberOpenOrder(orderId) {
+    memberFillOrderId(orderId);
+    memberMobileView = 'orderDetail';
+    memberRender();
+}
+
+function memberOrderDetailHtml(order) {
+    const items = order.items || [];
+    const lines = items.map(function (row) {
+        return '<div class="member-order-card"><strong>' + memberEscapeHtml(row.productName || '') + '</strong>'
+            + '<p>¥' + memberEscapeHtml(row.sellPrice) + ' × ' + memberEscapeHtml(row.qty) + '</p></div>';
+    }).join('');
+    const actions = order.orderStatus === 'SUBMIT'
+        ? '<div class="member-order-detail-actions">'
+            + '<button type="button" class="btn btn-primary" id="memberOrderPayBtn" onclick="memberPayCurrentOrder()">去支付</button>'
+            + '<button type="button" class="btn" id="memberOrderCancelBtn" onclick="memberCancelCurrentOrder()">取消</button>'
+            + '</div>'
+        : '';
+    return '<button type="button" class="member-back-btn" onclick="memberBackFromOrderDetail()">← 返回</button>'
+        + '<h2>订单详情</h2>'
+        + lines
+        + '<p class="member-detail-price">¥' + memberEscapeHtml(order.amount) + '</p>'
+        + '<p class="member-detail-stock">' + memberEscapeHtml(memberOrderStatusLabel(order.orderStatus)) + '</p>'
+        + actions;
+}
+
+async function memberRenderOrderDetail() {
+    const page = document.getElementById('memberPhonePage');
+    const seq = ++memberOrderDetailRenderSeq;
+    const orderId = memberOrderLastOrderId;
+    page.innerHTML = '<button type="button" class="member-back-btn" onclick="memberBackFromOrderDetail()">← 返回</button>'
+        + '<div class="member-detail loading">加载中...</div>';
+    if (!orderId) {
+        memberBackFromOrderDetail();
+        return;
+    }
+    try {
+        const order = await memberRequest('/demo/orders/get', { orderId: orderId });
+        if (seq !== memberOrderDetailRenderSeq || memberMobileView !== 'orderDetail') {
+            return;
+        }
+        page.innerHTML = memberOrderDetailHtml(order);
+    } catch (e) {
+        if (seq !== memberOrderDetailRenderSeq || memberMobileView !== 'orderDetail') {
+            return;
+        }
+        page.innerHTML = '<button type="button" class="member-back-btn" onclick="memberBackFromOrderDetail()">← 返回</button>'
+            + '<div class="member-detail error">订单详情加载失败</div>';
+    }
+}
+
+async function memberMutateCurrentOrder(url, actionLabel) {
+    const payBtn = document.getElementById('memberOrderPayBtn');
+    const cancelBtn = document.getElementById('memberOrderCancelBtn');
+    if (payBtn) {
+        payBtn.disabled = true;
+    }
+    if (cancelBtn) {
+        cancelBtn.disabled = true;
+    }
+    try {
+        await memberRequest(url, { orderId: memberOrderLastOrderId });
+        memberAppendLog(actionLabel + '成功 orderId=' + memberOrderLastOrderId);
+        if (memberMobileTab === 'orders') {
+            memberMobileView = 'home';
+            memberRender();
+        } else {
+            memberRenderOrderDetail();
+        }
+    } catch (e) {
+        memberAppendLog(actionLabel + '失败：' + e.message);
+        if (payBtn) {
+            payBtn.disabled = false;
+        }
+        if (cancelBtn) {
+            cancelBtn.disabled = false;
+        }
+    }
+}
+
+async function memberPayCurrentOrder() {
+    await memberMutateCurrentOrder('/demo/orders/pay', '支付');
+}
+
+async function memberCancelCurrentOrder() {
+    await memberMutateCurrentOrder('/demo/orders/cancel', '取消');
+}
+
+function memberOrderTabBtn(tab, label, count) {
+    const active = memberOrderListTab === tab ? ' active' : '';
+    const badge = (tab !== 'ALL' && Number(count) > 0)
+        ? '<span class="member-order-badge">' + memberEscapeHtml(count) + '</span>'
+        : '';
+    return '<button type="button" class="member-order-tab' + active + '" onclick="memberSwitchOrderListTab(\'' + tab + '\')">'
+        + memberEscapeHtml(label) + badge + '</button>';
+}
+
+function memberOrderTabsHtml(counts) {
+    const pending = counts && counts.pendingCount != null ? counts.pendingCount : 0;
+    const completed = counts && counts.completedCount != null ? counts.completedCount : 0;
+    return '<div class="member-order-tabs">'
+        + memberOrderTabBtn('ALL', '全部', 0)
+        + memberOrderTabBtn('SUBMIT', '待支付', pending)
+        + memberOrderTabBtn('COMPLETED', '已完成', completed)
+        + '</div>';
+}
+
+function memberOrderCardHtml(item) {
+    const orderId = memberSnowflakeId(item.orderId);
+    const first = (item.items && item.items[0]) ? item.items[0] : {};
+    return '<div class="member-order-card" onclick="memberOpenOrder(\'' + memberEscapeHtml(orderId) + '\')">'
+        + '<strong>' + memberEscapeHtml(first.productName || '订单') + '</strong>'
+        + '<p>¥' + memberEscapeHtml(item.amount) + ' · ' + memberEscapeHtml(memberOrderStatusLabel(item.orderStatus))
+        + (first.qty != null ? ' · x' + memberEscapeHtml(first.qty) : '')
+        + '</p></div>';
+}
+
+function memberSwitchOrderListTab(tab) {
+    memberOrderListTab = tab;
+    memberRenderOrders();
+}
+
 async function memberRenderDetail() {
     const page = document.getElementById('memberPhonePage');
     const seq = ++memberDetailRenderSeq;
@@ -281,7 +584,8 @@ async function memberRenderDetail() {
             + '<p class="member-detail-price">¥' + memberEscapeHtml(item.sellPrice) + '</p>'
             + sold + stock
             + '<div class="member-detail-content">' + memberEscapeHtml(item.detailContent || '') + '</div>'
-            + '<button type="button" class="btn member-detail-buy" disabled title="订单模块后续接入">立即购买</button>'
+            + '<button type="button" class="btn btn-primary member-detail-buy" onclick="memberBuyNow(\''
+            + memberSnowflakeId(item.productId) + '\')">立即购买</button>'
             + '</div>';
     } catch (e) {
         if (seq !== memberDetailRenderSeq || memberMobileView !== 'detail') {
@@ -293,12 +597,39 @@ async function memberRenderDetail() {
 }
 
 function memberRenderOrders() {
-    document.getElementById('memberPhonePage').innerHTML =
-        '<h2>订单</h2>' +
-        '<div class="member-orders">' +
-        '<div class="member-order-card"><strong>我的订单</strong><p>本页面仅做静态展示，不调用真实订单列表接口。</p></div>' +
-        '<div class="member-empty-state"><span>📦</span><strong>暂无更多订单</strong><span>登录后也不会请求订单列表</span></div>' +
-        '</div>';
+    const page = document.getElementById('memberPhonePage');
+    if (!memberRequireLogin()) {
+        page.innerHTML = '<h2>订单</h2><div class="member-empty-state">请先登录</div>';
+        return;
+    }
+    memberLoadOrderList();
+}
+
+async function memberLoadOrderList() {
+    const page = document.getElementById('memberPhonePage');
+    const seq = ++memberOrdersRenderSeq;
+    page.innerHTML = '<h2>订单</h2>' + memberOrderTabsHtml({})
+        + '<div class="member-orders loading">加载中...</div>';
+    try {
+        const [counts, list] = await Promise.all([
+            memberRequest('/demo/orders/counts', {}),
+            memberRequest('/demo/orders/list', { tab: memberOrderListTab, pageNo: 1, pageSize: 20 })
+        ]);
+        if (seq !== memberOrdersRenderSeq || memberMobileTab !== 'orders' || memberMobileView === 'orderDetail') {
+            return;
+        }
+        const items = (list && list.items) ? list.items : [];
+        page.innerHTML = '<h2>订单</h2>' + memberOrderTabsHtml(counts || {})
+            + '<div class="member-orders">'
+            + (items.length ? items.map(memberOrderCardHtml).join('') : '<div class="member-empty-state">暂无订单</div>')
+            + '</div>';
+    } catch (e) {
+        if (seq !== memberOrdersRenderSeq || memberMobileTab !== 'orders' || memberMobileView === 'orderDetail') {
+            return;
+        }
+        page.innerHTML = '<h2>订单</h2>' + memberOrderTabsHtml({})
+            + '<div class="member-orders error">订单加载失败</div>';
+    }
 }
 
 function memberRenderMe() {
@@ -388,31 +719,13 @@ function memberOrderResultBox() {
     return document.getElementById('memberOrderResult');
 }
 
-async function memberOrderCreate() {
-    if (!memberRequireLogin()) {
+function memberAfterDebugOrderMutation(orderId) {
+    if (memberMobileTab === 'orders' && memberMobileView !== 'orderDetail') {
+        memberRenderOrders();
         return;
     }
-    const amount = document.getElementById('memberOrderAmount').value.trim();
-    const delay = document.getElementById('memberOrderDelay').value.trim() || '60s';
-    const resultBox = memberOrderResultBox();
-    resultBox.className = 'result-box member-order-result loading';
-    resultBox.textContent = '创建订单中...';
-    try {
-        const data = await memberRequest('/demo/orders/orderPlace', {
-            amount: Number(amount),
-            delay: delay
-        });
-        memberOrderLastOrderId = memberSnowflakeId(data.orderId);
-        memberOrderLastTaskId = memberSnowflakeId(data.taskId);
-        document.getElementById('memberOrderId').value = memberOrderLastOrderId;
-        resultBox.className = 'result-box member-order-result';
-        resultBox.textContent = JSON.stringify(data, null, 2);
-        memberAppendLog('已创建 orderId=' + memberOrderLastOrderId + ' taskId=' + memberOrderLastTaskId
-            + ' delay=' + delay);
-    } catch (e) {
-        resultBox.className = 'result-box member-order-result error';
-        resultBox.textContent = '创建失败：' + e.message;
-        memberAppendLog('创建订单失败：' + e.message);
+    if (memberMobileView === 'orderDetail' && memberSnowflakeId(orderId) === memberOrderLastOrderId) {
+        memberRenderOrderDetail();
     }
 }
 
@@ -422,7 +735,7 @@ async function memberOrderPay() {
     }
     const orderId = document.getElementById('memberOrderId').value.trim() || memberOrderLastOrderId;
     if (!orderId) {
-        memberAppendLog('模拟支付失败：请先创建订单或填写 orderId');
+        memberAppendLog('模拟支付失败：请先下单或填写 orderId');
         return;
     }
     const resultBox = memberOrderResultBox();
@@ -433,6 +746,7 @@ async function memberOrderPay() {
         resultBox.className = 'result-box member-order-result';
         resultBox.textContent = JSON.stringify(data, null, 2);
         memberAppendLog('已支付 orderId=' + orderId);
+        memberAfterDebugOrderMutation(orderId);
     } catch (e) {
         resultBox.className = 'result-box member-order-result error';
         resultBox.textContent = '支付失败：' + e.message;
@@ -446,7 +760,7 @@ async function memberOrderCancel() {
     }
     const orderId = document.getElementById('memberOrderId').value.trim() || memberOrderLastOrderId;
     if (!orderId) {
-        memberAppendLog('取消订单失败：请先创建订单或填写 orderId');
+        memberAppendLog('取消订单失败：请先下单或填写 orderId');
         return;
     }
     const resultBox = memberOrderResultBox();
@@ -457,6 +771,7 @@ async function memberOrderCancel() {
         resultBox.className = 'result-box member-order-result';
         resultBox.textContent = JSON.stringify(data, null, 2);
         memberAppendLog('已取消 orderId=' + orderId);
+        memberAfterDebugOrderMutation(orderId);
     } catch (e) {
         resultBox.className = 'result-box member-order-result error';
         resultBox.textContent = '请求失败：' + e.message;

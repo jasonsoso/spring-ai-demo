@@ -174,6 +174,8 @@
 
 .member-products.loading,
 .member-products.error,
+.member-orders.loading,
+.member-orders.error,
 .member-detail.loading,
 .member-detail.error {
     color: #64748b;
@@ -254,8 +256,82 @@
 
 .member-detail-buy {
     width: 100%;
+}
+
+.member-detail-buy:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+}
+
+.member-preview-qty-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0;
+    color: #334155;
+    font-size: 14px;
+}
+
+.member-preview-qty {
+    width: 72px;
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.member-order-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.member-order-tab {
+    position: relative;
+    flex: 1;
+    padding: 8px 0;
+    border: 0;
+    border-radius: 10px;
+    color: #64748b;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.member-order-tab.active {
+    color: #7c3aed;
+    background: #faf5ff;
+}
+
+.member-order-badge {
+    position: absolute;
+    top: 2px;
+    right: 8px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    color: #fff;
+    background: #ef4444;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+}
+
+.member-orders .member-order-card {
+    cursor: pointer;
+}
+
+.member-order-detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.member-order-detail-actions .btn {
+    flex: 1;
 }
 
 .member-product-icon {
