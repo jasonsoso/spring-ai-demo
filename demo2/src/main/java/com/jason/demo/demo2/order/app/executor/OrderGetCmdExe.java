@@ -7,6 +7,7 @@ import com.jason.demo.demo2.order.service.core.OrderDomainService;
 import com.jason.demo.demo2.order.service.core.domain.Order;
 import org.springframework.stereotype.Service;
 
+/** 订单详情：主表 + 明细快照。 */
 @Service
 public class OrderGetCmdExe {
 

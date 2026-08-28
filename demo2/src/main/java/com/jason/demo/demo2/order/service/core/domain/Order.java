@@ -1,6 +1,5 @@
 package com.jason.demo.demo2.order.service.core.domain;
 
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
 import com.jason.demo.demo2.order.service.common.OrderErrorCodeEnum;
 import com.jason.demo.demo2.order.service.common.OrderStatusEnum;
@@ -13,9 +12,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 订单聚合。继承 {@link OrderDO} 只为复用字段，不是表映射类；{@code items} 在明细表。
+ * 落库走 {@code OrderDoConvert.toDo}，不要把本对象直接丢给 Mapper。
+ */
 public class Order extends OrderDO {
 
-    @TableField(exist = false)
     private List<OrderItem> items = new ArrayList<>();
 
     public static Order create(long orderId, long memberId, List<OrderItem> items, LocalDateTime now) {

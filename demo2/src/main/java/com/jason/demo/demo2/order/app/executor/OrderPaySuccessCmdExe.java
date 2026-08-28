@@ -13,6 +13,7 @@ import com.jason.demo.demo2.order.service.core.statemachine.OrderContext;
 import com.jason.demo.demo2.order.service.core.statemachine.OrderStateMachineExecutor;
 import org.springframework.stereotype.Service;
 
+/** 模拟支付成功。fireEvent 成功后再撤延时关单，避免回滚后留下幽灵任务。 */
 @Service
 public class OrderPaySuccessCmdExe {
 

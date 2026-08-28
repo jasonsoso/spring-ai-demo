@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.order.service.infrastructure.redis;
 
+/** Redis key：preview 凭证、下单互斥锁、同一 token 已生成的 orderId。 */
 public final class OrderPlaceTokenKeys {
 
     private OrderPlaceTokenKeys() {

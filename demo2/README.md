@@ -13,6 +13,7 @@
 - [功能模块](#功能模块)
 - [快速开始](#快速开始)
 - [热库存（Redis + MySQL）](#热库存redis--mysql)
+- [订单模块（COLA 状态机）](#订单模块cola-状态机)
 - [前端说明](#前端说明)
 - [配置说明](#配置说明)
 - [可观测性](#可观测性)
@@ -881,13 +882,171 @@ curl -s -X POST http://localhost:8081/demo/products/adjustStock \
   -d "{\"productId\":\"2085550503315509001\",\"targetActual\":80}"
 ```
 
-界面：Tab「会员 C 端 Demo」→ 点商品看详情「库存」；列表卡片不展示可售。订单 `orderPlace` / `pay` / `cancel` **尚未**改调 `ProductStockHotService`。
+界面：Tab「会员 C 端 Demo」→ 点商品看详情「库存」；列表卡片不展示可售。下单/支付/取消走 `ProductStockHotService`（见 [订单模块](#订单模块cola-状态机)）。
 
 ### 运维注意
 
 - seed 商品默认已上架。Redis 空 Hash 时列表仍显示 MySQL 可售，热路径预占会 40010；演示请先下架再上架灌入。
 - Redis 丢数据：停售，按 MySQL `stock` + `stock_seq` 回灌 Hash，不要在热卖中途用库值覆盖 `avail`。
 - seq 未齐时两边可售可以暂时不同，这是在途。
+
+---
+
+## 订单模块（COLA 状态机）
+
+C 端打通：商品详情 → 预览（不落库）→ 下单预占库存 → 模拟支付 / 取消 → 我的订单。流转用阿里 COLA 状态机（只引入 `cola-component-statemachine` 5.0.0）。`INIT` 不落库；`pay_status` 是伴随字段。本版 `items[]` 仅 1 行。
+
+**Spec / Plan / 归档**：`docs/superpowers/specs/2026-08-28-order-module-statemachine-design.md`、`docs/superpowers/plans/2026-08-28-order-module-statemachine.md`、`docs/superpowers/archive/2026-08-28-order-module-statemachine.md`
+
+### 依赖与建表
+
+- 已有库执行 `src/main/resources/db/order-module-schema.sql`（`order_status` / `pay_status` / `demo_order_item`）
+- 新库先 `delay-order-schema.sql` 建 `demo_order`，再跑本脚本 ALTER
+- Redis（`placeToken`）、热库存（下单/支付/取消调 `ProductStockHotService`）、延时关单（`framework.delay`）
+
+配置：`app.order.place-token-ttl=30m`。
+
+### 架构
+
+CmdExe 做登录、token、幂等、商品再校验、延时；Action（Spring Bean + `@Transactional`）改状态、写库、调热库存。延时不进 Action。
+
+```mermaid
+flowchart LR
+  subgraph C端
+    UI[member.js]
+  end
+  subgraph app
+    CTL[OrderController]
+    EXE["*CmdExe"]
+  end
+  subgraph core
+    SM[COLA Executor]
+    ACT["Action TX"]
+  end
+  subgraph infra
+    TOK[placeToken Redis]
+    REP[OrderRepository]
+    HOT[ProductStockHotService]
+    DLY[DelayTaskService]
+  end
+  UI --> CTL --> EXE
+  EXE --> TOK
+  EXE --> SM --> ACT
+  ACT --> REP
+  ACT --> HOT
+  EXE --> DLY
+```
+
+### 状态机
+
+```mermaid
+stateDiagram-v2
+  [*] --> INIT: 不落库
+  INIT --> SUBMIT: SUBMIT_ORDER
+  SUBMIT --> COMPLETED: PAY_SUCCESS
+  SUBMIT --> CANCEL: CANCEL_ORDER
+  SUBMIT --> CANCEL: ORDER_EXPIRE
+  COMPLETED --> [*]
+  CANCEL --> [*]
+```
+
+`SUBMIT`→`WAIT_PAY`，`COMPLETED`→`PAY_SUCCESS`，`CANCEL`→`CLOSE`。非法转移 `30002`。
+
+### C 端主路径
+
+```mermaid
+flowchart TD
+  P[商品详情] -->|立即购买| L{已登录?}
+  L -->|否| AUTH[登录]
+  AUTH --> L
+  L -->|是| PV[POST /preview]
+  PV -->|改 qty 重新 preview| PV
+  PV -->|提交| PL[POST /orderPlace]
+  PL --> D[待支付详情]
+  D -->|支付| PAY[POST /pay]
+  D -->|取消| CAN[POST /cancel]
+  PAY --> DONE[已完成]
+  CAN --> ALL[全部 Tab 可见取消单]
+  D --> TAB[我的订单 counts+list]
+  DONE --> TAB
+```
+
+### 下单时序
+
+同一 `placeToken` 只生成一单。实现上 **先写 Redis result 再 schedule 延时**，避免 schedule 失败后重复下单。Action 内先写 MySQL 再 `reserve`；热库存不在 JDBC 事务里，回滚时补偿 `release`。
+
+```mermaid
+sequenceDiagram
+  actor U as 会员
+  participant C as PlaceCmdExe
+  participant R as Redis
+  participant A as PlaceAction
+  participant S as HotService
+  participant DB as MySQL
+  participant D as Delay
+
+  U->>C: orderPlace(token, items)
+  C->>R: 校验 preview + 锁
+  alt 已有 result
+    C-->>U: 已有单
+  else 首次
+    C->>C: 再校验售价/库存
+    C->>A: fireEvent INIT SUBMIT_ORDER
+    A->>DB: insert 主表+明细
+    A->>S: reserve
+    C->>R: saveResult
+    C->>D: schedule ORDER_CANCEL
+    C-->>U: SUBMIT
+  end
+```
+
+### HTTP（均需登录）
+
+全部 `POST /demo/orders/{action}` + JSON。Scalar → 订单。
+
+| 路径 | 说明 |
+|------|------|
+| `/preview` | 不落库，签发 `placeToken` |
+| `/orderPlace` | 校验 token，预占并创建 `SUBMIT` |
+| `/pay` | 模拟支付 → `COMPLETED` |
+| `/cancel` | 手动取消 → `CANCEL` |
+| `/get` | 详情（含明细快照） |
+| `/list` | `tab`: `ALL` / `SUBMIT` / `COMPLETED` |
+| `/counts` | 待支付 / 已完成数量（一条 `GROUP BY`） |
+
+```bash
+token="<登录响应中的 token>"
+pid="2085550503315509001"
+
+# 预览
+curl -s -X POST http://localhost:8081/demo/orders/preview \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $token" \
+  -d "{\"items\":[{\"productId\":\"$pid\",\"qty\":1}]}"
+
+# 下单（placeToken / sellPrice 用预览返回值）
+curl -s -X POST http://localhost:8081/demo/orders/orderPlace \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $token" \
+  -d "{\"placeToken\":\"<placeToken>\",\"items\":[{\"productId\":\"$pid\",\"qty\":1,\"sellPrice\":18.00}]}"
+
+curl -s -X POST http://localhost:8081/demo/orders/pay \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $token" \
+  -d "{\"orderId\":\"<orderId>\"}"
+
+curl -s -X POST http://localhost:8081/demo/orders/list \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $token" \
+  -d "{\"tab\":\"ALL\",\"pageNo\":1,\"pageSize\":20}"
+
+curl -s -X POST http://localhost:8081/demo/orders/counts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $token" \
+  -d "{}"
+```
+
+界面：Tab「会员 C 端 Demo」→ 商品详情「立即购买」→ 预览/下单 →「我的订单」。seed 商品若 Redis 无 Hash，预占会 `40010`，先下架再上架灌入。
 
 ---
 
@@ -1427,10 +1586,11 @@ curl -s -o - -w "\nHTTP:%{http_code}\n" -X POST http://localhost:8081/demo/lock/
   -d "{\"userId\":\"u1\",\"sessionId\":\"s1\",\"message\":\"same\",\"workMs\":5000}"
 ```
 
-**延时任务 + 订单超时取消（`framework.delay` / `/demo/orders`）：**
+**延时任务（`framework.delay`）：**
 
 - 依赖：MySQL 执行 `src/main/resources/db/delay-order-schema.sql`；Redis（Redisson 主路径 / 锁）；可选 RocketMQ（`app.delay.backend=rocketmq`）
 - 主投递：`app.delay.backend=redisson|rocketmq`（单主）；扫描兜底：`app.delay.scan-interval-ms`
+- 订单超时关单已接到 COLA `ORDER_EXPIRE`，见 [订单模块](#订单模块cola-状态机)
 - Spec / Plan：`docs/superpowers/specs/2026-08-06-delay-task-order-cancel-design.md`、`docs/superpowers/plans/2026-08-06-delay-task-order-cancel.md`
 
 **会员 C 端 Demo（`member` / `/demo/members`）：**
@@ -1449,32 +1609,11 @@ curl -s -X POST http://localhost:8081/demo/members/login \
   -H "Content-Type: application/json" \
   -d "{\"phone\":\"13888999999\",\"password\":\"pwd123456\"}"
 token="<登录响应中的 token>"
+```
 
-# 创建待支付订单并注册超时取消（默认 30s，可改 delay）
-curl -s -X POST http://localhost:8081/demo/orders/orderPlace \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $token" \
-  -d "{\"amount\":9.9,\"delay\":\"10s\"}"
+购买流（preview → orderPlace → pay / list）见 [订单模块](#订单模块cola-状态机)。查延时台账：
 
-# 查询订单；到期后 status 应为 CANCELLED
-curl -s -X POST http://localhost:8081/demo/orders/get \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $token" \
-  -d "{\"orderId\":\"{orderId}\"}"
-
-# 支付路径：先支付则保持 PAID，延时任务逻辑取消
-curl -s -X POST http://localhost:8081/demo/orders/pay \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $token" \
-  -d "{\"orderId\":\"{orderId}\"}"
-
-# 手动取消：仅待支付订单可取消
-curl -s -X POST http://localhost:8081/demo/orders/cancel \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $token" \
-  -d "{\"orderId\":\"{orderId}\"}"
-
-# 查台账
+```bash
 curl -s "http://localhost:8081/demo/delay-tasks?bizKey={orderId}"
 ```
 
@@ -1485,7 +1624,7 @@ curl -s "http://localhost:8081/demo/delay-tasks?bizKey={orderId}"
 - 热库存（Redis 闸门 + MQ 投影 + 上下架/调库存）：见专章 **[热库存（Redis + MySQL）](#热库存redis--mysql)**
 - 商品模块归档：`docs/superpowers/archive/2026-08-26-product-module.md`
 - C 端入口：首页 Tab「会员 C 端 Demo」→ 列表 / 详情（`member.js`）；**无需登录**
-- 预占/实扣/释放入口是 `ProductStockHotService`（开关关闭则 DomainService）；**订单 HTTP 尚未接入**
+- 预占/实扣/释放入口是 `ProductStockHotService`（开关关闭则 DomainService）；订单 place/pay/cancel/expire **已接入**
 
 ```bash
 # 商品列表（上架商品 + 可售库存 / 已售）
@@ -3090,6 +3229,67 @@ sequenceDiagram
 
 > **与 Session Memory Tab 的区别**：Session Memory 用 Spring AI `RecursiveSummarizationCompactionStrategy`（Turn / Event Store）；AgentScope Compaction 是 Harness 原生中间件，压缩的是同一份 `AgentState.context`，与 PostgreSQL store 配合使用。
 
+### 29. 订单模块 — COLA 架构
+
+```mermaid
+flowchart LR
+  UI[member.js] --> CTL[OrderController]
+  CTL --> EXE["*CmdExe"]
+  EXE --> TOK[Redis placeToken]
+  EXE --> SM[OrderStateMachineExecutor]
+  SM --> ACT["Action @Transactional"]
+  ACT --> DB[(demo_order + item)]
+  ACT --> HOT[ProductStockHotService]
+  EXE --> DLY[DelayTaskService]
+```
+
+CmdExe 校验与延时；Action 落库并调热库存。详见 [订单模块](#订单模块cola-状态机)。
+
+### 30. 订单模块 — 状态机
+
+```mermaid
+stateDiagram-v2
+  [*] --> INIT: 不落库
+  INIT --> SUBMIT: SUBMIT_ORDER
+  SUBMIT --> COMPLETED: PAY_SUCCESS
+  SUBMIT --> CANCEL: CANCEL_ORDER
+  SUBMIT --> CANCEL: ORDER_EXPIRE
+```
+
+### 31. 订单模块 — C 端购买流
+
+```mermaid
+flowchart TD
+  P[商品详情立即购买] --> L{登录}
+  L -->|否| AUTH[Auth Sheet] --> L
+  L -->|是| PV[preview]
+  PV --> PL[orderPlace 预占]
+  PL --> D[待支付]
+  D --> PAY[pay 实扣]
+  D --> CAN[cancel 释放]
+  PAY --> TAB[我的订单]
+  CAN --> TAB
+```
+
+### 32. 订单模块 — 下单时序
+
+```mermaid
+sequenceDiagram
+  participant C as PlaceCmdExe
+  participant R as Redis
+  participant A as PlaceAction
+  participant S as HotService
+  participant DB as MySQL
+  participant D as Delay
+
+  C->>R: 校验 token + 锁
+  C->>A: fireEvent INIT SUBMIT_ORDER
+  A->>DB: insert 主表+明细
+  A->>S: reserve
+  C->>R: saveResult
+  C->>D: schedule 超时关单
+```
+
 ---
 
 ## 目录结构
@@ -3272,7 +3472,8 @@ demo2/
 │       ├── 2026-08-23-order-ddd-package-refactor.md # 订单 DDD 分包样板归档
 │       ├── 2026-08-25-unified-json-result.md # 统一 JsonResult 归档
 │       ├── 2026-08-26-product-module.md      # 商品模块归档
-│       └── 2026-08-27-redis-stock-consistency.md # Redis 热库存归档
+│       ├── 2026-08-27-redis-stock-consistency.md # Redis 热库存归档
+│       └── 2026-08-28-order-module-statemachine.md # 订单 COLA 状态机归档
 └── pom.xml
 ```
 
@@ -3400,6 +3601,7 @@ MCP Client 连接本机 MCP Server（`http://localhost:8081/mcp`，Streamable HT
 - **Embabel 自动选路 + Quizzard**：`embabel-agent` 2.0.0-SNAPSHOT Closed 模式三 Agent；jsoup 抓文 + Action 链出题，见 §10.3 与 `docs/superpowers/archive/2026-07-16-embabel-quizzard.md`
 - **商品模块**：三表 + C 端 list/get，见快速开始「商品 C 端 Demo」与 `docs/superpowers/archive/2026-08-26-product-module.md`
 - **热库存**：Redis `avail+seq` 闸门 + RocketMQ 投影 MySQL + Demo 上下架/调库存，见 [热库存（Redis + MySQL）](#热库存redis--mysql) 与 `docs/superpowers/archive/2026-08-27-redis-stock-consistency.md`
+- **订单模块**：COLA 状态机 + placeToken + 热库存 + C 端立即购买/我的订单，见 [订单模块（COLA 状态机）](#订单模块cola-状态机) 与 `docs/superpowers/archive/2026-08-28-order-module-statemachine.md`
 - **Micrometer + OpenTelemetry**：Boot 4 内置，通过 `spring-boot-starter-opentelemetry` 接入；Spring AI 自动暴露 `gen_ai.*` 指标
 
 详细设计见 `docs/superpowers/specs/` 目录。

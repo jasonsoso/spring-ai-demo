@@ -9,6 +9,9 @@ import com.jason.demo.demo2.order.service.core.statemachine.OrderStateMachineExe
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+/**
+ * 超时关单，无登录态。非 SUBMIT 只打日志，不 fireEvent。
+ */
 @Slf4j
 @Service
 public class OrderExpireCmdExe {

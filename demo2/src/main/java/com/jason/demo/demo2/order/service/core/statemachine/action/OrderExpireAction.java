@@ -16,6 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * SUBMIT → CANCEL（超时）。CAS 不带 memberId；0 行视为已支付/已取消，静默返回。
+ */
 @Component
 public class OrderExpireAction implements Action<OrderStatusEnum, OrderEventEnum, OrderContext> {
 

@@ -18,6 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * SUBMIT → CANCEL（会员手动）。CAS 带 memberId；成功后逐行 {@code release}。
+ */
 @Component
 public class OrderCancelAction implements Action<OrderStatusEnum, OrderEventEnum, OrderContext> {
 

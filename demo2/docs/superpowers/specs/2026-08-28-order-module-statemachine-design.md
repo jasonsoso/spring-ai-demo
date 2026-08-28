@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-28  
 **项目**: spring-ai-demo / demo2  
-**状态**: 待实现  
+**状态**: 已实现（见 [archive/2026-08-28-order-module-statemachine.md](../archive/2026-08-28-order-module-statemachine.md)）  
 **前置**: [2026-08-23-order-ddd-package-refactor-design.md](./2026-08-23-order-ddd-package-refactor-design.md)、[2026-08-26-product-module-design.md](./2026-08-26-product-module-design.md)、[2026-08-27-redis-stock-consistency-design.md](./2026-08-27-redis-stock-consistency-design.md)  
 **参考**: [digital-food-market-center 订单状态机深度分析](https://my.feishu.cn/wiki/Ui0iwV6GsijkqZkPSZXc0eonnCh)（COLA 状态机装配与流转）
 

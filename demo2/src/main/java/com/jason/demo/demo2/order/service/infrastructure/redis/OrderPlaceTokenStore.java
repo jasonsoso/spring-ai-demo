@@ -11,6 +11,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * 预览/下单 Redis：preview payload、place 锁、幂等 result。
+ * SET+TTL 必须走 Lua；Boot4 {@code opsForValue().set(..., Expiration)} 会 StackOverflow。
+ */
 @Service
 public class OrderPlaceTokenStore {
 

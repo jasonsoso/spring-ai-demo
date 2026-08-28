@@ -18,6 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * SUBMIT → COMPLETED：CAS 成功后再 {@code confirm}。CAS 0 行抛 30002。
+ * 延时关单由 CmdExe 在 fireEvent 成功后撤销，不进本 Action。
+ */
 @Component
 public class OrderPaySuccessAction implements Action<OrderStatusEnum, OrderEventEnum, OrderContext> {
 

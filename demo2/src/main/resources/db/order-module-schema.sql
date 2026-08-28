@@ -1,6 +1,6 @@
 -- demo2 订单模块演进
 -- 已有库执行本脚本 ALTER / 历史映射；新库以 delay-order-schema.sql 建表为准。
--- MySQL 8 可重复执行：仅当仍存在 status 列时 CHANGE；ADD COLUMN IF NOT EXISTS；DROP INDEX IF EXISTS。
+-- MySQL 8.0 可重复执行：列/索引用 information_schema 判断（官方 8.0 无 ADD COLUMN IF NOT EXISTS）。
 -- 绿场建表不要改 delay-order-schema.sql，本脚本不 DROP/重建 demo_order。
 
 -- 仅当遗留列仍叫 status 时才 CHANGE 为 order_status（已演进库跳过）。
@@ -20,15 +20,69 @@ PREPARE demo_order_rename_stmt FROM @demo_order_rename_sql;
 EXECUTE demo_order_rename_stmt;
 DEALLOCATE PREPARE demo_order_rename_stmt;
 
-ALTER TABLE demo_order
-    ADD COLUMN IF NOT EXISTS pay_status VARCHAR(32) NOT NULL DEFAULT 'WAIT_PAY'
-        COMMENT '支付状态(伴随): WAIT_PAY/PAY_SUCCESS/CLOSE' AFTER order_status;
-ALTER TABLE demo_order
-    ADD COLUMN IF NOT EXISTS pay_time DATETIME(3) NULL COMMENT '支付完成时间' AFTER pay_status;
-ALTER TABLE demo_order
-    ADD COLUMN IF NOT EXISTS cancel_time DATETIME(3) NULL COMMENT '取消/超时时间' AFTER pay_time;
+SET @demo_order_need_pay_status := (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'demo_order'
+      AND COLUMN_NAME = 'pay_status'
+);
+SET @demo_order_pay_status_sql := IF(
+    @demo_order_need_pay_status = 0,
+    'ALTER TABLE demo_order ADD COLUMN pay_status VARCHAR(32) NOT NULL DEFAULT ''WAIT_PAY'' COMMENT ''支付状态(伴随): WAIT_PAY/PAY_SUCCESS/CLOSE'' AFTER order_status',
+    'SELECT 1'
+);
+PREPARE demo_order_pay_status_stmt FROM @demo_order_pay_status_sql;
+EXECUTE demo_order_pay_status_stmt;
+DEALLOCATE PREPARE demo_order_pay_status_stmt;
 
-ALTER TABLE demo_order DROP INDEX IF EXISTS idx_demo_order_status;
+SET @demo_order_need_pay_time := (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'demo_order'
+      AND COLUMN_NAME = 'pay_time'
+);
+SET @demo_order_pay_time_sql := IF(
+    @demo_order_need_pay_time = 0,
+    'ALTER TABLE demo_order ADD COLUMN pay_time DATETIME(3) NULL COMMENT ''支付完成时间'' AFTER pay_status',
+    'SELECT 1'
+);
+PREPARE demo_order_pay_time_stmt FROM @demo_order_pay_time_sql;
+EXECUTE demo_order_pay_time_stmt;
+DEALLOCATE PREPARE demo_order_pay_time_stmt;
+
+SET @demo_order_need_cancel_time := (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'demo_order'
+      AND COLUMN_NAME = 'cancel_time'
+);
+SET @demo_order_cancel_time_sql := IF(
+    @demo_order_need_cancel_time = 0,
+    'ALTER TABLE demo_order ADD COLUMN cancel_time DATETIME(3) NULL COMMENT ''取消/超时时间'' AFTER pay_time',
+    'SELECT 1'
+);
+PREPARE demo_order_cancel_time_stmt FROM @demo_order_cancel_time_sql;
+EXECUTE demo_order_cancel_time_stmt;
+DEALLOCATE PREPARE demo_order_cancel_time_stmt;
+
+SET @demo_order_need_drop_old_idx := (
+    SELECT COUNT(*)
+    FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'demo_order'
+      AND INDEX_NAME = 'idx_demo_order_status'
+);
+SET @demo_order_drop_old_idx_sql := IF(
+    @demo_order_need_drop_old_idx > 0,
+    'ALTER TABLE demo_order DROP INDEX idx_demo_order_status',
+    'SELECT 1'
+);
+PREPARE demo_order_drop_old_idx_stmt FROM @demo_order_drop_old_idx_sql;
+EXECUTE demo_order_drop_old_idx_stmt;
+DEALLOCATE PREPARE demo_order_drop_old_idx_stmt;
 SET @demo_order_need_idx := (
     SELECT COUNT(*)
     FROM information_schema.STATISTICS

@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
+/** 下单商品快照行。金额 {@link #lineAmount()} = 售价快照 × qty。 */
 public class OrderItem extends OrderItemDO {
 
     public static OrderItem create(

@@ -9,5 +9,6 @@ import java.time.Duration;
 @ConfigurationProperties(prefix = "app.order")
 public class OrderProperties {
 
+    /** 预览 placeToken TTL，默认 30 分钟。 */
     private Duration placeTokenTtl = Duration.ofMinutes(30);
 }

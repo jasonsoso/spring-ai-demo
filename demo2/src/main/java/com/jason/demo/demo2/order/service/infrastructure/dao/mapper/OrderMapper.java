@@ -2,6 +2,7 @@ package com.jason.demo.demo2.order.service.infrastructure.dao.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO;
+import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderStatusCountDO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -19,8 +20,7 @@ public interface OrderMapper extends BaseMapper<OrderDO> {
                       @Param("memberId") Long memberId,
                       @Param("cancelTime") LocalDateTime cancelTime);
 
-    long countByMemberAndStatus(@Param("memberId") long memberId,
-                                @Param("orderStatus") String orderStatus);
+    List<OrderStatusCountDO> countSubmitAndCompletedByMember(@Param("memberId") long memberId);
 
     long countPageByMemberAndTab(@Param("memberId") long memberId,
                                  @Param("orderStatus") String orderStatus);

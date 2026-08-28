@@ -77,11 +77,19 @@ class OrderListCountsCmdExeTest {
 
     @Test
     void counts_mapsSubmitAndCompleted() {
-        when(orderRepository.countByMemberAndStatus(9001L, "SUBMIT")).thenReturn(3L);
-        when(orderRepository.countByMemberAndStatus(9001L, "COMPLETED")).thenReturn(11L);
+        when(orderRepository.countSubmitAndCompletedByMember(9001L))
+                .thenReturn(Map.of("SUBMIT", 3L, "COMPLETED", 11L));
         OrderCountsResVO vo = new OrderCountsCmdExe(orderRepository).execute();
         assertEquals(3L, vo.getPendingCount());
         assertEquals(11L, vo.getCompletedCount());
+    }
+
+    @Test
+    void counts_missingStatus_defaultsToZero() {
+        when(orderRepository.countSubmitAndCompletedByMember(9001L)).thenReturn(Map.of("SUBMIT", 2L));
+        OrderCountsResVO vo = new OrderCountsCmdExe(orderRepository).execute();
+        assertEquals(2L, vo.getPendingCount());
+        assertEquals(0L, vo.getCompletedCount());
     }
 
     @Test

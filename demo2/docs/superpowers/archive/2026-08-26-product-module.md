@@ -109,7 +109,7 @@ com.jason.demo.demo2.product
 - `member.js`：`memberSnowflakeId()`、卡片 `data-product-id` 不用 `Number()`
 - `memberHomeRenderSeq` / `memberDetailRenderSeq` 防异步覆盖
 - 详情封面 `.member-detail-cover` 全宽（`member.css`）
-- 「立即购买」disabled，待订单模块接入
+- 「立即购买」已由订单模块接入（需登录）
 
 ---
 
@@ -121,7 +121,7 @@ com.jason.demo.demo2.product
 | pay | `ProductStockHotService.confirm` |
 | cancel / 超时 cancel | `ProductStockHotService.release` |
 
-取消回滚数量以 RESERVE 流水为准。热闸门与 MQ 投影见 [2026-08-27-redis-stock-consistency.md](./2026-08-27-redis-stock-consistency.md)。订单 HTTP 接入热路径仍待后续 spec。
+取消回滚数量以 RESERVE 流水为准。热闸门与 MQ 投影见 [2026-08-27-redis-stock-consistency.md](./2026-08-27-redis-stock-consistency.md)。订单已接入热路径，见 [2026-08-28-order-module-statemachine.md](./2026-08-28-order-module-statemachine.md)。
 
 ---
 
@@ -131,3 +131,4 @@ com.jason.demo.demo2.product
 |------|------|
 | 2026-08-26 | 初版归档：三表 + 读 API + 库存领域服务 + C 端列表/详情 |
 | 2026-08-28 | 衔接热库存：订单应调 `ProductStockHotService`（见 Redis 热库存归档） |
+| 2026-08-29 | 订单模块已接入热路径（见订单 COLA 归档） |

@@ -23,6 +23,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * 预览：不落库、不占库存。签发 Redis placeToken，改 qty 必须重新 preview。
+ */
 @Service
 public class OrderPreviewCmdExe {
 

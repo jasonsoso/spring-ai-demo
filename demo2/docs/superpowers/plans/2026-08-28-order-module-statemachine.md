@@ -1,5 +1,7 @@
 # Order Module COLA State Machine Implementation Plan
 
+> **Status:** 已实现（2026-08-29）。归档见 `docs/superpowers/archive/2026-08-28-order-module-statemachine.md`。
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 按 spec 重构 demo2 订单模块：COLA 5.0.0 状态机 + `items[]` 预览/下单 + Redis `placeToken` 幂等 + Action 内落库并调热库存，打通 C 端立即购买到我的订单。

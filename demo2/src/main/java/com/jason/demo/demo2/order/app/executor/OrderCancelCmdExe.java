@@ -13,6 +13,7 @@ import com.jason.demo.demo2.order.service.core.statemachine.OrderContext;
 import com.jason.demo.demo2.order.service.core.statemachine.OrderStateMachineExecutor;
 import org.springframework.stereotype.Service;
 
+/** 会员手动取消。非 SUBMIT 由状态机 FailCallback 抛 30002。 */
 @Service
 public class OrderCancelCmdExe {
 

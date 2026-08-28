@@ -18,6 +18,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * INIT → SUBMIT：先写主表+明细，再逐行 {@code reserve}。
+ * Redis 热库存不在 JDBC 事务里，本地回滚时按已预占商品补偿 {@code release}。
+ */
 @Slf4j
 @Component
 public class OrderPlaceAction implements Action<OrderStatusEnum, OrderEventEnum, OrderContext> {
@@ -36,6 +40,7 @@ public class OrderPlaceAction implements Action<OrderStatusEnum, OrderEventEnum,
         applyTransition(to, event, ctx);
         orderRepository.insertWithItems(ctx.getOrder());
         List<Long> reserved = new ArrayList<>();
+        // reserve 成功后若 insert 之后的步骤失败，JDBC 回滚订单行，Redis 票需补偿释放
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override

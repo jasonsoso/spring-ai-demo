@@ -7,6 +7,9 @@ import com.jason.demo.demo2.order.service.core.statemachine.action.OrderPlaceAct
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * 生产态状态机。Action 必须是 Spring Bean，匿名 Action 吃不到 {@code @Transactional} 代理。
+ */
 @Configuration
 public class OrderStateMachineConfiguration {
 

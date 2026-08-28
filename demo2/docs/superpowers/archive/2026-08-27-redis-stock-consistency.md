@@ -22,7 +22,7 @@
 - Demo HTTP：`offShelf` / `onShelf` / `adjustStock`；C 端 `availableStock` 热路径 overlay Redis，`sellStock` 仍 MySQL
 - 对账先比 seq：在途不报 avail 不一致；齐了才比 `avail ≟ mysql.stock`
 
-**本阶段未做**：订单 HTTP / 订单表改为调 `ProductStockHotService`（下单/支付/取消仍走旧入口）。
+**本阶段未做**（已由订单模块补齐）：当时订单 HTTP 尚未改调 `ProductStockHotService`。现已接入，见 [2026-08-28-order-module-statemachine.md](./2026-08-28-order-module-statemachine.md)。
 
 ---
 
@@ -111,3 +111,4 @@ rocketmq.consumers.stockSync.listenerBeanName=stockSyncMqListener
 | 日期 | 说明 |
 |------|------|
 | 2026-08-28 | 初版归档：Redis 热闸门 + MQ 投影 + Demo 上下架/调库存 + seq 对账 |
+| 2026-08-29 | 订单 place/pay/cancel/expire 已调 `ProductStockHotService` |

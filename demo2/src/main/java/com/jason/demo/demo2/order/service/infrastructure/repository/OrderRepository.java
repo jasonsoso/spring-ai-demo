@@ -3,14 +3,18 @@ package com.jason.demo.demo2.order.service.infrastructure.repository;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.jason.demo.demo2.order.service.core.domain.Order;
 import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO;
+import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderStatusCountDO;
 import com.jason.demo.demo2.order.service.infrastructure.dao.mapper.OrderMapper;
 import com.jason.demo.demo2.order.service.infrastructure.repository.convert.OrderDoConvert;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
+/** 订单持久化出口。对外只暴露领域 {@link Order}，表映射走 DO + Convert。 */
 @Repository
 public class OrderRepository {
 
@@ -55,8 +59,16 @@ public class OrderRepository {
         return orderMapper.markCancelled(orderId, memberId, cancelTime) > 0;
     }
 
-    public long countByMemberAndStatus(long memberId, String orderStatus) {
-        return orderMapper.countByMemberAndStatus(memberId, orderStatus);
+    /** SUBMIT/COMPLETED 数量，key 为状态名；缺的状态不在 map 里。 */
+    public Map<String, Long> countSubmitAndCompletedByMember(long memberId) {
+        Map<String, Long> counts = new HashMap<>();
+        for (OrderStatusCountDO row : orderMapper.countSubmitAndCompletedByMember(memberId)) {
+            if (row.getOrderStatus() == null) {
+                continue;
+            }
+            counts.put(row.getOrderStatus(), row.getCnt() == null ? 0L : row.getCnt());
+        }
+        return counts;
     }
 
     public long countPageByMemberAndTab(long memberId, String orderStatusOrNull) {

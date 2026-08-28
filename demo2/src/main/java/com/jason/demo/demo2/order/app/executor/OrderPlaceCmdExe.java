@@ -35,6 +35,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * 下单：校验 placeToken → 幂等锁 → 再校验商品/售价 → fireEvent(INIT, SUBMIT_ORDER)。
+ * 本类不加 {@code @Transactional}：延时任务必须在 Action 事务提交之后注册。
+ */
 @Service
 public class OrderPlaceCmdExe {
 
@@ -130,6 +134,7 @@ public class OrderPlaceCmdExe {
             ctx.setOrder(order);
             executor.fireEvent(OrderStatusEnum.INIT, OrderEventEnum.SUBMIT_ORDER, ctx);
 
+            // 先写 result 再 schedule：避免 schedule 失败后同一 token 再下一单
             tokenStore.saveResult(token, orderId, Duration.ofHours(24));
             long taskId = delayTaskService.schedule(
                     DelayTaskType.ORDER_CANCEL,

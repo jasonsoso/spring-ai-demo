@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
+/** 订单查询门面。写路径走状态机 Action，这里只读。 */
 @Service
 public class OrderDomainService {
 
@@ -34,6 +35,7 @@ public class OrderDomainService {
                 .orElseThrow(() -> new BusinessException(OrderErrorCodeEnum.ORDER_NOT_FOUND));
     }
 
+    /** 详情/幂等回读：主表没有对应会员或明细缺失时由调用方按空 items 展示。 */
     public Order requireOrderWithItems(long orderId, long memberId) {
         Order order = requireOrder(orderId, memberId);
         order.setItems(orderItemRepository.listByOrderId(orderId));

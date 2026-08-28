@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/** 我的订单分页。ALL 不滤状态（含 CANCEL）；SUBMIT/COMPLETED 按 tab 名过滤。 */
 @Service
 public class OrderListCmdExe {
 

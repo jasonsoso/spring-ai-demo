@@ -3,6 +3,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.jason.demo.demo2.order.service.infrastructure.dao.mapper.OrderMapper">
 
+    <!-- CAS：仅 SUBMIT 可支付/取消，防并发双花 -->
     <update id="markCompleted">
         UPDATE demo_order
         SET order_status = 'COMPLETED',
@@ -29,19 +30,20 @@
         </if>
     </update>
 
-    <select id="countByMemberAndStatus" resultType="long">
-        SELECT COUNT(*)
+    <!-- Tab 冒泡：一次查出待支付/已完成；缺档由 CmdExe 补 0 -->
+    <select id="countSubmitAndCompletedByMember"
+            resultType="com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderStatusCountDO">
+        SELECT o.order_status AS orderStatus, COUNT(*) AS cnt
         FROM demo_order o
         WHERE o.member_id = #{memberId}
-          AND o.order_status = #{orderStatus}
-          AND EXISTS (SELECT 1 FROM demo_order_item i WHERE i.order_id = o.order_id)
+          AND o.order_status IN ('SUBMIT', 'COMPLETED')
+        GROUP BY o.order_status
     </select>
 
     <select id="countPageByMemberAndTab" resultType="long">
         SELECT COUNT(*)
         FROM demo_order o
         WHERE o.member_id = #{memberId}
-          AND EXISTS (SELECT 1 FROM demo_order_item i WHERE i.order_id = o.order_id)
         <if test="orderStatus != null">
             AND o.order_status = #{orderStatus}
         </if>
@@ -52,7 +54,6 @@
         SELECT o.*
         FROM demo_order o
         WHERE o.member_id = #{memberId}
-          AND EXISTS (SELECT 1 FROM demo_order_item i WHERE i.order_id = o.order_id)
         <if test="orderStatus != null">
             AND o.order_status = #{orderStatus}
         </if>
