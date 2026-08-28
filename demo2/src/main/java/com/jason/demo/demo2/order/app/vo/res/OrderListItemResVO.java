@@ -8,8 +8,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@Schema(description = "订单详情响应")
-public class GetOrderResVO {
+@Schema(description = "订单列表项")
+public class OrderListItemResVO {
 
     @Schema(description = "订单 ID")
     private Long orderId;
@@ -20,7 +20,7 @@ public class GetOrderResVO {
     @Schema(description = "支付状态", example = "WAIT_PAY")
     private String payStatus;
 
-    @Schema(description = "订单金额", example = "18.00")
+    @Schema(description = "订单金额", example = "36.00")
     private BigDecimal amount;
 
     @Schema(description = "支付时间")
@@ -32,9 +32,6 @@ public class GetOrderResVO {
     @Schema(description = "创建时间")
     private LocalDateTime createdAt;
 
-    @Schema(description = "更新时间")
-    private LocalDateTime updatedAt;
-
-    @Schema(description = "商品行快照；无明细时为空数组")
+    @Schema(description = "商品行；列表仅封面/名称/qty/售价")
     private List<OrderLineResVO> items;
 }

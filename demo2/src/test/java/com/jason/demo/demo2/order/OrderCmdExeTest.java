@@ -16,6 +16,7 @@ import com.jason.demo.demo2.order.service.core.OrderDomainService;
 import com.jason.demo.demo2.order.service.core.domain.Order;
 import com.jason.demo.demo2.order.service.common.OrderEventEnum;
 import com.jason.demo.demo2.order.service.core.statemachine.OrderStateMachineExecutor;
+import com.jason.demo.demo2.order.service.infrastructure.repository.OrderItemRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -43,6 +45,8 @@ class OrderCmdExeTest {
     private DelayTaskService delayTaskService;
     @Mock
     private OrderVoConvert orderVoConvert;
+    @Mock
+    private OrderItemRepository orderItemRepository;
 
     @BeforeEach
     void setUp() {
@@ -74,7 +78,8 @@ class OrderCmdExeTest {
         Order order = order(55L, OrderStatusEnum.SUBMIT);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(order);
         when(orderVoConvert.toGetRes(order)).thenReturn(getRes(order));
-        OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
+        when(orderItemRepository.listByOrderId(55L)).thenReturn(List.of());
+        OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService, orderItemRepository, orderVoConvert);
 
         GetOrderResVO result = exe.execute(55L);
 
@@ -117,7 +122,7 @@ class OrderCmdExeTest {
     private static GetOrderResVO getRes(Order order) {
         GetOrderResVO vo = new GetOrderResVO();
         vo.setOrderId(order.getOrderId());
-        vo.setStatus(order.getOrderStatus());
+        vo.setOrderStatus(order.getOrderStatus());
         vo.setAmount(order.getAmount());
         return vo;
     }
