@@ -3,16 +3,18 @@
 -- 新建环境可直接执行本脚本；已有 demo_order 表的环境请手动执行 member-module-migration.sql
 
 CREATE TABLE IF NOT EXISTS demo_order (
-    order_id    BIGINT        NOT NULL COMMENT '订单ID（雪花）',
-    member_id   BIGINT        NOT NULL COMMENT '下单会员ID（雪花）',
-    status      VARCHAR(32)   NOT NULL COMMENT '订单状态：PENDING_PAY/PAID/CANCELLED',
-    amount      DECIMAL(12,2) NOT NULL COMMENT '订单金额',
-    created_at  DATETIME(3)   NOT NULL COMMENT '创建时间',
-    updated_at  DATETIME(3)   NOT NULL COMMENT '更新时间',
+    order_id     BIGINT        NOT NULL COMMENT '订单ID（雪花）',
+    member_id    BIGINT        NOT NULL COMMENT '下单会员ID',
+    order_status VARCHAR(32)   NOT NULL COMMENT 'SUBMIT/COMPLETED/CANCEL',
+    pay_status   VARCHAR(32)   NOT NULL COMMENT 'WAIT_PAY/PAY_SUCCESS/CLOSE',
+    amount       DECIMAL(12,2) NOT NULL COMMENT '应付金额 = sum(sell_price * qty)',
+    pay_time     DATETIME(3)   NULL COMMENT '支付完成时间',
+    cancel_time  DATETIME(3)   NULL COMMENT '取消/超时时间',
+    created_at   DATETIME(3)   NOT NULL,
+    updated_at   DATETIME(3)   NOT NULL,
     PRIMARY KEY (order_id),
-    INDEX idx_demo_order_member (member_id),
-    INDEX idx_demo_order_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='演示订单表（超时未支付自动取消）';
+    INDEX idx_demo_order_member_status_time (member_id, order_status, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='演示订单主表';
 
 CREATE TABLE IF NOT EXISTS delay_task (
     task_id      BIGINT       NOT NULL COMMENT '任务ID（雪花）',

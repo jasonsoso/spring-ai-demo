@@ -75,31 +75,31 @@ class OrderCmdExeTest {
 
         assertEquals(55L, result.getOrderId());
         assertEquals(77L, result.getTaskId());
-        assertEquals(OrderStatusEnum.PENDING_PAY.name(), result.getStatus());
+        assertEquals(OrderStatusEnum.SUBMIT.name(), result.getStatus());
         assertEquals("PT10S", result.getDelay());
         verify(orderDomainService).place(argThat(o -> o.getOrderId() == 55L
                 && o.getMemberId() == 9001L
-                && OrderStatusEnum.PENDING_PAY.name().equals(o.getStatus())));
+                && OrderStatusEnum.SUBMIT.name().equals(o.getOrderStatus())));
         verify(delayTaskService).schedule(DelayTaskType.ORDER_CANCEL, "55", null, Duration.ofSeconds(10));
     }
 
     @Test
     void pay_cancelsDelayTask() {
-        Order paid = order(55L, OrderStatusEnum.PAID);
+        Order paid = order(55L, OrderStatusEnum.COMPLETED);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(paid);
         when(orderVoConvert.toPayRes(paid)).thenReturn(payRes(paid));
         OrderPaySuccessCmdExe exe = new OrderPaySuccessCmdExe(orderDomainService, delayTaskService, orderVoConvert);
 
         PayOrderResVO result = exe.execute(55L);
 
-        assertEquals(OrderStatusEnum.PAID.name(), result.getStatus());
+        assertEquals(OrderStatusEnum.COMPLETED.name(), result.getStatus());
         verify(orderDomainService).payOrder(55L, 9001L);
         verify(delayTaskService).cancelByBizKey(DelayTaskType.ORDER_CANCEL, "55");
     }
 
     @Test
     void get_usesCurrentMemberOwnership() {
-        Order order = order(55L, OrderStatusEnum.PENDING_PAY);
+        Order order = order(55L, OrderStatusEnum.SUBMIT);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(order);
         when(orderVoConvert.toGetRes(order)).thenReturn(getRes(order));
         OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
@@ -112,14 +112,14 @@ class OrderCmdExeTest {
 
     @Test
     void cancel_cancelsDelayTask() {
-        Order cancelled = order(55L, OrderStatusEnum.CANCELLED);
+        Order cancelled = order(55L, OrderStatusEnum.CANCEL);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(cancelled);
         when(orderVoConvert.toCancelRes(cancelled)).thenReturn(cancelRes(cancelled));
         OrderCancelCmdExe exe = new OrderCancelCmdExe(orderDomainService, delayTaskService, orderVoConvert);
 
         CancelOrderResVO result = exe.execute(55L);
 
-        assertEquals(OrderStatusEnum.CANCELLED.name(), result.getStatus());
+        assertEquals(OrderStatusEnum.CANCEL.name(), result.getStatus());
         verify(orderDomainService).manualCancel(55L, 9001L);
         verify(delayTaskService).cancelByBizKey(DelayTaskType.ORDER_CANCEL, "55");
     }
@@ -127,7 +127,7 @@ class OrderCmdExeTest {
     private static Order order(long orderId, OrderStatusEnum status) {
         Order order = new Order();
         order.setOrderId(orderId);
-        order.setStatus(status.name());
+        order.setOrderStatus(status.name());
         order.setAmount(new BigDecimal("9.90"));
         order.setCreatedAt(LocalDateTime.now());
         order.setUpdatedAt(LocalDateTime.now());
@@ -137,14 +137,14 @@ class OrderCmdExeTest {
     private static PayOrderResVO payRes(Order order) {
         PayOrderResVO vo = new PayOrderResVO();
         vo.setOrderId(order.getOrderId());
-        vo.setStatus(order.getStatus());
+        vo.setStatus(order.getOrderStatus());
         return vo;
     }
 
     private static GetOrderResVO getRes(Order order) {
         GetOrderResVO vo = new GetOrderResVO();
         vo.setOrderId(order.getOrderId());
-        vo.setStatus(order.getStatus());
+        vo.setStatus(order.getOrderStatus());
         vo.setAmount(order.getAmount());
         return vo;
     }
@@ -152,7 +152,7 @@ class OrderCmdExeTest {
     private static CancelOrderResVO cancelRes(Order order) {
         CancelOrderResVO vo = new CancelOrderResVO();
         vo.setOrderId(order.getOrderId());
-        vo.setStatus(order.getStatus());
+        vo.setStatus(order.getOrderStatus());
         return vo;
     }
 }

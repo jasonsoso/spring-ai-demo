@@ -1,14 +1,19 @@
 package com.jason.demo.demo2.order.service.core.domain;
 
-import com.jason.demo.demo2.order.service.common.OrderStatusEnum;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
 import com.jason.demo.demo2.order.service.common.OrderErrorCodeEnum;
+import com.jason.demo.demo2.order.service.common.OrderStatusEnum;
+import com.jason.demo.demo2.order.service.common.PayStatusEnum;
 import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Order extends OrderDO {
+
+    private List<?> items = new ArrayList<>();
 
     public static Order create(long orderId, long memberId, BigDecimal amount, LocalDateTime now) {
         if (amount == null || amount.signum() <= 0) {
@@ -17,7 +22,8 @@ public class Order extends OrderDO {
         Order order = new Order();
         order.setOrderId(orderId);
         order.setMemberId(memberId);
-        order.setStatus(OrderStatusEnum.PENDING_PAY.name());
+        order.setOrderStatus(OrderStatusEnum.SUBMIT.name());
+        order.setPayStatus(PayStatusEnum.WAIT_PAY.name());
         order.setAmount(amount);
         order.setCreatedAt(now);
         order.setUpdatedAt(now);
@@ -31,28 +37,45 @@ public class Order extends OrderDO {
         Order order = new Order();
         order.setOrderId(source.getOrderId());
         order.setMemberId(source.getMemberId());
-        order.setStatus(source.getStatus());
+        order.setOrderStatus(source.getOrderStatus());
+        order.setPayStatus(source.getPayStatus());
         order.setAmount(source.getAmount());
+        order.setPayTime(source.getPayTime());
+        order.setCancelTime(source.getCancelTime());
         order.setCreatedAt(source.getCreatedAt());
         order.setUpdatedAt(source.getUpdatedAt());
         return order;
     }
 
+    public List<?> getItems() {
+        return items;
+    }
+
+    public void setItems(List<?> items) {
+        this.items = items == null ? new ArrayList<>() : items;
+    }
+
     public void pay() {
-        if (!OrderStatusEnum.PENDING_PAY.name().equals(getStatus())) {
+        if (!OrderStatusEnum.SUBMIT.name().equals(getOrderStatus())) {
             throw new BusinessException(OrderErrorCodeEnum.ORDER_STATUS_CONFLICT,
-                    "cannot pay order in status " + getStatus());
+                    "cannot pay order in status " + getOrderStatus());
         }
-        setStatus(OrderStatusEnum.PAID.name());
-        setUpdatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        setOrderStatus(OrderStatusEnum.COMPLETED.name());
+        setPayStatus(PayStatusEnum.PAY_SUCCESS.name());
+        setPayTime(now);
+        setUpdatedAt(now);
     }
 
     public boolean cancel() {
-        if (!OrderStatusEnum.PENDING_PAY.name().equals(getStatus())) {
+        if (!OrderStatusEnum.SUBMIT.name().equals(getOrderStatus())) {
             return false;
         }
-        setStatus(OrderStatusEnum.CANCELLED.name());
-        setUpdatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        setOrderStatus(OrderStatusEnum.CANCEL.name());
+        setPayStatus(PayStatusEnum.CLOSE.name());
+        setCancelTime(now);
+        setUpdatedAt(now);
         return true;
     }
 }

@@ -81,7 +81,7 @@ class JacksonJsonCustomizerTest {
     void localDateTimeAndInstant_useConfiguredPattern() {
         OrderDO order = new OrderDO();
         order.setOrderId(55L);
-        order.setStatus("PAID");
+        order.setOrderStatus("COMPLETED");
         order.setAmount(new BigDecimal("1.00"));
         order.setCreatedAt(LocalDateTime.of(2026, 8, 7, 10, 16, 2));
         order.setUpdatedAt(LocalDateTime.of(2026, 8, 7, 10, 16, 2));

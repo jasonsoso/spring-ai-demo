@@ -3,6 +3,7 @@ package com.jason.demo.demo2.order.service.infrastructure.repository;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.jason.demo.demo2.order.service.common.OrderStatusEnum;
+import com.jason.demo.demo2.order.service.common.PayStatusEnum;
 import com.jason.demo.demo2.order.service.core.domain.Order;
 import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO;
 import com.jason.demo.demo2.order.service.infrastructure.dao.mapper.OrderMapper;
@@ -38,13 +39,15 @@ public class OrderRepository {
         return Optional.ofNullable(orderDoConvert.toDomain(row));
     }
 
-    public boolean markPaid(long orderId, long memberId) {
+    public boolean markCompleted(long orderId, long memberId) {
         LocalDateTime now = LocalDateTime.now();
         int rows = orderMapper.update(null, new LambdaUpdateWrapper<OrderDO>()
                 .eq(OrderDO::getOrderId, orderId)
                 .eq(OrderDO::getMemberId, memberId)
-                .eq(OrderDO::getStatus, OrderStatusEnum.PENDING_PAY.name())
-                .set(OrderDO::getStatus, OrderStatusEnum.PAID.name())
+                .eq(OrderDO::getOrderStatus, OrderStatusEnum.SUBMIT.name())
+                .set(OrderDO::getOrderStatus, OrderStatusEnum.COMPLETED.name())
+                .set(OrderDO::getPayStatus, PayStatusEnum.PAY_SUCCESS.name())
+                .set(OrderDO::getPayTime, now)
                 .set(OrderDO::getUpdatedAt, now));
         return rows > 0;
     }
@@ -54,8 +57,10 @@ public class OrderRepository {
         int rows = orderMapper.update(null, new LambdaUpdateWrapper<OrderDO>()
                 .eq(OrderDO::getOrderId, orderId)
                 .eq(OrderDO::getMemberId, memberId)
-                .eq(OrderDO::getStatus, OrderStatusEnum.PENDING_PAY.name())
-                .set(OrderDO::getStatus, OrderStatusEnum.CANCELLED.name())
+                .eq(OrderDO::getOrderStatus, OrderStatusEnum.SUBMIT.name())
+                .set(OrderDO::getOrderStatus, OrderStatusEnum.CANCEL.name())
+                .set(OrderDO::getPayStatus, PayStatusEnum.CLOSE.name())
+                .set(OrderDO::getCancelTime, now)
                 .set(OrderDO::getUpdatedAt, now));
         return rows > 0;
     }
@@ -64,8 +69,10 @@ public class OrderRepository {
         LocalDateTime now = LocalDateTime.now();
         int rows = orderMapper.update(null, new LambdaUpdateWrapper<OrderDO>()
                 .eq(OrderDO::getOrderId, orderId)
-                .eq(OrderDO::getStatus, OrderStatusEnum.PENDING_PAY.name())
-                .set(OrderDO::getStatus, OrderStatusEnum.CANCELLED.name())
+                .eq(OrderDO::getOrderStatus, OrderStatusEnum.SUBMIT.name())
+                .set(OrderDO::getOrderStatus, OrderStatusEnum.CANCEL.name())
+                .set(OrderDO::getPayStatus, PayStatusEnum.CLOSE.name())
+                .set(OrderDO::getCancelTime, now)
                 .set(OrderDO::getUpdatedAt, now));
         return rows > 0;
     }

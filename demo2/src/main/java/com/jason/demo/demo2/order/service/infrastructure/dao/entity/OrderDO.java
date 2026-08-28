@@ -15,8 +15,11 @@ public class OrderDO {
     @TableId(value = "order_id", type = IdType.INPUT)
     private Long orderId;
     private Long memberId;
-    private String status;
+    private String orderStatus;
+    private String payStatus;
     private BigDecimal amount;
+    private LocalDateTime payTime;
+    private LocalDateTime cancelTime;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -27,10 +27,10 @@ public class OrderDomainService {
     public void payOrder(long orderId, long memberId) {
         Order order = requireOrder(orderId, memberId);
         order.pay();
-        if (!orderRepository.markPaid(orderId, memberId)) {
+        if (!orderRepository.markCompleted(orderId, memberId)) {
             Order latest = requireOrder(orderId, memberId);
             throw new BusinessException(OrderErrorCodeEnum.ORDER_STATUS_CONFLICT,
-                    "cannot pay order in status " + latest.getStatus());
+                    "cannot pay order in status " + latest.getOrderStatus());
         }
     }
 
@@ -49,12 +49,12 @@ public class OrderDomainService {
         Order order = requireOrder(orderId, memberId);
         if (!order.cancel()) {
             throw new BusinessException(OrderErrorCodeEnum.ORDER_STATUS_CONFLICT,
-                    "cannot cancel order in status " + order.getStatus());
+                    "cannot cancel order in status " + order.getOrderStatus());
         }
         if (!orderRepository.markCancelled(orderId, memberId)) {
             Order latest = requireOrder(orderId, memberId);
             throw new BusinessException(OrderErrorCodeEnum.ORDER_STATUS_CONFLICT,
-                    "cannot cancel order in status " + latest.getStatus());
+                    "cannot cancel order in status " + latest.getOrderStatus());
         }
     }
 }

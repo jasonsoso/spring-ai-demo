@@ -50,7 +50,7 @@ public class OrderPlaceCmdExe {
 
         OrderPlaceResVO res = new OrderPlaceResVO();
         res.setOrderId(orderId);
-        res.setStatus(order.getStatus());
+        res.setStatus(order.getOrderStatus());
         res.setAmount(order.getAmount());
         res.setTaskId(taskId);
         res.setDelay(effectiveDelay.toString());
