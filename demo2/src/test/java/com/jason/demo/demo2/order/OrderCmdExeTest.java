@@ -14,6 +14,8 @@ import com.jason.demo.demo2.order.app.vo.res.PayOrderResVO;
 import com.jason.demo.demo2.order.service.common.OrderStatusEnum;
 import com.jason.demo.demo2.order.service.core.OrderDomainService;
 import com.jason.demo.demo2.order.service.core.domain.Order;
+import com.jason.demo.demo2.order.service.common.OrderEventEnum;
+import com.jason.demo.demo2.order.service.core.statemachine.OrderStateMachineExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +37,8 @@ class OrderCmdExeTest {
 
     @Mock
     private OrderDomainService orderDomainService;
+    @Mock
+    private OrderStateMachineExecutor executor;
     @Mock
     private DelayTaskService delayTaskService;
     @Mock
@@ -50,15 +56,16 @@ class OrderCmdExeTest {
 
     @Test
     void pay_cancelsDelayTask() {
-        Order paid = order(55L, OrderStatusEnum.COMPLETED);
+        Order paid = order(55L, OrderStatusEnum.SUBMIT);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(paid);
         when(orderVoConvert.toPayRes(paid)).thenReturn(payRes(paid));
-        OrderPaySuccessCmdExe exe = new OrderPaySuccessCmdExe(orderDomainService, delayTaskService, orderVoConvert);
+        OrderPaySuccessCmdExe exe = new OrderPaySuccessCmdExe(
+                orderDomainService, executor, delayTaskService, orderVoConvert);
 
         PayOrderResVO result = exe.execute(55L);
 
-        assertEquals(OrderStatusEnum.COMPLETED.name(), result.getStatus());
-        verify(orderDomainService).payOrder(55L, 9001L);
+        assertEquals(OrderStatusEnum.SUBMIT.name(), result.getOrderStatus());
+        verify(executor).fireEvent(eq(OrderStatusEnum.SUBMIT), eq(OrderEventEnum.PAY_SUCCESS), any());
         verify(delayTaskService).cancelByBizKey(DelayTaskType.ORDER_CANCEL, "55");
     }
 
@@ -77,15 +84,16 @@ class OrderCmdExeTest {
 
     @Test
     void cancel_cancelsDelayTask() {
-        Order cancelled = order(55L, OrderStatusEnum.CANCEL);
+        Order cancelled = order(55L, OrderStatusEnum.SUBMIT);
         when(orderDomainService.requireOrder(55L, 9001L)).thenReturn(cancelled);
         when(orderVoConvert.toCancelRes(cancelled)).thenReturn(cancelRes(cancelled));
-        OrderCancelCmdExe exe = new OrderCancelCmdExe(orderDomainService, delayTaskService, orderVoConvert);
+        OrderCancelCmdExe exe = new OrderCancelCmdExe(
+                orderDomainService, executor, delayTaskService, orderVoConvert);
 
         CancelOrderResVO result = exe.execute(55L);
 
-        assertEquals(OrderStatusEnum.CANCEL.name(), result.getStatus());
-        verify(orderDomainService).manualCancel(55L, 9001L);
+        assertEquals(OrderStatusEnum.SUBMIT.name(), result.getOrderStatus());
+        verify(executor).fireEvent(eq(OrderStatusEnum.SUBMIT), eq(OrderEventEnum.CANCEL_ORDER), any());
         verify(delayTaskService).cancelByBizKey(DelayTaskType.ORDER_CANCEL, "55");
     }
 
@@ -102,7 +110,7 @@ class OrderCmdExeTest {
     private static PayOrderResVO payRes(Order order) {
         PayOrderResVO vo = new PayOrderResVO();
         vo.setOrderId(order.getOrderId());
-        vo.setStatus(order.getOrderStatus());
+        vo.setOrderStatus(order.getOrderStatus());
         return vo;
     }
 
@@ -117,7 +125,7 @@ class OrderCmdExeTest {
     private static CancelOrderResVO cancelRes(Order order) {
         CancelOrderResVO vo = new CancelOrderResVO();
         vo.setOrderId(order.getOrderId());
-        vo.setStatus(order.getOrderStatus());
+        vo.setOrderStatus(order.getOrderStatus());
         return vo;
     }
 }

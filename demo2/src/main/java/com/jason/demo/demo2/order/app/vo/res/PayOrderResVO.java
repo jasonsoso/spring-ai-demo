@@ -10,6 +10,9 @@ public class PayOrderResVO {
     @Schema(description = "订单 ID")
     private Long orderId;
 
-    @Schema(description = "订单状态", example = "PAID")
-    private String status;
+    @Schema(description = "订单状态", example = "COMPLETED")
+    private String orderStatus;
+
+    @Schema(description = "支付状态", example = "PAY_SUCCESS")
+    private String payStatus;
 }

@@ -8,6 +8,7 @@ import com.jason.demo.demo2.order.service.infrastructure.repository.OrderReposit
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 public class OrderDomainService {
@@ -22,6 +23,10 @@ public class OrderDomainService {
 
     public void place(Order order) {
         orderRepository.insert(order);
+    }
+
+    public Optional<Order> findById(long orderId) {
+        return orderRepository.findById(orderId);
     }
 
     public Order requireOrder(long orderId, long memberId) {

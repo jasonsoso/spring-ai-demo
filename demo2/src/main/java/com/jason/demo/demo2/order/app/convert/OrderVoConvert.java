@@ -10,12 +10,10 @@ import org.mapstruct.Mapping;
 @Mapper(componentModel = "spring")
 public interface OrderVoConvert {
 
-    @Mapping(source = "orderStatus", target = "status")
     PayOrderResVO toPayRes(Order order);
 
     @Mapping(source = "orderStatus", target = "status")
     GetOrderResVO toGetRes(Order order);
 
-    @Mapping(source = "orderStatus", target = "status")
     CancelOrderResVO toCancelRes(Order order);
 }

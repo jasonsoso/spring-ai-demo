@@ -1,43 +1,66 @@
 package com.jason.demo.demo2.order.service.core.statemachine.action;
 
 import com.alibaba.cola.statemachine.Action;
+import com.jason.demo.demo2.framework.web.exception.BusinessException;
+import com.jason.demo.demo2.order.service.common.OrderErrorCodeEnum;
 import com.jason.demo.demo2.order.service.common.OrderEventEnum;
 import com.jason.demo.demo2.order.service.common.OrderStatusEnum;
 import com.jason.demo.demo2.order.service.common.PayStatusEnum;
 import com.jason.demo.demo2.order.service.core.domain.Order;
+import com.jason.demo.demo2.order.service.core.domain.OrderItem;
 import com.jason.demo.demo2.order.service.core.statemachine.OrderContext;
+import com.jason.demo.demo2.order.service.infrastructure.repository.OrderItemRepository;
 import com.jason.demo.demo2.order.service.infrastructure.repository.OrderRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.jason.demo.demo2.product.service.core.ProductStockHotService;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Component
 public class OrderPaySuccessAction implements Action<OrderStatusEnum, OrderEventEnum, OrderContext> {
 
-    @SuppressWarnings("unused")
     private final OrderRepository orderRepository;
+    private final ProductStockHotService productStockHotService;
+    private final OrderItemRepository orderItemRepository;
 
-    @Autowired
-    public OrderPaySuccessAction(OrderRepository orderRepository) {
-        this(orderRepository, null);
-    }
-
-    public OrderPaySuccessAction(OrderRepository orderRepository, Object productStockHotService) {
+    public OrderPaySuccessAction(
+            OrderRepository orderRepository,
+            ProductStockHotService productStockHotService,
+            OrderItemRepository orderItemRepository) {
         this.orderRepository = orderRepository;
+        this.productStockHotService = productStockHotService;
+        this.orderItemRepository = orderItemRepository;
     }
 
     @Override
     @Transactional
     public void execute(OrderStatusEnum from, OrderStatusEnum to, OrderEventEnum event, OrderContext ctx) {
-        applyTransition(to, event, ctx);
+        Order order = ctx.getOrder();
+        LocalDateTime now = LocalDateTime.now();
+        applyTransition(to, order, now);
+        if (!orderRepository.markCompleted(order.getOrderId(), order.getMemberId(), now)) {
+            throw new BusinessException(OrderErrorCodeEnum.ORDER_STATUS_CONFLICT);
+        }
+        for (OrderItem item : itemsOf(ctx)) {
+            productStockHotService.confirm(item.getProductId(), order.getOrderId(), item.getQty());
+        }
     }
 
-    private void applyTransition(OrderStatusEnum to, OrderEventEnum event, OrderContext ctx) {
-        Order order = ctx.getOrder();
+    private void applyTransition(OrderStatusEnum to, Order order, LocalDateTime now) {
         order.setOrderStatus(to.name());
         order.setPayStatus(PayStatusEnum.PAY_SUCCESS.name());
-        order.setPayTime(LocalDateTime.now());
+        order.setPayTime(now);
+    }
+
+    private List<OrderItem> itemsOf(OrderContext ctx) {
+        Order order = ctx.getOrder();
+        List<OrderItem> items = order.getItems();
+        if (items == null || items.isEmpty()) {
+            items = orderItemRepository.listByOrderId(order.getOrderId());
+            order.setItems(items);
+        }
+        return items;
     }
 }

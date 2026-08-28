@@ -13,6 +13,7 @@ import com.jason.demo.demo2.order.service.core.statemachine.action.OrderCancelAc
 import com.jason.demo.demo2.order.service.core.statemachine.action.OrderExpireAction;
 import com.jason.demo.demo2.order.service.core.statemachine.action.OrderPaySuccessAction;
 import com.jason.demo.demo2.order.service.core.statemachine.action.OrderPlaceAction;
+import com.jason.demo.demo2.order.service.infrastructure.repository.OrderItemRepository;
 import com.jason.demo.demo2.order.service.infrastructure.repository.OrderRepository;
 import com.jason.demo.demo2.product.service.core.ProductStockHotService;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,9 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class OrderStateMachineExecutorTest {
@@ -34,17 +38,21 @@ class OrderStateMachineExecutorTest {
     @Mock
     private OrderRepository orderRepository;
     @Mock
+    private OrderItemRepository orderItemRepository;
+    @Mock
     private ProductStockHotService productStockHotService;
 
     private OrderStateMachineExecutor executor;
 
     @BeforeEach
     void setUp() {
+        lenient().when(orderRepository.markCompleted(anyLong(), any(), any())).thenReturn(true);
+        lenient().when(orderRepository.markCancelled(anyLong(), any(), any())).thenReturn(true);
         executor = new OrderStateMachineExecutor(
                 new OrderPlaceAction(orderRepository, productStockHotService),
-                new OrderPaySuccessAction(null, null),
-                new OrderCancelAction(null, null),
-                new OrderExpireAction(null, null));
+                new OrderPaySuccessAction(orderRepository, productStockHotService, orderItemRepository),
+                new OrderCancelAction(orderRepository, productStockHotService, orderItemRepository),
+                new OrderExpireAction(orderRepository, productStockHotService, orderItemRepository));
     }
 
     @Test
