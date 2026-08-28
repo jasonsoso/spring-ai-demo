@@ -8,6 +8,7 @@ import com.jason.demo.demo2.order.service.common.PayStatusEnum;
 import com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,8 +18,13 @@ public class Order extends OrderDO {
     @TableField(exist = false)
     private List<OrderItem> items = new ArrayList<>();
 
-    public static Order create(long orderId, long memberId, BigDecimal amount, LocalDateTime now) {
-        if (amount == null || amount.signum() <= 0) {
+    public static Order create(long orderId, long memberId, List<OrderItem> items, LocalDateTime now) {
+        List<OrderItem> lines = items == null ? List.of() : items;
+        BigDecimal amount = BigDecimal.ZERO.setScale(2, RoundingMode.UNNECESSARY);
+        for (OrderItem item : lines) {
+            amount = amount.add(item.lineAmount());
+        }
+        if (amount.signum() <= 0) {
             throw new BusinessException(OrderErrorCodeEnum.AMOUNT_INVALID);
         }
         Order order = new Order();
@@ -27,6 +33,7 @@ public class Order extends OrderDO {
         order.setOrderStatus(OrderStatusEnum.SUBMIT.name());
         order.setPayStatus(PayStatusEnum.WAIT_PAY.name());
         order.setAmount(amount);
+        order.setItems(new ArrayList<>(lines));
         order.setCreatedAt(now);
         order.setUpdatedAt(now);
         return order;

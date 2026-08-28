@@ -52,7 +52,7 @@ public class OrderController {
     @PostMapping("/orderPlace")
     public JsonResult<OrderPlaceResVO> orderPlace(@Valid @RequestBody OrderPlaceReqVO request) {
         Duration delay = OrderDelayParser.parseDelay(request.getDelay());
-        return JsonResults.ok(orderPlaceCmdExe.execute(request.getAmount(), delay));
+        return JsonResults.ok(orderPlaceCmdExe.execute(request, delay));
     }
 
     @LoginRequired

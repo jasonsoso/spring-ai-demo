@@ -12,8 +12,11 @@ public class OrderPlaceResVO {
     @Schema(description = "订单 ID")
     private Long orderId;
 
-    @Schema(description = "订单状态", example = "PENDING")
-    private String status;
+    @Schema(description = "订单状态", example = "SUBMIT")
+    private String orderStatus;
+
+    @Schema(description = "支付状态", example = "WAIT_PAY")
+    private String payStatus;
 
     @Schema(description = "订单金额", example = "18.00")
     private BigDecimal amount;
