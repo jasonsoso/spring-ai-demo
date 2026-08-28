@@ -1,6 +1,9 @@
 package com.jason.demo.demo2.product.service.infrastructure.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.jason.demo.demo2.framework.web.exception.BusinessException;
+import com.jason.demo.demo2.product.service.common.ProductErrorCodeEnum;
 import com.jason.demo.demo2.product.service.common.ProductStatusEnum;
 import com.jason.demo.demo2.product.service.core.domain.Product;
 import com.jason.demo.demo2.product.service.core.domain.ProductStock;
@@ -11,6 +14,7 @@ import com.jason.demo.demo2.product.service.infrastructure.dao.mapper.ProductMap
 import com.jason.demo.demo2.product.service.infrastructure.repository.convert.ProductDoConvert;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -76,5 +80,17 @@ public class ProductRepository {
         ProductDO productDO = productMapper.selectOne(new LambdaQueryWrapper<ProductDO>()
                 .eq(ProductDO::getProductId, productId));
         return Optional.ofNullable(productDoConvert.toDomain(productDO));
+    }
+
+    public Product requireByProductId(long productId) {
+        return findByProductId(productId)
+                .orElseThrow(() -> new BusinessException(ProductErrorCodeEnum.PRODUCT_NOT_FOUND));
+    }
+
+    public void updateStatus(long productId, ProductStatusEnum status) {
+        productMapper.update(null, new LambdaUpdateWrapper<ProductDO>()
+                .eq(ProductDO::getProductId, productId)
+                .set(ProductDO::getStatus, status.name())
+                .set(ProductDO::getUpdatedAt, LocalDateTime.now()));
     }
 }

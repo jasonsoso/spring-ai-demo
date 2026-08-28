@@ -39,9 +39,25 @@ public class ProductStockRepository {
                 .toList();
     }
 
+    public List<ProductStock> findAll() {
+        return productStockMapper.selectList(null).stream()
+                .map(productStockDoConvert::toDomain)
+                .toList();
+    }
+
     public ProductStock requireByProductId(long productId) {
         return findByProductId(productId)
                 .orElseThrow(() -> new BusinessException(ProductErrorCodeEnum.STOCK_NOT_FOUND));
+    }
+
+    public ProductStock requireByProductIdForUpdate(long productId) {
+        ProductStockDO row = productStockMapper.selectOne(new LambdaQueryWrapper<ProductStockDO>()
+                .eq(ProductStockDO::getProductId, productId)
+                .last("FOR UPDATE"));
+        if (row == null) {
+            throw new BusinessException(ProductErrorCodeEnum.STOCK_NOT_FOUND);
+        }
+        return productStockDoConvert.toDomain(row);
     }
 
     public boolean reserve(long productId, int qty) {
@@ -54,5 +70,21 @@ public class ProductStockRepository {
 
     public boolean release(long productId, int qty) {
         return productStockMapper.release(productId, qty) > 0;
+    }
+
+    public boolean adjustActual(long productId, int targetActual) {
+        return productStockMapper.adjustActual(productId, targetActual) > 0;
+    }
+
+    public boolean applyReserveDelta(long productId, int qty, long seq) {
+        return productStockMapper.applyReserveDelta(productId, qty, seq) > 0;
+    }
+
+    public boolean applyConfirmDelta(long productId, int qty, long seq) {
+        return productStockMapper.applyConfirmDelta(productId, qty, seq) > 0;
+    }
+
+    public boolean applyReleaseDelta(long productId, int qty, long seq) {
+        return productStockMapper.applyReleaseDelta(productId, qty, seq) > 0;
     }
 }

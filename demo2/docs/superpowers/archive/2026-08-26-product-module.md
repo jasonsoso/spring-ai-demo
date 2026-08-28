@@ -117,11 +117,11 @@ com.jason.demo.demo2.product
 
 | 订单事件 | 商品模块调用 |
 |----------|-------------|
-| orderPlace（待支付） | `ProductStockDomainService.reserve(productId, orderId, qty)` |
-| pay | `confirm(productId, orderId, qty)` |
-| cancel / 超时 cancel | `release(productId, orderId)` |
+| orderPlace（待支付） | 热路径 `ProductStockHotService.reserve`（开关关闭则 DomainService） |
+| pay | `ProductStockHotService.confirm` |
+| cancel / 超时 cancel | `ProductStockHotService.release` |
 
-取消回滚数量以 RESERVE 流水为准。
+取消回滚数量以 RESERVE 流水为准。热闸门与 MQ 投影见 [2026-08-27-redis-stock-consistency.md](./2026-08-27-redis-stock-consistency.md)。订单 HTTP 接入热路径仍待后续 spec。
 
 ---
 
@@ -130,3 +130,4 @@ com.jason.demo.demo2.product
 | 日期 | 说明 |
 |------|------|
 | 2026-08-26 | 初版归档：三表 + 读 API + 库存领域服务 + C 端列表/详情 |
+| 2026-08-28 | 衔接热库存：订单应调 `ProductStockHotService`（见 Redis 热库存归档） |

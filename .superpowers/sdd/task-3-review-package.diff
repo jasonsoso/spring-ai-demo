@@ -1,0 +1,450 @@
+Task 3 review package
+Base: 58406a8 HEAD
+Head: working tree
+
+diff --git a/demo2/src/main/java/com/jason/demo/demo2/product/service/core/ProductStockDomainService.java b/demo2/src/main/java/com/jason/demo/demo2/product/service/core/ProductStockDomainService.java
+index 7ccbe63..229f400 100644
+--- a/demo2/src/main/java/com/jason/demo/demo2/product/service/core/ProductStockDomainService.java
++++ b/demo2/src/main/java/com/jason/demo/demo2/product/service/core/ProductStockDomainService.java
+@@ -1,16 +1,17 @@
+ package com.jason.demo.demo2.product.service.core;
+ 
+ import com.jason.demo.demo2.framework.id.SnowflakeIdGenerator;
+ import com.jason.demo.demo2.framework.web.exception.BusinessException;
+ import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
+ import com.jason.demo.demo2.product.service.common.ProductErrorCodeEnum;
++import com.jason.demo.demo2.product.service.common.ProductStockIdempotentKeys;
+ import com.jason.demo.demo2.product.service.common.ProductStockOptTypeEnum;
+ import com.jason.demo.demo2.product.service.core.domain.ProductStock;
+ import com.jason.demo.demo2.product.service.infrastructure.dao.entity.ProductStockLogDO;
+ import com.jason.demo.demo2.product.service.infrastructure.repository.ProductStockLogRepository;
+ import com.jason.demo.demo2.product.service.infrastructure.repository.ProductStockRepository;
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+ 
+ import java.time.LocalDateTime;
+ 
+@@ -28,85 +29,124 @@ public class ProductStockDomainService {
+         this.productStockRepository = productStockRepository;
+         this.productStockLogRepository = productStockLogRepository;
+         this.idGenerator = idGenerator;
+     }
+ 
+     @Transactional
+     public void reserve(long productId, long orderId, int qty) {
+         if (qty <= 0) {
+             throw new BusinessException(CommonErrorCodeEnum.BAD_REQUEST, "qty must be positive");
+         }
+-        ProductStock before = productStockRepository.requireByProductId(productId);
++        String key = ProductStockIdempotentKeys.of(orderId, productId, ProductStockOptTypeEnum.RESERVE);
++        if (productStockLogRepository.existsByIdempotentKey(key)) {
++            return;
++        }
++        ProductStock before = productStockRepository.requireByProductIdForUpdate(productId);
+         if (!productStockRepository.reserve(productId, qty)) {
+             throw new BusinessException(ProductErrorCodeEnum.STOCK_INSUFFICIENT);
+         }
+-        ProductStock after = productStockRepository.requireByProductId(productId);
++        ProductStock after = before.copy().applyReserve(qty);
++        after.setStockSeq(nullToZero(before.getStockSeq()) + 1);
+         after.assertBalance();
+-        writeLog(before, after, ProductStockOptTypeEnum.RESERVE, orderId, qty, null);
++        writeLog(before, after, ProductStockOptTypeEnum.RESERVE, orderId, qty, null, key);
+     }
+ 
+     @Transactional
+     public void confirm(long productId, long orderId, int qty) {
++        if (productStockLogRepository.existsOpt(orderId, productId, ProductStockOptTypeEnum.CONFIRM)) {
++            return;
++        }
+         ProductStockLogDO reserve = productStockLogRepository.findPendingReserve(orderId, productId)
+                 .orElseThrow(() -> new BusinessException(ProductErrorCodeEnum.RESERVE_LOG_NOT_FOUND));
+         int effectiveQty = reserve.getChangeQty();
+-        ProductStock before = productStockRepository.requireByProductId(productId);
++        ProductStock before = productStockRepository.requireByProductIdForUpdate(productId);
+         if (!productStockRepository.confirm(productId, effectiveQty)) {
+             throw new BusinessException(ProductErrorCodeEnum.STOCK_CONFLICT);
+         }
+-        ProductStock after = productStockRepository.requireByProductId(productId);
++        ProductStock after = before.copy().applyConfirm(effectiveQty);
++        after.setStockSeq(nullToZero(before.getStockSeq()) + 1);
+         after.assertBalance();
+-        writeLog(before, after, ProductStockOptTypeEnum.CONFIRM, orderId, effectiveQty, null);
++        String key = ProductStockIdempotentKeys.of(orderId, productId, ProductStockOptTypeEnum.CONFIRM);
++        writeLog(before, after, ProductStockOptTypeEnum.CONFIRM, orderId, effectiveQty, null, key);
+     }
+ 
+     @Transactional
+     public void release(long productId, long orderId) {
+         OptionalReserve reserve = findPendingReserveOrEmpty(orderId, productId);
+         if (reserve.empty()) {
+             return;
+         }
+         int qty = reserve.qty();
+-        ProductStock before = productStockRepository.requireByProductId(productId);
++        ProductStock before = productStockRepository.requireByProductIdForUpdate(productId);
+         if (!productStockRepository.release(productId, qty)) {
+             throw new BusinessException(ProductErrorCodeEnum.STOCK_CONFLICT);
+         }
+-        ProductStock after = productStockRepository.requireByProductId(productId);
++        ProductStock after = before.copy().applyRelease(qty);
++        after.setStockSeq(nullToZero(before.getStockSeq()) + 1);
+         after.assertBalance();
+-        writeLog(before, after, ProductStockOptTypeEnum.RELEASE, orderId, qty, "cancel rollback");
++        String key = ProductStockIdempotentKeys.of(orderId, productId, ProductStockOptTypeEnum.RELEASE);
++        writeLog(before, after, ProductStockOptTypeEnum.RELEASE, orderId, qty, "cancel rollback", key);
++    }
++
++    @Transactional
++    public ProductStock adjust(long productId, int targetActual, long adjustId) {
++        String key = ProductStockIdempotentKeys.ofAdjust(adjustId);
++        if (productStockLogRepository.existsByIdempotentKey(key)) {
++            return productStockRepository.requireByProductId(productId);
++        }
++        ProductStock before = productStockRepository.requireByProductIdForUpdate(productId);
++        if (targetActual < 0 || targetActual < before.getWithholdStock()) {
++            throw new BusinessException(ProductErrorCodeEnum.ADJUST_INVALID_TARGET);
++        }
++        if (!productStockRepository.adjustActual(productId, targetActual)) {
++            throw new BusinessException(ProductErrorCodeEnum.ADJUST_INVALID_TARGET);
++        }
++        ProductStock after = before.copy().applyAdjust(targetActual);
++        after.setStockSeq(nullToZero(before.getStockSeq()) + 1);
++        after.assertBalance();
++        writeLog(before, after, ProductStockOptTypeEnum.ADJUST, 0L, Math.abs(targetActual - before.getActualStock()),
++                "adjust", key);
++        return after;
+     }
+ 
+     private OptionalReserve findPendingReserveOrEmpty(long orderId, long productId) {
+         return productStockLogRepository.findPendingReserve(orderId, productId)
+                 .map(log -> new OptionalReserve(false, log.getChangeQty()))
+                 .orElseGet(() -> new OptionalReserve(true, 0));
+     }
+ 
+     private void writeLog(
+             ProductStock before,
+             ProductStock after,
+             ProductStockOptTypeEnum optType,
+             long orderId,
+             int changeQty,
+-            String remarks) {
++            String remarks,
++            String idempotentKey) {
+         ProductStockLogDO log = new ProductStockLogDO();
+         log.setLogId(idGenerator.nextId());
+         log.setStockId(before.getStockId());
+         log.setProductId(before.getProductId());
+         log.setOrderId(orderId);
+         log.setOptType(optType.name());
++        log.setIdempotentKey(idempotentKey);
+         log.setChangeQty(changeQty);
+         log.setBeforeActual(before.getActualStock());
+         log.setAfterActual(after.getActualStock());
+         log.setBeforeStock(before.getStock());
+         log.setAfterStock(after.getStock());
+         log.setBeforeWithhold(before.getWithholdStock());
+         log.setAfterWithhold(after.getWithholdStock());
+         log.setBeforeSell(before.getSellStock());
+         log.setAfterSell(after.getSellStock());
+         log.setRemarks(remarks);
+         log.setCreatedAt(LocalDateTime.now());
+         productStockLogRepository.insertLog(log);
+     }
+ 
++    private static long nullToZero(Long v) {
++        return v == null ? 0L : v;
++    }
++
+     private record OptionalReserve(boolean empty, int qty) {
+     }
+ }
+diff --git a/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/mapper/ProductStockMapper.java b/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/mapper/ProductStockMapper.java
+index d50ad6e..d25ee63 100644
+--- a/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/mapper/ProductStockMapper.java
++++ b/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/mapper/ProductStockMapper.java
+@@ -6,11 +6,13 @@ import org.apache.ibatis.annotations.Mapper;
+ import org.apache.ibatis.annotations.Param;
+ 
+ @Mapper
+ public interface ProductStockMapper extends BaseMapper<ProductStockDO> {
+ 
+     int reserve(@Param("productId") long productId, @Param("qty") int qty);
+ 
+     int confirm(@Param("productId") long productId, @Param("qty") int qty);
+ 
+     int release(@Param("productId") long productId, @Param("qty") int qty);
++
++    int adjustActual(@Param("productId") long productId, @Param("targetActual") int targetActual);
+ }
+diff --git a/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/repository/ProductStockLogRepository.java b/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/repository/ProductStockLogRepository.java
+index f90f556..25a1853 100644
+--- a/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/repository/ProductStockLogRepository.java
++++ b/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/repository/ProductStockLogRepository.java
+@@ -33,11 +33,23 @@ public class ProductStockLogRepository {
+         }
+         return Optional.of(reserve);
+     }
+ 
+     public boolean existsRelease(long orderId, long productId) {
+         return productStockLogMapper.selectCount(new LambdaQueryWrapper<ProductStockLogDO>()
+                 .eq(ProductStockLogDO::getOrderId, orderId)
+                 .eq(ProductStockLogDO::getProductId, productId)
+                 .eq(ProductStockLogDO::getOptType, ProductStockOptTypeEnum.RELEASE.name())) > 0;
+     }
++
++    public boolean existsByIdempotentKey(String idempotentKey) {
++        return productStockLogMapper.selectCount(new LambdaQueryWrapper<ProductStockLogDO>()
++                .eq(ProductStockLogDO::getIdempotentKey, idempotentKey)) > 0;
++    }
++
++    public boolean existsOpt(long orderId, long productId, ProductStockOptTypeEnum optType) {
++        return productStockLogMapper.selectCount(new LambdaQueryWrapper<ProductStockLogDO>()
++                .eq(ProductStockLogDO::getOrderId, orderId)
++                .eq(ProductStockLogDO::getProductId, productId)
++                .eq(ProductStockLogDO::getOptType, optType.name())) > 0;
++    }
+ }
+diff --git a/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/repository/ProductStockRepository.java b/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/repository/ProductStockRepository.java
+index 53f3fee..f8107f7 100644
+--- a/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/repository/ProductStockRepository.java
++++ b/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/repository/ProductStockRepository.java
+@@ -37,22 +37,36 @@ public class ProductStockRepository {
+                         .in(ProductStockDO::getProductId, productIds)).stream()
+                 .map(productStockDoConvert::toDomain)
+                 .toList();
+     }
+ 
+     public ProductStock requireByProductId(long productId) {
+         return findByProductId(productId)
+                 .orElseThrow(() -> new BusinessException(ProductErrorCodeEnum.STOCK_NOT_FOUND));
+     }
+ 
++    public ProductStock requireByProductIdForUpdate(long productId) {
++        ProductStockDO row = productStockMapper.selectOne(new LambdaQueryWrapper<ProductStockDO>()
++                .eq(ProductStockDO::getProductId, productId)
++                .last("FOR UPDATE"));
++        if (row == null) {
++            throw new BusinessException(ProductErrorCodeEnum.STOCK_NOT_FOUND);
++        }
++        return productStockDoConvert.toDomain(row);
++    }
++
+     public boolean reserve(long productId, int qty) {
+         return productStockMapper.reserve(productId, qty) > 0;
+     }
+ 
+     public boolean confirm(long productId, int qty) {
+         return productStockMapper.confirm(productId, qty) > 0;
+     }
+ 
+     public boolean release(long productId, int qty) {
+         return productStockMapper.release(productId, qty) > 0;
+     }
++
++    public boolean adjustActual(long productId, int targetActual) {
++        return productStockMapper.adjustActual(productId, targetActual) > 0;
++    }
+ }
+diff --git a/demo2/src/main/resources/mapper/product/ProductStockMapper.xml b/demo2/src/main/resources/mapper/product/ProductStockMapper.xml
+index c001c28..68b9ab1 100644
+--- a/demo2/src/main/resources/mapper/product/ProductStockMapper.xml
++++ b/demo2/src/main/resources/mapper/product/ProductStockMapper.xml
+@@ -1,34 +1,47 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+ <mapper namespace="com.jason.demo.demo2.product.service.infrastructure.dao.mapper.ProductStockMapper">
+ 
+     <update id="reserve">
+         UPDATE demo_product_stock
+         SET stock = stock - #{qty},
+             withhold_stock = withhold_stock + #{qty},
++            stock_seq = stock_seq + 1,
+             updated_at = NOW(3)
+         WHERE product_id = #{productId}
+           AND stock >= #{qty}
+     </update>
+ 
+     <update id="confirm">
+         UPDATE demo_product_stock
+         SET actual_stock = actual_stock - #{qty},
+             withhold_stock = withhold_stock - #{qty},
+             sell_stock = sell_stock + #{qty},
++            stock_seq = stock_seq + 1,
+             updated_at = NOW(3)
+         WHERE product_id = #{productId}
+           AND withhold_stock >= #{qty}
+     </update>
+ 
+     <update id="release">
+         UPDATE demo_product_stock
+         SET stock = stock + #{qty},
+             withhold_stock = withhold_stock - #{qty},
++            stock_seq = stock_seq + 1,
+             updated_at = NOW(3)
+         WHERE product_id = #{productId}
+           AND withhold_stock >= #{qty}
+     </update>
+ 
++    <update id="adjustActual">
++        UPDATE demo_product_stock
++        SET actual_stock = #{targetActual},
++            stock = #{targetActual} - withhold_stock,
++            stock_seq = stock_seq + 1,
++            updated_at = NOW(3)
++        WHERE product_id = #{productId}
++          AND #{targetActual} >= withhold_stock
++    </update>
++
+ </mapper>
+diff --git a/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockDomainServiceTest.java b/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockDomainServiceTest.java
+index 8ac805c..5854c1d 100644
+--- a/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockDomainServiceTest.java
++++ b/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockDomainServiceTest.java
+@@ -40,91 +40,118 @@ class ProductStockDomainServiceTest {
+     @Mock
+     private ProductStockLogRepository productStockLogRepository;
+     @Mock
+     private SnowflakeIdGenerator idGenerator;
+ 
+     @InjectMocks
+     private ProductStockDomainService service;
+ 
+     @Test
+     void reserve_insufficientStock() {
+-        when(productStockRepository.requireByProductId(PRODUCT_ID)).thenReturn(stock(100, 0, 100));
++        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(stock(100, 0, 100));
+         when(productStockRepository.reserve(PRODUCT_ID, 5)).thenReturn(false);
+ 
+         BusinessException ex = assertThrows(BusinessException.class,
+                 () -> service.reserve(PRODUCT_ID, ORDER_ID, 5));
+         assertEquals(ProductErrorCodeEnum.STOCK_INSUFFICIENT.getCode(), ex.getCode());
+     }
+ 
+     @Test
+     void reserve_success_writesLog() {
+         ProductStock before = stock(100, 0, 100);
+-        ProductStock after = stock(95, 5, 100);
+-        when(productStockRepository.requireByProductId(PRODUCT_ID)).thenReturn(before, after);
++        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(before);
+         when(productStockRepository.reserve(PRODUCT_ID, 5)).thenReturn(true);
+         when(idGenerator.nextId()).thenReturn(999L);
+ 
+         service.reserve(PRODUCT_ID, ORDER_ID, 5);
+ 
+         ArgumentCaptor<ProductStockLogDO> captor = ArgumentCaptor.forClass(ProductStockLogDO.class);
+         verify(productStockLogRepository).insertLog(captor.capture());
+         ProductStockLogDO log = captor.getValue();
+         assertEquals(ProductStockOptTypeEnum.RESERVE.name(), log.getOptType());
+         assertEquals(STOCK_ID, log.getStockId());
+         assertEquals(5, log.getChangeQty());
++        assertEquals(100, log.getBeforeStock());
++        assertEquals(95, log.getAfterStock());
++        assertEquals("100:9001:RESERVE", log.getIdempotentKey());
+     }
+ 
+     @Test
+     void confirm_incrementsSellStock() {
+         ProductStockLogDO reserve = new ProductStockLogDO();
+         reserve.setChangeQty(2);
+         when(productStockLogRepository.findPendingReserve(ORDER_ID, PRODUCT_ID)).thenReturn(Optional.of(reserve));
+         ProductStock before = stock(98, 2, 100);
+-        ProductStock after = stock(98, 0, 98);
+-        after.setSellStock(12);
+-        when(productStockRepository.requireByProductId(PRODUCT_ID)).thenReturn(before, after);
++        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(before);
+         when(productStockRepository.confirm(PRODUCT_ID, 2)).thenReturn(true);
+         when(idGenerator.nextId()).thenReturn(1000L);
+ 
+         service.confirm(PRODUCT_ID, ORDER_ID, 2);
+ 
+         verify(productStockRepository).confirm(PRODUCT_ID, 2);
+         verify(productStockLogRepository).insertLog(any());
+     }
+ 
++    @Test
++    void confirm_idempotent_whenConfirmLogExists() {
++        when(productStockLogRepository.existsOpt(ORDER_ID, PRODUCT_ID, ProductStockOptTypeEnum.CONFIRM))
++                .thenReturn(true);
++
++        service.confirm(PRODUCT_ID, ORDER_ID, 2);
++
++        verify(productStockRepository, never()).confirm(anyLong(), anyInt());
++    }
++
+     @Test
+     void release_restoresStock_fromReserveQty() {
+         ProductStockLogDO reserve = new ProductStockLogDO();
+         reserve.setChangeQty(4);
+         when(productStockLogRepository.findPendingReserve(ORDER_ID, PRODUCT_ID)).thenReturn(Optional.of(reserve));
+         ProductStock before = stock(96, 4, 100);
+-        ProductStock after = stock(100, 0, 100);
+-        when(productStockRepository.requireByProductId(PRODUCT_ID)).thenReturn(before, after);
++        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(before);
+         when(productStockRepository.release(PRODUCT_ID, 4)).thenReturn(true);
+         when(idGenerator.nextId()).thenReturn(1001L);
+ 
+         service.release(PRODUCT_ID, ORDER_ID);
+ 
+         verify(productStockRepository).release(PRODUCT_ID, 4);
+     }
+ 
+     @Test
+     void release_idempotent_whenAlreadyReleased() {
+         when(productStockLogRepository.findPendingReserve(ORDER_ID, PRODUCT_ID)).thenReturn(Optional.empty());
+ 
+         service.release(PRODUCT_ID, ORDER_ID);
+ 
+         verify(productStockRepository, never()).release(anyLong(), anyInt());
+     }
+ 
++    @Test
++    void adjust_updatesActual() {
++        ProductStock locked = stock(90, 10, 100);
++        locked.setStockSeq(3L);
++        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(locked);
++        when(productStockRepository.adjustActual(PRODUCT_ID, 80)).thenReturn(true);
++        when(idGenerator.nextId()).thenReturn(2000L);
++
++        ProductStock result = service.adjust(PRODUCT_ID, 80, 55L);
++
++        assertEquals(80, result.getActualStock());
++        assertEquals(70, result.getStock());
++        ArgumentCaptor<ProductStockLogDO> captor = ArgumentCaptor.forClass(ProductStockLogDO.class);
++        verify(productStockLogRepository).insertLog(captor.capture());
++        assertEquals("ADJUST:55", captor.getValue().getIdempotentKey());
++    }
++
+     private static ProductStock stock(int available, int withhold, int actual) {
+         ProductStock stock = new ProductStock();
+         stock.setStockId(STOCK_ID);
+         stock.setProductId(PRODUCT_ID);
+         stock.setStock(available);
+         stock.setWithholdStock(withhold);
+         stock.setActualStock(actual);
+         stock.setSellStock(10);
++        stock.setStockSeq(0L);
+         stock.setUpdatedAt(LocalDateTime.now());
+         return stock;
+     }
+ }
+diff --git a/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockMapperXmlTest.java b/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockMapperXmlTest.java
+index c843111..1a12fe8 100644
+--- a/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockMapperXmlTest.java
++++ b/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockMapperXmlTest.java
+@@ -20,12 +20,14 @@ class ProductStockMapperXmlTest {
+         Configuration configuration = new Configuration();
+         try (InputStream in = Thread.currentThread().getContextClassLoader().getResourceAsStream(RESOURCE)) {
+             assertNotNull(in, () -> "missing classpath resource: " + RESOURCE);
+             XMLMapperBuilder builder = new XMLMapperBuilder(in, configuration, RESOURCE, configuration.getSqlFragments());
+             builder.parse();
+         }
+ 
+         assertTrue(configuration.hasStatement(NAMESPACE + ".reserve"));
+         assertTrue(configuration.hasStatement(NAMESPACE + ".confirm"));
+         assertTrue(configuration.hasStatement(NAMESPACE + ".release"));
++        assertTrue(configuration.hasStatement(NAMESPACE + ".adjustActual"));
++
+     }
+ }

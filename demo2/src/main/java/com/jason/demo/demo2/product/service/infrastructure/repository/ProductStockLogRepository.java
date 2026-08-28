@@ -40,4 +40,16 @@ public class ProductStockLogRepository {
                 .eq(ProductStockLogDO::getProductId, productId)
                 .eq(ProductStockLogDO::getOptType, ProductStockOptTypeEnum.RELEASE.name())) > 0;
     }
+
+    public boolean existsByIdempotentKey(String idempotentKey) {
+        return productStockLogMapper.selectCount(new LambdaQueryWrapper<ProductStockLogDO>()
+                .eq(ProductStockLogDO::getIdempotentKey, idempotentKey)) > 0;
+    }
+
+    public boolean existsOpt(long orderId, long productId, ProductStockOptTypeEnum optType) {
+        return productStockLogMapper.selectCount(new LambdaQueryWrapper<ProductStockLogDO>()
+                .eq(ProductStockLogDO::getOrderId, orderId)
+                .eq(ProductStockLogDO::getProductId, productId)
+                .eq(ProductStockLogDO::getOptType, optType.name())) > 0;
+    }
 }

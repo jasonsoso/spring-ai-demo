@@ -1,0 +1,229 @@
+﻿# Task 1 review package
+Base: 58406a8 (HEAD, no commit for this task)
+Head: working tree
+
+diff --git a/demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductErrorCodeEnum.java b/demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductErrorCodeEnum.java
+index 9ce1ef1..3fe6e7b 100644
+--- a/demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductErrorCodeEnum.java
++++ b/demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductErrorCodeEnum.java
+@@ -2,21 +2,24 @@ package com.jason.demo.demo2.product.service.common;
+ 
+ import com.jason.demo.demo2.framework.web.exception.ErrorCode;
+ 
+ public enum ProductErrorCodeEnum implements ErrorCode {
+ 
+     PRODUCT_NOT_FOUND(40001, "鍟嗗搧涓嶅瓨鍦?),
+     PRODUCT_OFF_SHELF(40002, "鍟嗗搧宸蹭笅鏋?),
+     STOCK_INSUFFICIENT(40003, "鍙敭搴撳瓨涓嶈冻"),
+     RESERVE_LOG_NOT_FOUND(40004, "鏃犲緟閲婃斁鐨勯鍗犳祦姘?),
+     STOCK_CONFLICT(40005, "搴撳瓨鐘舵€佸啿绐?),
+-    STOCK_NOT_FOUND(40007, "搴撳瓨璁板綍涓嶅瓨鍦?);
++    STOCK_NOT_FOUND(40007, "搴撳瓨璁板綍涓嶅瓨鍦?),
++    ADJUST_REQUIRES_OFF_SHELF(40008, "璋冩暣搴撳瓨鍓嶅繀椤诲厛涓嬫灦"),
++    ADJUST_INVALID_TARGET(40009, "鐩爣鐜拌揣闈炴硶"),
++    STOCK_SYNC_LAG(40010, "搴撳瓨鍚屾鏈拷涓?);
+ 
+     private final int code;
+     private final String desc;
+ 
+     ProductErrorCodeEnum(int code, String desc) {
+         this.code = code;
+         this.desc = desc;
+     }
+ 
+     @Override
+diff --git a/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockDO.java b/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockDO.java
+index 14ee9a9..833410f 100644
+--- a/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockDO.java
++++ b/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockDO.java
+@@ -12,12 +12,13 @@ import java.time.LocalDateTime;
+ public class ProductStockDO {
+ 
+     @TableId(value = "id", type = IdType.AUTO)
+     private Long id;
+     private Long stockId;
+     private Long productId;
+     private Integer actualStock;
+     private Integer stock;
+     private Integer withholdStock;
+     private Integer sellStock;
++    private Long stockSeq;
+     private LocalDateTime updatedAt;
+ }
+diff --git a/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockLogDO.java b/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockLogDO.java
+index 0504875..6d56724 100644
+--- a/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockLogDO.java
++++ b/demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockLogDO.java
+@@ -11,20 +11,21 @@ import java.time.LocalDateTime;
+ @TableName("demo_product_stock_log")
+ public class ProductStockLogDO {
+ 
+     @TableId(value = "id", type = IdType.AUTO)
+     private Long id;
+     private Long logId;
+     private Long stockId;
+     private Long productId;
+     private Long orderId;
+     private String optType;
++    private String idempotentKey;
+     private Integer changeQty;
+     private Integer beforeActual;
+     private Integer afterActual;
+     private Integer beforeStock;
+     private Integer afterStock;
+     private Integer beforeWithhold;
+     private Integer afterWithhold;
+     private Integer beforeSell;
+     private Integer afterSell;
+     private String remarks;
+diff --git a/demo2/src/main/resources/db/product-module-schema.sql b/demo2/src/main/resources/db/product-module-schema.sql
+index dcc04ec..46f8273 100644
+--- a/demo2/src/main/resources/db/product-module-schema.sql
++++ b/demo2/src/main/resources/db/product-module-schema.sql
+@@ -20,65 +20,68 @@ CREATE TABLE IF NOT EXISTS demo_product (
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='婕旂ず鍟嗗搧涓昏〃';
+ 
+ CREATE TABLE IF NOT EXISTS demo_product_stock (
+     id              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '鏁版嵁搴撹嚜澧炰富閿?,
+     stock_id        BIGINT       NOT NULL COMMENT '搴撳瓨涓氬姟ID锛堥洩鑺憋級',
+     product_id      BIGINT       NOT NULL COMMENT '鍟嗗搧ID',
+     actual_stock    INT          NOT NULL DEFAULT 0 COMMENT '鐜拌揣搴撳瓨',
+     stock           INT          NOT NULL DEFAULT 0 COMMENT '鍙敭搴撳瓨',
+     withhold_stock  INT          NOT NULL DEFAULT 0 COMMENT '棰勫崰搴撳瓨',
+     sell_stock      INT          NOT NULL DEFAULT 0 COMMENT '绱宸插敭',
++    stock_seq       BIGINT       NOT NULL DEFAULT 0 COMMENT '宸叉姇褰辩殑 Redis seq',
+     updated_at      DATETIME(3)  NOT NULL COMMENT '鏇存柊鏃堕棿',
+     PRIMARY KEY (id),
+     UNIQUE KEY uk_demo_product_stock_stock_id (stock_id),
+     UNIQUE KEY uk_demo_product_stock_product_id (product_id)
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='婕旂ず鍟嗗搧搴撳瓨琛?;
+ 
+ CREATE TABLE IF NOT EXISTS demo_product_stock_log (
+     id               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '鏁版嵁搴撹嚜澧炰富閿?,
+     log_id           BIGINT       NOT NULL COMMENT '娴佹按涓氬姟ID锛堥洩鑺憋級',
+     stock_id         BIGINT       NOT NULL COMMENT '搴撳瓨涓氬姟ID',
+     product_id       BIGINT       NOT NULL COMMENT '鍟嗗搧ID',
+     order_id         BIGINT       NULL COMMENT '鍏宠仈璁㈠崟ID',
+     opt_type         VARCHAR(32)  NOT NULL COMMENT 'RESERVE/CONFIRM/RELEASE/ADJUST',
++    idempotent_key   VARCHAR(64)  NOT NULL COMMENT '骞傜瓑閿?,
+     change_qty       INT          NOT NULL COMMENT '鍙樺姩鏁伴噺',
+     before_actual    INT          NOT NULL COMMENT '鍙樺姩鍓?actual_stock',
+     after_actual     INT          NOT NULL COMMENT '鍙樺姩鍚?actual_stock',
+     before_stock     INT          NOT NULL COMMENT '鍙樺姩鍓?stock',
+     after_stock      INT          NOT NULL COMMENT '鍙樺姩鍚?stock',
+     before_withhold  INT          NOT NULL COMMENT '鍙樺姩鍓?withhold_stock',
+     after_withhold   INT          NOT NULL COMMENT '鍙樺姩鍚?withhold_stock',
+     before_sell      INT          NOT NULL COMMENT '鍙樺姩鍓?sell_stock',
+     after_sell       INT          NOT NULL COMMENT '鍙樺姩鍚?sell_stock',
+     remarks          VARCHAR(255) NULL COMMENT '澶囨敞',
+     created_at       DATETIME(3)  NOT NULL COMMENT '鍒涘缓鏃堕棿',
+     PRIMARY KEY (id),
+     UNIQUE KEY uk_demo_product_stock_log_log_id (log_id),
++    UNIQUE KEY uk_stock_log_idempotent (idempotent_key),
+     INDEX idx_stock_log_stock_id (stock_id),
+     INDEX idx_stock_log_order_product (order_id, product_id, opt_type),
+     INDEX idx_stock_log_product_time (product_id, created_at)
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='婕旂ず鍟嗗搧搴撳瓨娴佹按琛?;
+ 
+ INSERT INTO demo_product (product_id, product_name, subtitle, cover_url, sell_price, market_price,
+     detail_content, status, sort, created_at, updated_at)
+ SELECT * FROM (
+     SELECT 2085550503315509001 AS product_id, '鎷块搧' AS product_name, '缁忓吀娴撻儊锛屽彛鎰熼『婊? AS subtitle,
+         NULL AS cover_url, 18.00 AS sell_price, NULL AS market_price,
+         '绮鹃€夊挅鍟¤眴锛岀粡鍏告嬁閾併€? AS detail_content, 'ON_SHELF' AS status, 30 AS sort, NOW(3) AS created_at, NOW(3) AS updated_at
+     UNION ALL
+     SELECT 2085550503315509002, '鐢熸ぐ鎷块搧', '妞伴娓呯敎锛屾竻鐖戒笉鑵?, NULL, 20.00, NULL,
+         '鐢熸ぐ鎼厤 espresso锛屾竻鐖戒笉鑵汇€?, 'ON_SHELF', 20, NOW(3), NOW(3)
+     UNION ALL
+     SELECT 2085550503315509003, '鑺濆＋铔嬬硶', '缁靛瘑鑺濆＋锛屼笅鍗堣尪鎺ㄨ崘', NULL, 16.00, NULL,
+         '缁靛瘑鑺濆＋锛屼笅鍗堣尪鎺ㄨ崘銆?, 'ON_SHELF', 10, NOW(3), NOW(3)
+ ) AS seed
+ WHERE NOT EXISTS (SELECT 1 FROM demo_product LIMIT 1);
+ 
+-INSERT INTO demo_product_stock (stock_id, product_id, actual_stock, stock, withhold_stock, sell_stock, updated_at)
++INSERT INTO demo_product_stock (stock_id, product_id, actual_stock, stock, withhold_stock, sell_stock, stock_seq, updated_at)
+ SELECT * FROM (
+-    SELECT 2085550503315509101 AS stock_id, 2085550503315509001 AS product_id, 100 AS actual_stock, 100 AS stock, 0 AS withhold_stock, 128 AS sell_stock, NOW(3) AS updated_at
++    SELECT 2085550503315509101 AS stock_id, 2085550503315509001 AS product_id, 100 AS actual_stock, 100 AS stock, 0 AS withhold_stock, 128 AS sell_stock, 0 AS stock_seq, NOW(3) AS updated_at
+     UNION ALL
+-    SELECT 2085550503315509102, 2085550503315509002, 80, 80, 0, 86, NOW(3)
++    SELECT 2085550503315509102, 2085550503315509002, 80, 80, 0, 86, 0, NOW(3)
+     UNION ALL
+-    SELECT 2085550503315509103, 2085550503315509003, 50, 50, 0, 42, NOW(3)
++    SELECT 2085550503315509103, 2085550503315509003, 50, 50, 0, 42, 0, NOW(3)
+ ) AS seed
+ WHERE NOT EXISTS (SELECT 1 FROM demo_product_stock LIMIT 1);
+
+# Untracked files
+
+diff --git a/demo2/src/main/resources/db/product-stock-seq-schema.sql b/demo2/src/main/resources/db/product-stock-seq-schema.sql
+new file mode 100644
+index 0000000..c4599f0
+--- /dev/null
++++ b/demo2/src/main/resources/db/product-stock-seq-schema.sql
+@@ -0,0 +1,13 @@
++ALTER TABLE demo_product_stock
++    ADD COLUMN stock_seq BIGINT NOT NULL DEFAULT 0 COMMENT '宸叉姇褰辩殑 Redis seq' AFTER sell_stock;
++
++ALTER TABLE demo_product_stock_log
++    ADD COLUMN idempotent_key VARCHAR(64) NULL COMMENT '骞傜瓑閿? AFTER opt_type;
++
++UPDATE demo_product_stock_log
++SET idempotent_key = CONCAT(IFNULL(order_id, '0'), ':', product_id, ':', opt_type)
++WHERE idempotent_key IS NULL;
++
++ALTER TABLE demo_product_stock_log
++    MODIFY idempotent_key VARCHAR(64) NOT NULL,
++    ADD UNIQUE KEY uk_stock_log_idempotent (idempotent_key);
+diff --git a/demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductStockIdempotentKeys.java b/demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductStockIdempotentKeys.java
+new file mode 100644
+index 0000000..77298c5
+--- /dev/null
++++ b/demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductStockIdempotentKeys.java
+@@ -0,0 +1,15 @@
++package com.jason.demo.demo2.product.service.common;
++
++public final class ProductStockIdempotentKeys {
++
++    private ProductStockIdempotentKeys() {
++    }
++
++    public static String of(long orderId, long productId, ProductStockOptTypeEnum optType) {
++        return orderId + ":" + productId + ":" + optType.name();
++    }
++
++    public static String ofAdjust(long adjustId) {
++        return "ADJUST:" + adjustId;
++    }
++}
+diff --git a/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockIdempotentKeysTest.java b/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockIdempotentKeysTest.java
+new file mode 100644
+index 0000000..d7fbf0f
+--- /dev/null
++++ b/demo2/src/test/java/com/jason/demo/demo2/product/ProductStockIdempotentKeysTest.java
+@@ -0,0 +1,25 @@
++package com.jason.demo.demo2.product;
++
++import com.jason.demo.demo2.product.service.common.ProductErrorCodeEnum;
++import com.jason.demo.demo2.product.service.common.ProductStockIdempotentKeys;
++import com.jason.demo.demo2.product.service.common.ProductStockOptTypeEnum;
++import org.junit.jupiter.api.Test;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++class ProductStockIdempotentKeysTest {
++
++    @Test
++    void of_joinsOrderProductOpt() {
++        assertEquals("100:9001:RESERVE",
++                ProductStockIdempotentKeys.of(100L, 9001L, ProductStockOptTypeEnum.RESERVE));
++        assertEquals("ADJUST:55", ProductStockIdempotentKeys.ofAdjust(55L));
++    }
++
++    @Test
++    void newErrorCodes_areStable() {
++        assertEquals(40008, ProductErrorCodeEnum.ADJUST_REQUIRES_OFF_SHELF.getCode());
++        assertEquals(40009, ProductErrorCodeEnum.ADJUST_INVALID_TARGET.getCode());
++        assertEquals(40010, ProductErrorCodeEnum.STOCK_SYNC_LAG.getCode());
++    }
++}

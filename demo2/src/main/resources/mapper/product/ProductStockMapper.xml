@@ -3,10 +3,12 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.jason.demo.demo2.product.service.infrastructure.dao.mapper.ProductStockMapper">
 
+    <!-- 冷路径：行锁下直写，seq 自增 -->
     <update id="reserve">
         UPDATE demo_product_stock
         SET stock = stock - #{qty},
             withhold_stock = withhold_stock + #{qty},
+            stock_seq = stock_seq + 1,
             updated_at = NOW(3)
         WHERE product_id = #{productId}
           AND stock >= #{qty}
@@ -17,6 +19,7 @@
         SET actual_stock = actual_stock - #{qty},
             withhold_stock = withhold_stock - #{qty},
             sell_stock = sell_stock + #{qty},
+            stock_seq = stock_seq + 1,
             updated_at = NOW(3)
         WHERE product_id = #{productId}
           AND withhold_stock >= #{qty}
@@ -26,9 +29,50 @@
         UPDATE demo_product_stock
         SET stock = stock + #{qty},
             withhold_stock = withhold_stock - #{qty},
+            stock_seq = stock_seq + 1,
             updated_at = NOW(3)
         WHERE product_id = #{productId}
           AND withhold_stock >= #{qty}
+    </update>
+
+    <update id="adjustActual">
+        UPDATE demo_product_stock
+        SET actual_stock = #{targetActual},
+            stock = #{targetActual} - withhold_stock,
+            stock_seq = stock_seq + 1,
+            updated_at = NOW(3)
+        WHERE product_id = #{productId}
+          AND #{targetActual} >= withhold_stock
+    </update>
+
+    <!-- 热路径投影：无行锁，仅当 mysql 正好是这条消息的前驱 seq-1 -->
+    <update id="applyReserveDelta">
+        UPDATE demo_product_stock
+        SET stock = stock - #{qty},
+            withhold_stock = withhold_stock + #{qty},
+            stock_seq = #{seq},
+            updated_at = NOW(3)
+        WHERE product_id = #{productId}
+          AND stock_seq = #{seq} - 1
+    </update>
+    <update id="applyConfirmDelta">
+        UPDATE demo_product_stock
+        SET actual_stock = actual_stock - #{qty},
+            withhold_stock = withhold_stock - #{qty},
+            sell_stock = sell_stock + #{qty},
+            stock_seq = #{seq},
+            updated_at = NOW(3)
+        WHERE product_id = #{productId}
+          AND stock_seq = #{seq} - 1
+    </update>
+    <update id="applyReleaseDelta">
+        UPDATE demo_product_stock
+        SET stock = stock + #{qty},
+            withhold_stock = withhold_stock - #{qty},
+            stock_seq = #{seq},
+            updated_at = NOW(3)
+        WHERE product_id = #{productId}
+          AND stock_seq = #{seq} - 1
     </update>
 
 </mapper>

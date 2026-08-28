@@ -19,5 +19,6 @@ public class ProductStockDO {
     private Integer stock;
     private Integer withholdStock;
     private Integer sellStock;
+    private Long stockSeq;
     private LocalDateTime updatedAt;
 }

@@ -7,6 +7,7 @@ import com.jason.demo.demo2.product.app.vo.res.ProductDetailResVO;
 import com.jason.demo.demo2.product.app.vo.res.ProductListItemResVO;
 import com.jason.demo.demo2.product.app.vo.res.ProductListResVO;
 import com.jason.demo.demo2.product.service.core.ProductDomainService;
+import com.jason.demo.demo2.product.service.core.ProductStockHotService;
 import com.jason.demo.demo2.product.service.core.domain.Product;
 import com.jason.demo.demo2.product.service.core.domain.ProductStock;
 import com.jason.demo.demo2.product.service.core.domain.ProductWithStock;
@@ -18,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.when;
@@ -29,6 +31,8 @@ class ProductCmdExeTest {
     private ProductDomainService productDomainService;
     @Mock
     private ProductVoConvert productVoConvert;
+    @Mock
+    private ProductStockHotService productStockHotService;
 
     @InjectMocks
     private ProductListCmdExe productListCmdExe;
@@ -41,6 +45,7 @@ class ProductCmdExeTest {
         item.setProductName("拿铁");
         when(productDomainService.listOnShelf()).thenReturn(List.of(row));
         when(productVoConvert.toListItem(row)).thenReturn(item);
+        when(productStockHotService.overlayAvail(9001L)).thenReturn(Optional.empty());
 
         ProductListResVO result = productListCmdExe.execute();
 
@@ -49,14 +54,33 @@ class ProductCmdExeTest {
     }
 
     @Test
+    void listProducts_overlaysRedisAvail() {
+        ProductWithStock row = sampleRow();
+        ProductListItemResVO item = new ProductListItemResVO();
+        item.setProductId(9001L);
+        item.setAvailableStock(100);
+        item.setSellStock(128);
+        when(productDomainService.listOnShelf()).thenReturn(List.of(row));
+        when(productVoConvert.toListItem(row)).thenReturn(item);
+        when(productStockHotService.overlayAvail(9001L)).thenReturn(Optional.of(77));
+
+        ProductListResVO result = productListCmdExe.execute();
+
+        assertEquals(77, result.getItems().get(0).getAvailableStock());
+        assertEquals(128, result.getItems().get(0).getSellStock());
+    }
+
+    @Test
     void getProduct_mapsDetail() {
-        ProductGetCmdExe getCmdExe = new ProductGetCmdExe(productDomainService, productVoConvert);
+        ProductGetCmdExe getCmdExe = new ProductGetCmdExe(
+                productDomainService, productVoConvert, productStockHotService);
         ProductWithStock row = sampleRow();
         ProductDetailResVO detail = new ProductDetailResVO();
         detail.setProductId(9001L);
         detail.setDetailContent("详情");
         when(productDomainService.requireOnShelf(9001L)).thenReturn(row);
         when(productVoConvert.toDetail(row)).thenReturn(detail);
+        when(productStockHotService.overlayAvail(9001L)).thenReturn(Optional.empty());
 
         ProductDetailResVO result = getCmdExe.execute(9001L);
 

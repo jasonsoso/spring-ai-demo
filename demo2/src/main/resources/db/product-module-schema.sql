@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS demo_product_stock (
     stock           INT          NOT NULL DEFAULT 0 COMMENT '可售库存',
     withhold_stock  INT          NOT NULL DEFAULT 0 COMMENT '预占库存',
     sell_stock      INT          NOT NULL DEFAULT 0 COMMENT '累计已售',
+    stock_seq       BIGINT       NOT NULL DEFAULT 0 COMMENT '已投影的 Redis seq',
     updated_at      DATETIME(3)  NOT NULL COMMENT '更新时间',
     PRIMARY KEY (id),
     UNIQUE KEY uk_demo_product_stock_stock_id (stock_id),
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS demo_product_stock_log (
     product_id       BIGINT       NOT NULL COMMENT '商品ID',
     order_id         BIGINT       NULL COMMENT '关联订单ID',
     opt_type         VARCHAR(32)  NOT NULL COMMENT 'RESERVE/CONFIRM/RELEASE/ADJUST',
+    idempotent_key   VARCHAR(64)  NOT NULL COMMENT '幂等键',
     change_qty       INT          NOT NULL COMMENT '变动数量',
     before_actual    INT          NOT NULL COMMENT '变动前 actual_stock',
     after_actual     INT          NOT NULL COMMENT '变动后 actual_stock',
@@ -53,6 +55,7 @@ CREATE TABLE IF NOT EXISTS demo_product_stock_log (
     created_at       DATETIME(3)  NOT NULL COMMENT '创建时间',
     PRIMARY KEY (id),
     UNIQUE KEY uk_demo_product_stock_log_log_id (log_id),
+    UNIQUE KEY uk_stock_log_idempotent (idempotent_key),
     INDEX idx_stock_log_stock_id (stock_id),
     INDEX idx_stock_log_order_product (order_id, product_id, opt_type),
     INDEX idx_stock_log_product_time (product_id, created_at)
@@ -73,12 +76,12 @@ SELECT * FROM (
 ) AS seed
 WHERE NOT EXISTS (SELECT 1 FROM demo_product LIMIT 1);
 
-INSERT INTO demo_product_stock (stock_id, product_id, actual_stock, stock, withhold_stock, sell_stock, updated_at)
+INSERT INTO demo_product_stock (stock_id, product_id, actual_stock, stock, withhold_stock, sell_stock, stock_seq, updated_at)
 SELECT * FROM (
-    SELECT 2085550503315509101 AS stock_id, 2085550503315509001 AS product_id, 100 AS actual_stock, 100 AS stock, 0 AS withhold_stock, 128 AS sell_stock, NOW(3) AS updated_at
+    SELECT 2085550503315509101 AS stock_id, 2085550503315509001 AS product_id, 100 AS actual_stock, 100 AS stock, 0 AS withhold_stock, 128 AS sell_stock, 0 AS stock_seq, NOW(3) AS updated_at
     UNION ALL
-    SELECT 2085550503315509102, 2085550503315509002, 80, 80, 0, 86, NOW(3)
+    SELECT 2085550503315509102, 2085550503315509002, 80, 80, 0, 86, 0, NOW(3)
     UNION ALL
-    SELECT 2085550503315509103, 2085550503315509003, 50, 50, 0, 42, NOW(3)
+    SELECT 2085550503315509103, 2085550503315509003, 50, 50, 0, 42, 0, NOW(3)
 ) AS seed
 WHERE NOT EXISTS (SELECT 1 FROM demo_product_stock LIMIT 1);

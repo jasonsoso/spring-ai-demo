@@ -27,5 +27,9 @@ class ProductStockMapperXmlTest {
         assertTrue(configuration.hasStatement(NAMESPACE + ".reserve"));
         assertTrue(configuration.hasStatement(NAMESPACE + ".confirm"));
         assertTrue(configuration.hasStatement(NAMESPACE + ".release"));
+        assertTrue(configuration.hasStatement(NAMESPACE + ".adjustActual"));
+        assertTrue(configuration.hasStatement(NAMESPACE + ".applyReserveDelta"));
+        assertTrue(configuration.hasStatement(NAMESPACE + ".applyConfirmDelta"));
+        assertTrue(configuration.hasStatement(NAMESPACE + ".applyReleaseDelta"));
     }
 }

@@ -9,7 +9,10 @@ public enum ProductErrorCodeEnum implements ErrorCode {
     STOCK_INSUFFICIENT(40003, "可售库存不足"),
     RESERVE_LOG_NOT_FOUND(40004, "无待释放的预占流水"),
     STOCK_CONFLICT(40005, "库存状态冲突"),
-    STOCK_NOT_FOUND(40007, "库存记录不存在");
+    STOCK_NOT_FOUND(40007, "库存记录不存在"),
+    ADJUST_REQUIRES_OFF_SHELF(40008, "调整库存前必须先下架"),
+    ADJUST_INVALID_TARGET(40009, "目标现货非法"),
+    STOCK_SYNC_LAG(40010, "库存同步未追上");
 
     private final int code;
     private final String desc;

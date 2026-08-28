@@ -147,6 +147,28 @@ public class BaseEventPublisher implements ApplicationContextAware {
         doSend(message, messageBodyObj);
     }
 
+    /**
+     * 立即同步发送：不走 afterCommit。重试耗尽后抛异常，供出箱 Relay 据此不 XACK。
+     */
+    protected void sendImmediate(Object messageBodyObj, String... keys) {
+        Message message = buildMessage(messageBodyObj, keys);
+        Exception last = null;
+        for (int i = 0; i < maxTryTimes; i++) {
+            try {
+                SendResult sendResult = producer.send(message);
+                log.info("immediate send success, attempt:{}, result:{}", i + 1, sendResult);
+                return;
+            } catch (Exception e) {
+                last = e;
+                log.error("immediate send error, attempt:{}, message:{}", i + 1, messageBodyObj, e);
+                if (i < maxTryTimes - 1) {
+                    sleepQuietly(100L * (i + 1));
+                }
+            }
+        }
+        throw new IllegalStateException("rocketmq immediate send failed after retries", last);
+    }
+
     /** 同步发送核心：事务后提交 + 有限次重试。 */
     private void doSend(Message message, Object messageBodyObj) {
         TransactionUtils.afterCommitSyncExecute(() -> {

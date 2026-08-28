@@ -23,6 +23,8 @@ app → service.core → service.infrastructure
 
 禁止：Controller 注入 `*VoConvert`；Controller/CmdExe 直接注入 Mapper；domain 依赖 app；infrastructure 依赖 app。
 
+商品热库存：闸门在 Redis Hash（仅 `avail` + `seq`），MySQL 投影走 RocketMQ `applyDelta`。自定义 SQL 仍写 XML。发 MQ 放 `product.service.infrastructure.publisher`；RocketMQ / Redis Stream 消费者放 `product.app.listener`；定时对账放 `product.app.job`。不要把库存同步放到全局 `com.jason.demo.demo2.mq`。
+
 ### 命名
 
 | 类型 | 模式 | 示例 |

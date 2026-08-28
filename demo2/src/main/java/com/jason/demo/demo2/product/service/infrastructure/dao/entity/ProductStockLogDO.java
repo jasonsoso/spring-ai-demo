@@ -18,6 +18,7 @@ public class ProductStockLogDO {
     private Long productId;
     private Long orderId;
     private String optType;
+    private String idempotentKey;
     private Integer changeQty;
     private Integer beforeActual;
     private Integer afterActual;

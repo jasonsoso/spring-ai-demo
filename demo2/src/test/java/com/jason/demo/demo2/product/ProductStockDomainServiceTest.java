@@ -47,7 +47,7 @@ class ProductStockDomainServiceTest {
 
     @Test
     void reserve_insufficientStock() {
-        when(productStockRepository.requireByProductId(PRODUCT_ID)).thenReturn(stock(100, 0, 100));
+        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(stock(100, 0, 100));
         when(productStockRepository.reserve(PRODUCT_ID, 5)).thenReturn(false);
 
         BusinessException ex = assertThrows(BusinessException.class,
@@ -58,8 +58,7 @@ class ProductStockDomainServiceTest {
     @Test
     void reserve_success_writesLog() {
         ProductStock before = stock(100, 0, 100);
-        ProductStock after = stock(95, 5, 100);
-        when(productStockRepository.requireByProductId(PRODUCT_ID)).thenReturn(before, after);
+        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(before);
         when(productStockRepository.reserve(PRODUCT_ID, 5)).thenReturn(true);
         when(idGenerator.nextId()).thenReturn(999L);
 
@@ -71,6 +70,9 @@ class ProductStockDomainServiceTest {
         assertEquals(ProductStockOptTypeEnum.RESERVE.name(), log.getOptType());
         assertEquals(STOCK_ID, log.getStockId());
         assertEquals(5, log.getChangeQty());
+        assertEquals(100, log.getBeforeStock());
+        assertEquals(95, log.getAfterStock());
+        assertEquals("100:9001:RESERVE", log.getIdempotentKey());
     }
 
     @Test
@@ -79,9 +81,7 @@ class ProductStockDomainServiceTest {
         reserve.setChangeQty(2);
         when(productStockLogRepository.findPendingReserve(ORDER_ID, PRODUCT_ID)).thenReturn(Optional.of(reserve));
         ProductStock before = stock(98, 2, 100);
-        ProductStock after = stock(98, 0, 98);
-        after.setSellStock(12);
-        when(productStockRepository.requireByProductId(PRODUCT_ID)).thenReturn(before, after);
+        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(before);
         when(productStockRepository.confirm(PRODUCT_ID, 2)).thenReturn(true);
         when(idGenerator.nextId()).thenReturn(1000L);
 
@@ -92,13 +92,22 @@ class ProductStockDomainServiceTest {
     }
 
     @Test
+    void confirm_idempotent_whenConfirmLogExists() {
+        when(productStockLogRepository.existsOpt(ORDER_ID, PRODUCT_ID, ProductStockOptTypeEnum.CONFIRM))
+                .thenReturn(true);
+
+        service.confirm(PRODUCT_ID, ORDER_ID, 2);
+
+        verify(productStockRepository, never()).confirm(anyLong(), anyInt());
+    }
+
+    @Test
     void release_restoresStock_fromReserveQty() {
         ProductStockLogDO reserve = new ProductStockLogDO();
         reserve.setChangeQty(4);
         when(productStockLogRepository.findPendingReserve(ORDER_ID, PRODUCT_ID)).thenReturn(Optional.of(reserve));
         ProductStock before = stock(96, 4, 100);
-        ProductStock after = stock(100, 0, 100);
-        when(productStockRepository.requireByProductId(PRODUCT_ID)).thenReturn(before, after);
+        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(before);
         when(productStockRepository.release(PRODUCT_ID, 4)).thenReturn(true);
         when(idGenerator.nextId()).thenReturn(1001L);
 
@@ -116,6 +125,23 @@ class ProductStockDomainServiceTest {
         verify(productStockRepository, never()).release(anyLong(), anyInt());
     }
 
+    @Test
+    void adjust_updatesActual() {
+        ProductStock locked = stock(90, 10, 100);
+        locked.setStockSeq(3L);
+        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(locked);
+        when(productStockRepository.adjustActual(PRODUCT_ID, 80)).thenReturn(true);
+        when(idGenerator.nextId()).thenReturn(2000L);
+
+        ProductStock result = service.adjust(PRODUCT_ID, 80, 55L);
+
+        assertEquals(80, result.getActualStock());
+        assertEquals(70, result.getStock());
+        ArgumentCaptor<ProductStockLogDO> captor = ArgumentCaptor.forClass(ProductStockLogDO.class);
+        verify(productStockLogRepository).insertLog(captor.capture());
+        assertEquals("ADJUST:55", captor.getValue().getIdempotentKey());
+    }
+
     private static ProductStock stock(int available, int withhold, int actual) {
         ProductStock stock = new ProductStock();
         stock.setStockId(STOCK_ID);
@@ -124,6 +150,7 @@ class ProductStockDomainServiceTest {
         stock.setWithholdStock(withhold);
         stock.setActualStock(actual);
         stock.setSellStock(10);
+        stock.setStockSeq(0L);
         stock.setUpdatedAt(LocalDateTime.now());
         return stock;
     }

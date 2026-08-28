@@ -12,6 +12,7 @@
 - [技术栈](#技术栈)
 - [功能模块](#功能模块)
 - [快速开始](#快速开始)
+- [热库存（Redis + MySQL）](#热库存redis--mysql)
 - [前端说明](#前端说明)
 - [配置说明](#配置说明)
 - [可观测性](#可观测性)
@@ -784,6 +785,112 @@ mvn spring-boot:run
 
 ---
 
+## 热库存（Redis + MySQL）
+
+秒杀闸门在 Redis，账本在 MySQL。热卖：Lua 改可售 `avail` 与单调 `seq`，出箱 Stream → Relay 只发 RocketMQ → 消费者按 `seq` 乐观投影。`actual` / `withhold` / `sell` **不进 Redis**。运营调库存必须先下架。
+
+**Spec / Plan / 归档**：`docs/superpowers/specs/2026-08-27-redis-stock-consistency-design.md`、`docs/superpowers/plans/2026-08-27-redis-stock-consistency.md`、`docs/superpowers/archive/2026-08-27-redis-stock-consistency.md`
+
+### 依赖与建表
+
+- MySQL `spring_ai_agent2`：全新库执行 `src/main/resources/db/product-module-schema.sql`（已含 `stock_seq` / `idempotent_key`）
+- **已有商品表**须再执行 `src/main/resources/db/product-stock-seq-schema.sql`
+- Redis（Hash + Stream）、RocketMQ NameServer `127.0.0.1:9876`（`DEMO_STOCK_TOPIC`）
+
+### 读写分工
+
+```text
+下单/支付/取消 ──► ProductStockHotService
+                      │ redis-hot-enabled=true
+                      ▼
+                 Lua（avail/seq/票 + XADD）
+                      ▼
+              Stream demo2:stock:outbox
+                      ▼
+         RedisStockOutboxRelay ──sendImmediate──► RocketMQ
+                      ▼
+              StockSyncMqListener.applyDelta
+                      ▼
+              MySQL stock_seq = seq-1（无行锁）
+
+运营 ADJUST / 开关关闭 ──► ProductStockDomainService（FOR UPDATE + stock_seq+=1）
+```
+
+| Redis Key | 含义 |
+|-----------|------|
+| `demo2:stock:{productId}` | Hash：`avail`、`seq` |
+| `demo2:stock:reserve:{orderId}:{productId}` | 预占票 = qty |
+| `demo2:stock:outbox` | 出箱 Stream；Relay **发 MQ 成功才 XACK** |
+
+C 端列表/详情：热路径开启且 Hash 存在时，`availableStock` overlay Redis `avail`；**不要改** `sellStock`（仍 MySQL）。
+
+对账（`StockReconcileJob`）**先比 seq**：Redis 超前 = 在途（不因可售对不上告警）；齐了才比 `avail ≟ mysql.stock`。
+
+### 包约定
+
+发 MQ：`product.service.infrastructure.publisher`。RocketMQ / Stream 消费者：`product.app.listener`。定时对账：`product.app.job`。不要把库存同步放到全局 `com.jason.demo.demo2.mq`。自定义 SQL 仍在 XML。
+
+### 配置
+
+```properties
+app.product.stock.redis-hot-enabled=true
+app.product.stock.reconcile-interval-ms=60000
+app.product.stock.reconcile-lag-alarm-ms=300000
+app.product.stock.outbox-group=demo2-stock-relay
+rocketmq.producers.stockSyncProducer.enabled=true
+rocketmq.producers.stockSyncProducer.topic=DEMO_STOCK_TOPIC
+rocketmq.consumers.stockSync.enabled=true
+rocketmq.consumers.stockSync.listenerBeanName=stockSyncMqListener
+```
+
+`redis-hot-enabled=false` 时预占/实扣/释放直写 MySQL；Hash 未加载时热路径预占返回 **40010**，**不会**用当时的 `mysql.stock` 灌 Redis。
+
+### Demo HTTP（无登录）
+
+全部 `POST` + JSON；HTTP 始终 200，失败看 `code`。Scalar：`http://localhost:8081/scalar` → 商品。
+
+| 路径 | 说明 |
+|------|------|
+| `/demo/products/listProducts` | 上架列表；可售可 overlay Redis |
+| `/demo/products/getProduct` | 详情 |
+| `/demo/products/offShelf` | 只改下架，不改 Redis Hash |
+| `/demo/products/onShelf` | 无 Hash 则 HSETNX；**已有 Hash 不覆盖 avail** |
+| `/demo/products/adjustStock` | 必须先下架；`targetActual` 为新现货 |
+
+| code | 含义 |
+|------|------|
+| 40008 | 上架中不允许 ADJUST |
+| 40009 | 目标现货非法（小于 0 或小于预占） |
+| 40010 | seq 未齐 / Hash 未加载 |
+
+```bash
+# 下架 → 调现货 80 → 上架（第一次灌 Redis）
+curl -s -X POST http://localhost:8081/demo/products/offShelf \
+  -H "Content-Type: application/json" \
+  -d "{\"productId\":\"2085550503315509001\"}"
+curl -s -X POST http://localhost:8081/demo/products/adjustStock \
+  -H "Content-Type: application/json" \
+  -d "{\"productId\":\"2085550503315509001\",\"targetActual\":80}"
+curl -s -X POST http://localhost:8081/demo/products/onShelf \
+  -H "Content-Type: application/json" \
+  -d "{\"productId\":\"2085550503315509001\"}"
+
+# 上架中再调库存 → 40008
+curl -s -X POST http://localhost:8081/demo/products/adjustStock \
+  -H "Content-Type: application/json" \
+  -d "{\"productId\":\"2085550503315509001\",\"targetActual\":80}"
+```
+
+界面：Tab「会员 C 端 Demo」→ 点商品看详情「库存」；列表卡片不展示可售。订单 `orderPlace` / `pay` / `cancel` **尚未**改调 `ProductStockHotService`。
+
+### 运维注意
+
+- seed 商品默认已上架。Redis 空 Hash 时列表仍显示 MySQL 可售，热路径预占会 40010；演示请先下架再上架灌入。
+- Redis 丢数据：停售，按 MySQL `stock` + `stock_seq` 回灌 Hash，不要在热卖中途用库值覆盖 `avail`。
+- seq 未齐时两边可售可以暂时不同，这是在途。
+
+---
+
 ## 前端说明
 
 演示界面位于 `src/main/resources/static/`，由 Spring Boot 静态资源托管，`IndexController` 将 `GET /` 转发至 `index.html`。采用**零构建**方案：不引入 npm/Vite，改完代码后 `mvn spring-boot:run` 即可验证。
@@ -880,6 +987,10 @@ spring.ai.openai.embedding.model=embedding-2
 spring.datasource.url=jdbc:mysql://127.0.0.1:3306/spring_ai_agent2
 spring.datasource.username=root
 spring.datasource.password=123456
+
+# ===== 商品热库存（详见 README「热库存」专章）=====
+app.product.stock.redis-hot-enabled=true
+app.product.stock.reconcile-interval-ms=60000
 
 # ===== Session API JDBC（AI_SESSION / AI_SESSION_EVENT，与 chat_memory 表独立）=====
 spring.ai.session.repository.jdbc.initialize-schema=never   # 表已存在用 never；全新库首次可改 always 执行一次后改回
@@ -1370,10 +1481,11 @@ curl -s "http://localhost:8081/demo/delay-tasks?bizKey={orderId}"
 **商品 C 端 Demo（`product` / `/demo/products`）：**
 
 - 依赖 MySQL 表 `demo_product`、`demo_product_stock`、`demo_product_stock_log`
-- 执行 `src/main/resources/db/product-module-schema.sql`（含 DDL + 3 件 seed 商品）
-- Spec / Plan / **归档**：`docs/superpowers/specs/2026-08-26-product-module-design.md`、`docs/superpowers/plans/2026-08-26-product-module.md`、`docs/superpowers/archive/2026-08-26-product-module.md`
-- C 端入口：首页 Tab「会员 Demo」→ 商品列表 / 详情（`member.js`）；**无需登录**
-- 本阶段仅读接口；库存写操作由 `ProductStockDomainService` 供订单模块内部调用，订单改造后续做
+- 全新库：`src/main/resources/db/product-module-schema.sql`；已有库还要执行 `product-stock-seq-schema.sql`
+- 热库存（Redis 闸门 + MQ 投影 + 上下架/调库存）：见专章 **[热库存（Redis + MySQL）](#热库存redis--mysql)**
+- 商品模块归档：`docs/superpowers/archive/2026-08-26-product-module.md`
+- C 端入口：首页 Tab「会员 C 端 Demo」→ 列表 / 详情（`member.js`）；**无需登录**
+- 预占/实扣/释放入口是 `ProductStockHotService`（开关关闭则 DomainService）；**订单 HTTP 尚未接入**
 
 ```bash
 # 商品列表（上架商品 + 可售库存 / 已售）
@@ -3159,13 +3271,18 @@ demo2/
 │       ├── 2026-07-16-embabel-quizzard.md    # Embabel Quizzard 出题归档
 │       ├── 2026-08-23-order-ddd-package-refactor.md # 订单 DDD 分包样板归档
 │       ├── 2026-08-25-unified-json-result.md # 统一 JsonResult 归档
-│       └── 2026-08-26-product-module.md      # 商品模块归档
+│       ├── 2026-08-26-product-module.md      # 商品模块归档
+│       └── 2026-08-27-redis-stock-consistency.md # Redis 热库存归档
 └── pom.xml
 ```
 
 ---
 
 ## 常见问题
+
+**Q：商品详情有库存，下单预占却返回 40010？**
+
+热路径默认开启。seed 商品已上架但 Redis 可能没有 Hash，闸门视为未加载，不会用 MySQL 可售灌 Redis。演示请先 `offShelf` 再 `onShelf`（HSETNX），或关 `app.product.stock.redis-hot-enabled`。详见 [热库存（Redis + MySQL）](#热库存redis--mysql)。
 
 **Q：启动时报 Milvus 连接失败怎么办？**
 
@@ -3281,7 +3398,8 @@ MCP Client 连接本机 MCP Server（`http://localhost:8081/mcp`，Streamable HT
 - **瑞幸 MCP 点单**：Streamable HTTP 双远程 MCP（瑞幸 + 高德）+ 官方 My Coffee Skill 内嵌 System Prompt，见 §10.1 与 `docs/superpowers/archive/2026-07-06-lkcoffee-mcp.md`
 - **ElevenLabs 语音对话**：TTS（`spring-ai-starter-model-elevenlabs`）+ 自封装 Scribe STT + 分句流式朗读，见 §10.2 与 `docs/superpowers/archive/2026-07-08-elevenlabs-voice-chat.md`
 - **Embabel 自动选路 + Quizzard**：`embabel-agent` 2.0.0-SNAPSHOT Closed 模式三 Agent；jsoup 抓文 + Action 链出题，见 §10.3 与 `docs/superpowers/archive/2026-07-16-embabel-quizzard.md`
-- **商品模块**：三表 + C 端 list/get + `ProductStockDomainService` 预占/实扣/释放，见快速开始「商品 C 端 Demo」与 `docs/superpowers/archive/2026-08-26-product-module.md`
+- **商品模块**：三表 + C 端 list/get，见快速开始「商品 C 端 Demo」与 `docs/superpowers/archive/2026-08-26-product-module.md`
+- **热库存**：Redis `avail+seq` 闸门 + RocketMQ 投影 MySQL + Demo 上下架/调库存，见 [热库存（Redis + MySQL）](#热库存redis--mysql) 与 `docs/superpowers/archive/2026-08-27-redis-stock-consistency.md`
 - **Micrometer + OpenTelemetry**：Boot 4 内置，通过 `spring-boot-starter-opentelemetry` 接入；Spring AI 自动暴露 `gen_ai.*` 指标
 
 详细设计见 `docs/superpowers/specs/` 目录。
