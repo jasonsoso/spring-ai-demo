@@ -1,4 +1,4 @@
-package com.jason.demo.demo2.mq.listener;
+package com.jason.demo.demo2.framework.delay.listener;
 
 import com.jason.demo.demo2.framework.delay.DelayTaskExecutor;
 import com.jason.demo.demo2.framework.rocketmq.RocketMessageConcurrentlyListener;
