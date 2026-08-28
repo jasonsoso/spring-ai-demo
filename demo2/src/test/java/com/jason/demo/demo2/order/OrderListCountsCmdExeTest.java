@@ -123,9 +123,9 @@ class OrderListCountsCmdExeTest {
 
     @Test
     void get_othersOrder_throws30001() {
-        when(orderDomainService.requireOrder(ORDER_ID, MEMBER_ID))
+        when(orderDomainService.requireOrderWithItems(ORDER_ID, MEMBER_ID))
                 .thenThrow(new BusinessException(OrderErrorCodeEnum.ORDER_NOT_FOUND));
-        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderItemRepository, orderVoConvert);
+        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
 
         BusinessException ex = assertThrows(BusinessException.class, () -> getExe.execute(ORDER_ID));
 
@@ -137,8 +137,8 @@ class OrderListCountsCmdExeTest {
     @Test
     void get_attachesFullSnapshotItems() {
         Order owned = submitOrder(ORDER_ID);
-        when(orderDomainService.requireOrder(ORDER_ID, MEMBER_ID)).thenReturn(owned);
-        when(orderItemRepository.listByOrderId(ORDER_ID)).thenReturn(List.of(item));
+        owned.setItems(List.of(item));
+        when(orderDomainService.requireOrderWithItems(ORDER_ID, MEMBER_ID)).thenReturn(owned);
         when(orderVoConvert.toGetRes(any())).thenAnswer(inv -> {
             GetOrderResVO vo = new GetOrderResVO();
             Order source = inv.getArgument(0);
@@ -146,7 +146,7 @@ class OrderListCountsCmdExeTest {
             vo.setOrderStatus(source.getOrderStatus());
             return vo;
         });
-        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderItemRepository, orderVoConvert);
+        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
 
         GetOrderResVO vo = getExe.execute(ORDER_ID);
 
@@ -164,15 +164,15 @@ class OrderListCountsCmdExeTest {
     @Test
     void get_missingItems_emptyArray() {
         Order owned = submitOrder(ORDER_ID);
-        when(orderDomainService.requireOrder(ORDER_ID, MEMBER_ID)).thenReturn(owned);
-        when(orderItemRepository.listByOrderId(ORDER_ID)).thenReturn(List.of());
+        owned.setItems(List.of());
+        when(orderDomainService.requireOrderWithItems(ORDER_ID, MEMBER_ID)).thenReturn(owned);
         when(orderVoConvert.toGetRes(any())).thenAnswer(inv -> {
             GetOrderResVO vo = new GetOrderResVO();
             Order source = inv.getArgument(0);
             vo.setOrderId(source.getOrderId());
             return vo;
         });
-        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderItemRepository, orderVoConvert);
+        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
 
         getExe.execute(ORDER_ID);
 
