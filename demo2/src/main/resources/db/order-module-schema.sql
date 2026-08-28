@@ -1,18 +1,49 @@
 -- demo2 订单模块演进
 -- 已有库执行本脚本 ALTER / 历史映射；新库以 delay-order-schema.sql 建表为准。
--- 若现表列仍叫 status，先 CHANGE 为 order_status，再执行下方 UPDATE（已 CHANGE 的环境直接用 order_status）。
+-- MySQL 8 可重复执行：仅当仍存在 status 列时 CHANGE；ADD COLUMN IF NOT EXISTS；DROP INDEX IF EXISTS。
+-- 绿场建表不要改 delay-order-schema.sql，本脚本不 DROP/重建 demo_order。
+
+-- 仅当遗留列仍叫 status 时才 CHANGE 为 order_status（已演进库跳过）。
+SET @demo_order_need_rename := (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'demo_order'
+      AND COLUMN_NAME = 'status'
+);
+SET @demo_order_rename_sql := IF(
+    @demo_order_need_rename > 0,
+    'ALTER TABLE demo_order CHANGE COLUMN status order_status VARCHAR(32) NOT NULL COMMENT ''订单状态: SUBMIT=已提交, COMPLETED=已完成, CANCEL=已取消''',
+    'SELECT 1'
+);
+PREPARE demo_order_rename_stmt FROM @demo_order_rename_sql;
+EXECUTE demo_order_rename_stmt;
+DEALLOCATE PREPARE demo_order_rename_stmt;
 
 ALTER TABLE demo_order
-    CHANGE COLUMN status order_status VARCHAR(32) NOT NULL
-        COMMENT '订单状态: SUBMIT=已提交, COMPLETED=已完成, CANCEL=已取消',
-    ADD COLUMN pay_status VARCHAR(32) NOT NULL DEFAULT 'WAIT_PAY'
-        COMMENT '支付状态(伴随): WAIT_PAY/PAY_SUCCESS/CLOSE' AFTER order_status,
-    ADD COLUMN pay_time DATETIME(3) NULL COMMENT '支付完成时间' AFTER pay_status,
-    ADD COLUMN cancel_time DATETIME(3) NULL COMMENT '取消/超时时间' AFTER pay_time;
-
+    ADD COLUMN IF NOT EXISTS pay_status VARCHAR(32) NOT NULL DEFAULT 'WAIT_PAY'
+        COMMENT '支付状态(伴随): WAIT_PAY/PAY_SUCCESS/CLOSE' AFTER order_status;
 ALTER TABLE demo_order
-    DROP INDEX idx_demo_order_status,
-    ADD INDEX idx_demo_order_member_status_time (member_id, order_status, created_at);
+    ADD COLUMN IF NOT EXISTS pay_time DATETIME(3) NULL COMMENT '支付完成时间' AFTER pay_status;
+ALTER TABLE demo_order
+    ADD COLUMN IF NOT EXISTS cancel_time DATETIME(3) NULL COMMENT '取消/超时时间' AFTER pay_time;
+
+ALTER TABLE demo_order DROP INDEX IF EXISTS idx_demo_order_status;
+SET @demo_order_need_idx := (
+    SELECT COUNT(*)
+    FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'demo_order'
+      AND INDEX_NAME = 'idx_demo_order_member_status_time'
+);
+SET @demo_order_add_idx_sql := IF(
+    @demo_order_need_idx = 0,
+    'ALTER TABLE demo_order ADD INDEX idx_demo_order_member_status_time (member_id, order_status, created_at)',
+    'SELECT 1'
+);
+PREPARE demo_order_add_idx_stmt FROM @demo_order_add_idx_sql;
+EXECUTE demo_order_add_idx_stmt;
+DEALLOCATE PREPARE demo_order_add_idx_stmt;
 
 CREATE TABLE IF NOT EXISTS demo_order_item (
     id            BIGINT         NOT NULL AUTO_INCREMENT COMMENT '数据库自增主键',

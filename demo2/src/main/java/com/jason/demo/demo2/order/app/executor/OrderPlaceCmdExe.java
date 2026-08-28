@@ -130,12 +130,12 @@ public class OrderPlaceCmdExe {
             ctx.setOrder(order);
             executor.fireEvent(OrderStatusEnum.INIT, OrderEventEnum.SUBMIT_ORDER, ctx);
 
+            tokenStore.saveResult(token, orderId, Duration.ofHours(24));
             long taskId = delayTaskService.schedule(
                     DelayTaskType.ORDER_CANCEL,
                     String.valueOf(orderId),
                     null,
                     effectiveDelay);
-            tokenStore.saveResult(token, orderId, Duration.ofHours(24));
             return toRes(order, taskId, effectiveDelay);
         } finally {
             tokenStore.unlock(token);

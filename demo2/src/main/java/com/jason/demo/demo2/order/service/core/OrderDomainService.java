@@ -7,7 +7,6 @@ import com.jason.demo.demo2.order.service.infrastructure.repository.OrderItemRep
 import com.jason.demo.demo2.order.service.infrastructure.repository.OrderRepository;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Service
@@ -19,10 +18,6 @@ public class OrderDomainService {
     public OrderDomainService(OrderRepository orderRepository, OrderItemRepository orderItemRepository) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
-    }
-
-    public void place(Order order) {
-        orderRepository.insert(order);
     }
 
     public Optional<Order> findById(long orderId) {
@@ -49,39 +44,5 @@ public class OrderDomainService {
         Order order = requireOrder(orderId);
         order.setItems(orderItemRepository.listByOrderId(orderId));
         return order;
-    }
-
-    public void payOrder(long orderId, long memberId) {
-        Order order = requireOrder(orderId, memberId);
-        order.pay();
-        if (!orderRepository.markCompleted(orderId, memberId, LocalDateTime.now())) {
-            Order latest = requireOrder(orderId, memberId);
-            throw new BusinessException(OrderErrorCodeEnum.ORDER_STATUS_CONFLICT,
-                    "cannot pay order in status " + latest.getOrderStatus());
-        }
-    }
-
-    public boolean expireCancel(long orderId) {
-        Order order = orderRepository.findById(orderId).orElse(null);
-        if (order == null) {
-            return false;
-        }
-        if (!order.cancel()) {
-            return false;
-        }
-        return orderRepository.markCancelled(orderId, null, LocalDateTime.now());
-    }
-
-    public void manualCancel(long orderId, long memberId) {
-        Order order = requireOrder(orderId, memberId);
-        if (!order.cancel()) {
-            throw new BusinessException(OrderErrorCodeEnum.ORDER_STATUS_CONFLICT,
-                    "cannot cancel order in status " + order.getOrderStatus());
-        }
-        if (!orderRepository.markCancelled(orderId, memberId, LocalDateTime.now())) {
-            Order latest = requireOrder(orderId, memberId);
-            throw new BusinessException(OrderErrorCodeEnum.ORDER_STATUS_CONFLICT,
-                    "cannot cancel order in status " + latest.getOrderStatus());
-        }
     }
 }

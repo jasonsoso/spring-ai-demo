@@ -159,10 +159,10 @@ class OrderPlaceCmdExeTest {
         assertEquals(new BigDecimal("36.00"), res.getAmount());
         assertEquals(77L, res.getTaskId());
         assertEquals("PT10S", res.getDelay());
-        InOrder inOrder = inOrder(executor, delayTaskService, tokenStore);
+        InOrder inOrder = inOrder(executor, tokenStore, delayTaskService);
         inOrder.verify(executor).fireEvent(eq(OrderStatusEnum.INIT), eq(OrderEventEnum.SUBMIT_ORDER), any());
-        inOrder.verify(delayTaskService).schedule(DelayTaskType.ORDER_CANCEL, "55", null, Duration.ofSeconds(10));
         inOrder.verify(tokenStore).saveResult(TOKEN, 55L, Duration.ofHours(24));
+        inOrder.verify(delayTaskService).schedule(DelayTaskType.ORDER_CANCEL, "55", null, Duration.ofSeconds(10));
         verify(tokenStore).unlock(TOKEN);
     }
 

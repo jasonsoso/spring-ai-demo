@@ -63,28 +63,4 @@ public class Order extends OrderDO {
     public void setItems(List<OrderItem> items) {
         this.items = items == null ? new ArrayList<>() : items;
     }
-
-    public void pay() {
-        if (!OrderStatusEnum.SUBMIT.name().equals(getOrderStatus())) {
-            throw new BusinessException(OrderErrorCodeEnum.ORDER_STATUS_CONFLICT,
-                    "cannot pay order in status " + getOrderStatus());
-        }
-        LocalDateTime now = LocalDateTime.now();
-        setOrderStatus(OrderStatusEnum.COMPLETED.name());
-        setPayStatus(PayStatusEnum.PAY_SUCCESS.name());
-        setPayTime(now);
-        setUpdatedAt(now);
-    }
-
-    public boolean cancel() {
-        if (!OrderStatusEnum.SUBMIT.name().equals(getOrderStatus())) {
-            return false;
-        }
-        LocalDateTime now = LocalDateTime.now();
-        setOrderStatus(OrderStatusEnum.CANCEL.name());
-        setPayStatus(PayStatusEnum.CLOSE.name());
-        setCancelTime(now);
-        setUpdatedAt(now);
-        return true;
-    }
 }

@@ -31,9 +31,10 @@
 
     <select id="countByMemberAndStatus" resultType="long">
         SELECT COUNT(*)
-        FROM demo_order
-        WHERE member_id = #{memberId}
-          AND order_status = #{orderStatus}
+        FROM demo_order o
+        WHERE o.member_id = #{memberId}
+          AND o.order_status = #{orderStatus}
+          AND EXISTS (SELECT 1 FROM demo_order_item i WHERE i.order_id = o.order_id)
     </select>
 
     <select id="countPageByMemberAndTab" resultType="long">
