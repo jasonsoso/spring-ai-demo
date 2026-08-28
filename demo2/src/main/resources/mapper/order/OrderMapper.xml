@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jason.demo.demo2.order.service.infrastructure.dao.mapper.OrderMapper">
+
+    <update id="markCompleted">
+        UPDATE demo_order
+        SET order_status = 'COMPLETED',
+            pay_status = 'PAY_SUCCESS',
+            pay_time = #{payTime},
+            updated_at = #{payTime}
+        WHERE order_id = #{orderId}
+          AND order_status = 'SUBMIT'
+        <if test="memberId != null">
+            AND member_id = #{memberId}
+        </if>
+    </update>
+
+    <update id="markCancelled">
+        UPDATE demo_order
+        SET order_status = 'CANCEL',
+            pay_status = 'CLOSE',
+            cancel_time = #{cancelTime},
+            updated_at = #{cancelTime}
+        WHERE order_id = #{orderId}
+          AND order_status = 'SUBMIT'
+        <if test="memberId != null">
+            AND member_id = #{memberId}
+        </if>
+    </update>
+
+    <select id="countByMemberAndStatus" resultType="long">
+        SELECT COUNT(*)
+        FROM demo_order
+        WHERE member_id = #{memberId}
+          AND order_status = #{orderStatus}
+    </select>
+
+    <select id="countPageByMemberAndTab" resultType="long">
+        SELECT COUNT(*)
+        FROM demo_order o
+        WHERE o.member_id = #{memberId}
+          AND EXISTS (SELECT 1 FROM demo_order_item i WHERE i.order_id = o.order_id)
+        <if test="orderStatus != null">
+            AND o.order_status = #{orderStatus}
+        </if>
+    </select>
+
+    <select id="pageByMemberAndTab"
+            resultType="com.jason.demo.demo2.order.service.infrastructure.dao.entity.OrderDO">
+        SELECT o.*
+        FROM demo_order o
+        WHERE o.member_id = #{memberId}
+          AND EXISTS (SELECT 1 FROM demo_order_item i WHERE i.order_id = o.order_id)
+        <if test="orderStatus != null">
+            AND o.order_status = #{orderStatus}
+        </if>
+        ORDER BY o.created_at DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+</mapper>

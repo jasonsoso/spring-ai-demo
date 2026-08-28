@@ -1,5 +1,6 @@
 package com.jason.demo.demo2.order.service.core.domain;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
 import com.jason.demo.demo2.order.service.common.OrderErrorCodeEnum;
 import com.jason.demo.demo2.order.service.common.OrderStatusEnum;
@@ -13,7 +14,8 @@ import java.util.List;
 
 public class Order extends OrderDO {
 
-    private List<?> items = new ArrayList<>();
+    @TableField(exist = false)
+    private List<OrderItem> items = new ArrayList<>();
 
     public static Order create(long orderId, long memberId, BigDecimal amount, LocalDateTime now) {
         if (amount == null || amount.signum() <= 0) {
@@ -47,11 +49,11 @@ public class Order extends OrderDO {
         return order;
     }
 
-    public List<?> getItems() {
+    public List<OrderItem> getItems() {
         return items;
     }
 
-    public void setItems(List<?> items) {
+    public void setItems(List<OrderItem> items) {
         this.items = items == null ? new ArrayList<>() : items;
     }
 
