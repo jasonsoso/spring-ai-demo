@@ -17,7 +17,7 @@
 ### 1.2 目标
 
 1. 在 `com.jason.demo.demo2.framework.cache` 提供可复用的 **JetCache 两级缓存**：注解 + **Caffeine L1** + **Redis L2**。
-2. 商品作为第一个接入点：`listOnShelf` / `requireOnShelf` 走缓存；上/下架主动失效。
+2. 商品作为第一个接入点：列表 `listOnShelf`、详情 `requireOnShelfWithCache` 走缓存；**下单/预览/热库存闸门仍走无缓存的 `requireOnShelf`**。上/下架主动失效。
 3. 可售库存仍走现有 Redis Hash overlay，**不进目录缓存**。
 
 ### 1.3 已确认决策
@@ -29,16 +29,17 @@
 | L1 | Caffeine |
 | L2 | 复用已有 `RedissonClient`（`jetcache-starter-redisson`），不引 Jedis |
 | 版本 | 首选 JetCache **2.7.9**；若与 Spring Boot 4.1 / Redisson 4.1 依赖冲突，改用 **2.8.0.RC**，方案不变 |
-| 注解位置 | `ProductDomainService`（CmdExe 跨 Bean 调用，AOP 生效） |
+| 注解位置 | `ProductDomainService`（由 **其它 Bean** 调用带 `@Cached` 的方法，AOP 才生效） |
+| 详情拆方法 | `requireOnShelf` 无缓存（实时）；新建 `requireOnShelfWithCache` 仅给商品详情接口 |
 | 缓存内容 | `ProductWithStock` / `List<ProductWithStock>`（MySQL 投影） |
-| 可售 | CmdExe 每次 `overlayAvail`；Redis miss 时回退缓存/MySQL 里的 `stock` 字段（与今日行为一致，仅可能略陈旧） |
-| 已售 `sellStock` | 随缓存，直到上下架失效或 TTL；不写入热库存 Hash |
+| 可售 | 列表/详情 CmdExe 每次 `overlayAvail`；订单路径 `requireOnShelf` 每次打 MySQL，overlay miss 时回退的是实时 `stock` |
+| 已售 `sellStock` | 仅列表/详情缓存路径会陈旧，直到上下架失效或 TTL；订单读的是实时 MySQL |
 | 失效 | 上/下架主动清列表 + 该 `productId` 详情；TTL 仅兜底 |
 | 多实例 L1 | 本版不做 pub/sub / `syncLocal` |
 | 值序列化 | Kryo5（领域对象未实现 `Serializable`） |
 | key 转换 | fastjson2 |
 | Redis 前缀 | `demo2:cache:`，与 `demo2:stock:` 隔离 |
-| 订单 | 不改订单代码；`requireOnShelf` 被预览/下单调用时自然命中同一详情缓存 |
+| 订单 | **不改订单代码**，继续调 `requireOnShelf`，不走详情缓存 |
 
 ### 1.4 非目标（本版不做）
 
@@ -58,32 +59,26 @@
 ### 2.1 逻辑架构
 
 ```text
-CmdExe（list / get）
-    │
-    ▼
-ProductDomainService          ◄── @Cached / @CacheInvalidate
-    │  hit: Caffeine L1
-    │  miss: Redis L2（Redisson）
-    │  both miss: ProductRepository → MySQL
-    ▼
-ProductWithStock
-    │
-    ▼
-CmdExe overlayAvail（Redis Hash avail）
-    │
-    ▼
-ResVO / 下单校验用的 available
+商品列表          ProductListCmdExe  → listOnShelf()              @Cached
+商品详情          ProductGetCmdExe   → requireOnShelfWithCache()  @Cached
+订单预览/下单     Order*CmdExe       → requireOnShelf()           无缓存
+热库存 reserve    ProductStockHotService → requireOnShelf()       无缓存
+
+requireOnShelfWithCache 内部允许 this.requireOnShelf()（加载逻辑复用）。
+@Cached 打在被外部 Bean 调用的方法上，因此 AOP 有效。
 ```
 
 ```mermaid
 flowchart LR
   subgraph App["demo2"]
     EXE["ProductListCmdExe / ProductGetCmdExe"]
+    ORD["Order*CmdExe / ProductStockHotService"]
     DS["ProductDomainService"]
     JC["JetCache AOP"]
     L1["Caffeine L1"]
     OV["ProductStockHotService.overlayAvail"]
-    EXE --> DS
+    EXE -->|listOnShelf / requireOnShelfWithCache| DS
+    ORD -->|requireOnShelf 无缓存| DS
     DS -.-> JC
     JC --> L1
     JC --> L2["Redis L2 demo2:cache:*"]
@@ -102,16 +97,17 @@ flowchart LR
 | CmdExe | 负责 VO 转换 + overlay；缓存应发生在 overlay **之前** |
 | Repository | 基础设施查询；失效语义（上/下架）在领域方法上更直观 |
 
-`ProductDomainService` 由 CmdExe 注入调用，不是同类自调用，AOP 有效。
+`ProductGetCmdExe` 改为调用 `requireOnShelfWithCache`；订单与 `ProductStockHotService` 仍调用 `requireOnShelf`。不要把 `@Cached` 打在 `requireOnShelf` 上，否则所有调用者都会吃到缓存。
 
-订单预览/下单已调用 `requireOnShelf`，会打到同一 `product:detail:` 缓存。这是 B 方案的自然结果，不是给订单做单独改造。下单可售仍优先 overlay；仅 Hash 不存在时回退 `row.getStock().getStock()`。
+`requireOnShelfWithCache` 的方法体委托 `this.requireOnShelf(...)` 复用校验与查库。这不是「带缓存方法的自调用」：AOP 包的是 **外部进来的** `requireOnShelfWithCache`。禁止反过来在 `requireOnShelf` 上加 `@Cached` 再让详情去调它——同类 `this.requireOnShelf()` 会绕过代理，缓存永远不生效。
 
 ### 2.3 读路径（列表 / 详情）
 
-1. CmdExe 调 `listOnShelf` 或 `requireOnShelf`。
-2. JetCache：L1 → L2 → MySQL，回填两级。
-3. CmdExe 转 VO 后 `overlayAvail` 覆盖 `availableStock`。
-4. `requireOnShelf` 在未上架时抛 `BusinessException`（不存在 / 已下架）。**异常不缓存**。空列表是合法结果，**可以缓存**。
+1. 列表：`ProductListCmdExe` → `listOnShelf`（缓存）。详情：`ProductGetCmdExe` → `requireOnShelfWithCache`（缓存，内部再调 `requireOnShelf`）。
+2. 缓存命中则跳过 MySQL；miss 则 L2 → MySQL，回填两级。
+3. 两个 CmdExe 转 VO 后 `overlayAvail` 覆盖 `availableStock`。
+4. 未上架时 `requireOnShelf` 抛 `BusinessException`（不存在 / 已下架）。**异常不缓存**。空列表是合法结果，**可以缓存**。
+5. 订单预览/下单 / `reserve` **每次**走 `requireOnShelf` → MySQL，与详情缓存互不影响。
 
 ### 2.4 写路径（上/下架）
 
@@ -144,7 +140,8 @@ flowchart LR
 | `framework.cache.configuration.JetCacheConfiguration` | `@EnableMethodCache(basePackages = "com.jason.demo.demo2")` | JetCache starter |
 | `application.properties` 中 `jetcache.*` | L1/L2 类型、TTL 默认、keyPrefix、Redisson bean 名 | 已有 Redis |
 | `product.service.infrastructure.cache.ProductCacheNames` | 缓存 name 常量（对齐 `RedisStockKeys`） | 无 |
-| `ProductDomainService` | `@Cached` / `@CacheInvalidate` | 上表 name |
+| `ProductDomainService` | `listOnShelf` / `requireOnShelfWithCache` 加 `@Cached`；`requireOnShelf` 无注解 | ProductCacheNames |
+| `ProductGetCmdExe` | 改调 `requireOnShelfWithCache` | DomainService |
 | `ProductWithStock` | 增加无参构造，供 Kryo5 | 无新依赖 |
 
 不引入手写 `CacheManager` 包装类；业务只打 JetCache 注解。不需要 `@EnableCreateCacheAnnotation`（本版不用 `@CreateCache`）。
@@ -201,7 +198,7 @@ jetcache.remote.default.expireAfterWriteInMillis=600000
 
 落 Redis 后形态：`demo2:cache:product:list:`、`demo2:cache:product:detail:{productId}`（具体拼接以 JetCache `areaInCacheName=false` + `keyPrefix` 为准；实现后用一次真实 key 核对文档，若多一段分隔符只改常量/前缀，不改两级语义）。
 
-`requireProduct` **不缓存**（上/下架必须读最新 `status`）。
+`requireProduct`、`requireOnShelf` **不缓存**。只有 `requireOnShelfWithCache` 使用 `DETAIL`。
 
 ### 3.5 注解清单（`ProductDomainService`）
 
@@ -210,7 +207,12 @@ listOnShelf()
   @Cached(name = LIST, cacheType = BOTH, expire = 600, localExpire = 120)
 
 requireOnShelf(long productId)
+  无注解；查库 + 上架校验。订单 / 热库存 / WithCache 内部复用。
+
+requireOnShelfWithCache(long productId)
   @Cached(name = DETAIL, key = "#productId", cacheType = BOTH, expire = 600, localExpire = 120)
+  方法体：return requireOnShelf(productId);
+  仅 ProductGetCmdExe 调用。
 
 onShelf(long productId) / offShelf(long productId)
   @CacheInvalidate(name = LIST)
@@ -223,7 +225,7 @@ onShelf(long productId) / offShelf(long productId)
 
 - Key：fastjson2。
 - Value：Kryo5。`Product` / `ProductStock` 继承 Lombok `@Data` 的 DO，已有无参构造；`ProductWithStock` 目前只有全参构造，**必须补无参构造**。Kryo 按字段编解码，不必改成完整 JavaBean。
-- 不缓存 `Optional`；`requireOnShelf` 只缓存成功返回值。
+- 不缓存 `Optional`；`requireOnShelfWithCache` 只缓存成功返回值。
 
 ---
 
@@ -237,7 +239,7 @@ onShelf(long productId) / offShelf(long productId)
 | `BusinessException` | 不缓存 |
 | 空列表 | 可缓存 |
 | 热库存 overlay 失败 | 保持现有逻辑，与目录缓存无关 |
-| 同类方法自调用 | `@Cached` 不生效；本版调用链禁止 DomainService 内部调 `listOnShelf` / `requireOnShelf` |
+| 同类方法自调用 | `@Cached` 打在 `this.xxx()` 上不生效。允许 `requireOnShelfWithCache` 内部调 `requireOnShelf`；禁止在 `requireOnShelf` / `listOnShelf` 上加注解后再被同类其它方法 `this.` 调用 |
 
 不做穿透保护。demo 商品量小。
 
@@ -256,8 +258,11 @@ onShelf(long productId) / offShelf(long productId)
    用例：
    - `listOnShelf` 连调两次 → Repository 只进一次
    - `offShelf` 后再 `listOnShelf` → Repository 再进一次
-   - `requireOnShelf(A)` 命中后 `requireOnShelf(B)` 仍打 Repository（按 productId 分 key）
+   - `requireOnShelfWithCache(A)` 连调两次 → Repository 只进一次；`requireOnShelfWithCache(B)` 仍打 Repository
+   - `requireOnShelf(A)` 连调两次 → Repository **进两次**（订单路径无缓存）
    每例使用独立 cache name 后缀或先 `invalidate`，避免脏 key。
+
+`ProductGetCmdExe` 单测改为 mock `requireOnShelfWithCache`（不再 mock 详情路径上的 `requireOnShelf`）。订单相关单测仍 mock `requireOnShelf`，无需改断言语义。
 
 不强制写「Redis 宕机回源」自动化；降级语义按第 4 节实现与代码审阅即可。
 
@@ -280,4 +285,6 @@ onShelf(long productId) / offShelf(long productId)
 - `@EnableMethodCache` 的 `basePackages` 必须覆盖 `com.jason.demo.demo2.product`；放宽到 `com.jason.demo.demo2` 以便后续模块直接打注解。
 - 禁止在 Controller 或返回 `JsonResult` 的方法上加 `@Cached`。
 - 禁止 `@Cached` 包住 `overlayAvail` 的结果。
+- 禁止订单 / `ProductStockHotService` 改调 `requireOnShelfWithCache`。
+- `ProductGetCmdExe` 必须调 `requireOnShelfWithCache`，不能调 `requireOnShelf`。
 - 生产与缓存单测都用 `BOTH`，不要为测试把注解改成 `LOCAL`（profile 改不了方法上的 `cacheType`）。无 Redis 时跳过第 5 节第 2 项，而不是换一套缓存类型。
