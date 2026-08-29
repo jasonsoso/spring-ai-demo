@@ -140,7 +140,6 @@
 
 .member-home-banner strong {
     display: block;
-    margin-bottom: 4px;
     font-size: 17px;
 }
 
@@ -280,6 +279,17 @@
     font-size: 14px;
 }
 
+.member-preview-qty-row {
+    align-items: center;
+}
+
+.member-preview-qty-row .member-preview-qty {
+    width: 64px;
+    padding: 4px 8px;
+    text-align: right;
+    font-size: 13px;
+}
+
 .member-order-tabs {
     display: flex;
     gap: 8px;
@@ -303,6 +313,13 @@
 .member-order-tab.active {
     color: #7c3aed;
     background: #faf5ff;
+}
+
+.member-order-list-hint {
+    padding: 12px 0 8px;
+    color: #94a3b8;
+    font-size: 12px;
+    text-align: center;
 }
 
 .member-order-badge {

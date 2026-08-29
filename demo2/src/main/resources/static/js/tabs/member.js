@@ -16,6 +16,10 @@ let memberOrdersRenderSeq = 0;
 let memberOrderDetailRenderSeq = 0;
 let memberPreviewQty = 1;
 let memberOrderListTab = 'ALL';
+let memberOrderListPageNo = 1;
+let memberOrderListHasMore = true;
+let memberOrderListLoadingMore = false;
+const MEMBER_ORDER_PAGE_SIZE = 10;
 let memberPreviewData = null;
 let memberOrderCountdownTimer = null;
 let memberOrderCountdownRefreshOnce = '';
@@ -200,8 +204,7 @@ function memberRender() {
 }
 
 function memberHomeBannerHtml() {
-    return '<div class="member-home-banner"><strong>今日精选</strong>'
-        + '<span>商品来自接口 · 右侧面板可下单/支付/取消</span></div>';
+    return '<div class="member-home-banner"><strong>今日精选</strong></div>';
 }
 
 function memberProductEmoji(name) {
@@ -348,20 +351,33 @@ function memberOnPreviewQtyInput(el) {
 function memberPreviewViewHtml(preview) {
     const items = preview.items || [];
     const maxQty = memberPreviewQtyMax(preview);
-    const lines = items.map(function (row) {
-        return '<div class="member-order-card"><strong>' + memberEscapeHtml(row.productName) + '</strong>'
-            + '<p>¥' + memberEscapeHtml(row.sellPrice) + ' × ' + memberEscapeHtml(row.qty)
-            + (row.availableStock != null ? ' · 库存 ' + memberEscapeHtml(row.availableStock) : '')
-            + '</p></div>';
-    }).join('');
+    const first = items[0] || {};
+    const lines = items.length
+        ? items.map(memberOrderLineHtml).join('')
+        : memberOrderLineHtml({ productName: '商品', qty: memberPreviewQty, sellPrice: preview.amount });
+    const stock = first.availableStock != null
+        ? memberOrderMetaRow('可售库存', first.availableStock)
+        : '';
     return '<button type="button" class="member-back-btn" onclick="memberBackFromPreview()">← 返回</button>'
         + '<h2>确认订单</h2>'
-        + lines
-        + '<label class="member-preview-qty-label">数量 <input type="number" class="member-preview-qty" min="1" max="'
+        + '<div class="member-order-card member-order-detail-card">'
+        + '<div class="member-order-card-head">'
+        + '<span class="member-order-card-no">确认下单</span>'
+        + '<span class="member-order-card-status member-order-card-status--submit">待提交</span></div>'
+        + '<div class="member-order-card-lines">' + lines + '</div>'
+        + '<div class="member-order-detail-meta">'
+        + '<label class="member-order-detail-meta-row member-preview-qty-row">数量'
+        + '<input type="number" class="member-preview-qty" min="1" max="'
         + memberEscapeHtml(maxQty) + '" value="' + memberEscapeHtml(memberPreviewQty)
         + '" onchange="memberOnPreviewQtyInput(this)" onblur="memberOnPreviewQtyInput(this)"></label>'
-        + '<p class="member-detail-price">合计 ¥' + memberEscapeHtml(preview.amount) + '</p>'
-        + '<button type="button" class="btn btn-primary member-detail-buy" id="memberPlaceSubmit" onclick="memberPlaceOrder()">提交订单</button>';
+        + stock
+        + '</div>'
+        + '<div class="member-order-card-foot">'
+        + '<span></span>'
+        + '<span class="member-order-card-amount">合计 <em>¥' + memberEscapeHtml(preview.amount) + '</em></span></div>'
+        + '<div class="member-order-detail-actions">'
+        + '<button type="button" class="btn btn-primary" id="memberPlaceSubmit" onclick="memberPlaceOrder()">提交订单</button>'
+        + '</div></div>';
 }
 
 async function memberRenderPreview() {
@@ -738,6 +754,51 @@ function memberSwitchOrderListTab(tab) {
     memberRenderOrders();
 }
 
+function memberOrderListHint(text) {
+    const el = document.getElementById('memberOrderListHint');
+    if (el) {
+        el.textContent = text || '';
+    }
+}
+
+function memberBindOrderListScroll() {
+    const page = document.getElementById('memberPhonePage');
+    if (!page || page.dataset.orderScrollBound === '1') {
+        return;
+    }
+    page.dataset.orderScrollBound = '1';
+    page.addEventListener('scroll', memberOnOrderListScroll);
+}
+
+function memberOnOrderListScroll() {
+    if (memberMobileTab !== 'orders' || memberMobileView === 'orderDetail') {
+        return;
+    }
+    const page = document.getElementById('memberPhonePage');
+    if (!page || memberOrderListLoadingMore || !memberOrderListHasMore) {
+        return;
+    }
+    if (page.scrollHeight - page.scrollTop - page.clientHeight < 80) {
+        memberLoadOrderListMore();
+    }
+}
+
+function memberMaybeLoadMoreOrders() {
+    const page = document.getElementById('memberPhonePage');
+    if (!page || memberMobileTab !== 'orders' || memberMobileView === 'orderDetail') {
+        return;
+    }
+    if (page.scrollHeight <= page.clientHeight + 80) {
+        memberLoadOrderListMore();
+    }
+}
+
+function memberOrderListHasNext(loadedCount, list) {
+    const total = Number(list && list.total) || 0;
+    const items = (list && list.items) ? list.items : [];
+    return items.length > 0 && loadedCount < total;
+}
+
 async function memberRenderDetail() {
     const page = document.getElementById('memberPhonePage');
     const seq = ++memberDetailRenderSeq;
@@ -788,27 +849,89 @@ function memberRenderOrders() {
 async function memberLoadOrderList() {
     const page = document.getElementById('memberPhonePage');
     const seq = ++memberOrdersRenderSeq;
+    memberOrderListPageNo = 1;
+    memberOrderListHasMore = true;
+    memberOrderListLoadingMore = true;
+    page.scrollTop = 0;
     page.innerHTML = '<h2>订单</h2>' + memberOrderTabsHtml({})
         + '<div class="member-orders loading">加载中...</div>';
     try {
         const [counts, list] = await Promise.all([
             memberRequest('/demo/orders/counts', {}),
-            memberRequest('/demo/orders/list', { tab: memberOrderListTab, pageNo: 1, pageSize: 10 })
+            memberRequest('/demo/orders/list', {
+                tab: memberOrderListTab,
+                pageNo: 1,
+                pageSize: MEMBER_ORDER_PAGE_SIZE
+            })
         ]);
         if (seq !== memberOrdersRenderSeq || memberMobileTab !== 'orders' || memberMobileView === 'orderDetail') {
             return;
         }
         const items = (list && list.items) ? list.items : [];
+        memberOrderListHasMore = memberOrderListHasNext(items.length, list);
+        memberOrderListLoadingMore = false;
         page.innerHTML = '<h2>订单</h2>' + memberOrderTabsHtml(counts || {})
             + '<div class="member-orders">'
             + (items.length ? items.map(memberOrderCardHtml).join('') : '<div class="member-empty-state">暂无订单</div>')
+            + '</div>'
+            + '<div class="member-order-list-hint" id="memberOrderListHint">'
+            + (items.length && memberOrderListHasMore ? '继续上滑加载更多' : '')
             + '</div>';
+        memberBindOrderListScroll();
+        memberMaybeLoadMoreOrders();
     } catch (e) {
+        memberOrderListLoadingMore = false;
         if (seq !== memberOrdersRenderSeq || memberMobileTab !== 'orders' || memberMobileView === 'orderDetail') {
             return;
         }
         page.innerHTML = '<h2>订单</h2>' + memberOrderTabsHtml({})
             + '<div class="member-orders error">订单加载失败</div>';
+    }
+}
+
+async function memberLoadOrderListMore() {
+    if (memberOrderListLoadingMore || !memberOrderListHasMore) {
+        return;
+    }
+    if (memberMobileTab !== 'orders' || memberMobileView === 'orderDetail') {
+        return;
+    }
+    const seq = memberOrdersRenderSeq;
+    const nextPage = memberOrderListPageNo + 1;
+    memberOrderListLoadingMore = true;
+    memberOrderListHint('加载中...');
+    let loadedOk = false;
+    try {
+        const list = await memberRequest('/demo/orders/list', {
+            tab: memberOrderListTab,
+            pageNo: nextPage,
+            pageSize: MEMBER_ORDER_PAGE_SIZE
+        });
+        if (seq !== memberOrdersRenderSeq || memberMobileTab !== 'orders' || memberMobileView === 'orderDetail') {
+            return;
+        }
+        const box = document.querySelector('#memberPhonePage .member-orders');
+        const incoming = (list && list.items) ? list.items : [];
+        if (box && incoming.length) {
+            box.insertAdjacentHTML('beforeend', incoming.map(memberOrderCardHtml).join(''));
+        }
+        memberOrderListPageNo = nextPage;
+        const loaded = box ? box.querySelectorAll('.member-order-list-card').length : 0;
+        memberOrderListHasMore = memberOrderListHasNext(loaded, list);
+        memberOrderListHint(memberOrderListHasMore ? '继续上滑加载更多' : (loaded ? '没有更多了' : ''));
+        loadedOk = true;
+    } catch (e) {
+        if (seq !== memberOrdersRenderSeq) {
+            return;
+        }
+        memberOrderListHint('加载失败，上滑重试');
+    } finally {
+        if (seq === memberOrdersRenderSeq) {
+            memberOrderListLoadingMore = false;
+            if (loadedOk) {
+                memberMaybeLoadMoreOrders();
+            }
+        }
     }
 }
 

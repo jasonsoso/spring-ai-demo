@@ -143,7 +143,8 @@ const MemberAuth = (function () {
                 avatarUrl: input.avatarUrl
             });
             memberAppendLog('注册成功：' + JSON.stringify(data));
-            memberShowError('注册成功');
+            setMode('login');
+            memberShowError('注册成功，请登录');
         } catch (e) {
             memberAppendLog('注册失败：' + e.message);
         }

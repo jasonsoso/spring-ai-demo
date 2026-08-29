@@ -44,7 +44,7 @@
 | 登录/注册切换 | 底部文字链接；默认「登录」模式 |
 | 登录字段 | 手机号 + 密码（2 个） |
 | 注册字段 | 手机号 + 密码 + 头像 URL 可选（3 个） |
-| 注册成功 | Toast「注册成功」，停留注册模式，不自动登录 |
+| 注册成功 | Toast「注册成功，请登录」，切换到登录模式并保留手机号/密码，不自动登录、不关闭 Sheet |
 | 登录成功 | 关闭 Sheet，刷新「我的」页，执行可选 `onSuccess` 回调 |
 | 订单侧登录后 | 只关闭 Sheet，**不自动重试**被拦截的操作 |
 | 组件组织 | 新建 `member-auth.js`，样式扩展 `member.css` |
@@ -130,7 +130,7 @@
 
 - 打开：遮罩 `opacity 0→1`；Sheet `translateY(100%)→0`，约 0.28s ease-out
 - 关闭：反向动画，结束后 `display: none` 或移除 `open` class
-- 关闭方式：点遮罩、点 ×、登录/注册成功后自动关闭
+- 关闭方式：点遮罩、点 ×、登录成功后自动关闭
 - Sheet 内点击不冒泡到遮罩（`stopPropagation`）
 
 ### 4.5 对外 API（`member-auth.js`）
@@ -160,7 +160,7 @@ const MemberAuth = {
 
 1. 校验手机号、密码非空
 2. `memberRequest('/demo/members/register', { phone, password, avatarUrl })`
-3. 成功：`memberShowError('注册成功')` 或专用成功样式 Toast；**不关闭 Sheet、不自动登录**
+3. 成功：`memberShowError('注册成功，请登录')`，`setMode('login')` 切换到登录并保留手机号/密码；**不关闭 Sheet、不自动登录、不调用 `onSuccess`**
 4. 失败：居中 Toast + 日志
 
 ---
@@ -237,7 +237,7 @@ if (!memberToken) {
 - [ ] 「我的」Tab 未登录：无内联表单，点击卡片弹出底部 Sheet
 - [ ] Sheet 默认登录模式：仅 2 个输入框
 - [ ] 点击「还没有账号？去注册」：切换为 3 字段，手机号/密码保留
-- [ ] 注册成功：Toast 提示，Sheet 不关闭
+- [ ] 注册成功：Toast「注册成功，请登录」，Sheet 不关闭，切到登录模式（2 字段），手机号/密码保留
 - [ ] 登录成功：Sheet 关闭，「我的」页展示用户信息
 - [ ] 未登录点「创建待支付订单」：弹出 Sheet；登录成功后 Sheet 关闭，**订单未自动创建**
 - [ ] 点遮罩 / × 可关闭 Sheet
