@@ -21,6 +21,6 @@ public class OrderListReqVO {
 
     @Min(value = 1, message = "必须大于等于 1")
     @Max(value = 50, message = "不能超过 50")
-    @Schema(description = "每页条数，最大 50", example = "20")
+    @Schema(description = "每页条数，最大 50", example = "10")
     private Integer pageSize;
 }

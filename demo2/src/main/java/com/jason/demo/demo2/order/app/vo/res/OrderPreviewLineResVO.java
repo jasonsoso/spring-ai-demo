@@ -15,17 +15,11 @@ public class OrderPreviewLineResVO {
     @Schema(description = "商品名称快照", example = "拿铁")
     private String productName;
 
-    @Schema(description = "副标题快照")
-    private String subtitle;
-
     @Schema(description = "封面快照")
     private String coverUrl;
 
     @Schema(description = "售价快照", example = "18.00")
     private BigDecimal sellPrice;
-
-    @Schema(description = "划线价快照")
-    private BigDecimal marketPrice;
 
     @Schema(description = "购买数量", example = "2")
     private Integer qty;

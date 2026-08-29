@@ -119,6 +119,38 @@ CREATE TABLE IF NOT EXISTS demo_order_item (
     INDEX idx_demo_order_item_member_order (member_id, order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='演示订单明细（商品快照）';
 
+SET @demo_order_item_need_subtitle := (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'demo_order_item'
+      AND COLUMN_NAME = 'subtitle'
+);
+SET @demo_order_item_add_subtitle_sql := IF(
+    @demo_order_item_need_subtitle = 0,
+    'ALTER TABLE demo_order_item ADD COLUMN subtitle VARCHAR(255) NOT NULL DEFAULT '''' COMMENT ''副标题快照'' AFTER product_name',
+    'SELECT 1'
+);
+PREPARE demo_order_item_add_subtitle_stmt FROM @demo_order_item_add_subtitle_sql;
+EXECUTE demo_order_item_add_subtitle_stmt;
+DEALLOCATE PREPARE demo_order_item_add_subtitle_stmt;
+
+SET @demo_order_item_need_market_price := (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'demo_order_item'
+      AND COLUMN_NAME = 'market_price'
+);
+SET @demo_order_item_add_market_price_sql := IF(
+    @demo_order_item_need_market_price = 0,
+    'ALTER TABLE demo_order_item ADD COLUMN market_price DECIMAL(10,2) NULL COMMENT ''划线价快照'' AFTER sell_price',
+    'SELECT 1'
+);
+PREPARE demo_order_item_add_market_price_stmt FROM @demo_order_item_add_market_price_sql;
+EXECUTE demo_order_item_add_market_price_stmt;
+DEALLOCATE PREPARE demo_order_item_add_market_price_stmt;
+
 UPDATE demo_order SET order_status = 'SUBMIT', pay_status = 'WAIT_PAY' WHERE order_status = 'PENDING_PAY';
 UPDATE demo_order SET order_status = 'COMPLETED', pay_status = 'PAY_SUCCESS', pay_time = updated_at WHERE order_status = 'PAID';
 UPDATE demo_order SET order_status = 'CANCEL', pay_status = 'CLOSE', cancel_time = updated_at WHERE order_status = 'CANCELLED';

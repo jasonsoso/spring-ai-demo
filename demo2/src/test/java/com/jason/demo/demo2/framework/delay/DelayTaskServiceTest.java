@@ -67,4 +67,16 @@ class DelayTaskServiceTest {
         assertTrue(service.cancelByBizKey("ORDER_CANCEL", "99"));
         verify(redisson).cancel(1001L);
     }
+
+    @Test
+    void findPendingExecuteAt_mapsLedgerTime() {
+        var pending = new com.jason.demo.demo2.framework.delay.repository.DelayTaskEntity();
+        java.time.LocalDateTime executeAt = java.time.LocalDateTime.of(2026, 8, 29, 16, 0, 0);
+        pending.setExecuteAt(executeAt);
+        when(repository.findPendingByBizKey("ORDER_CANCEL", "99")).thenReturn(Optional.of(pending));
+
+        Optional<java.time.LocalDateTime> result = service.findPendingExecuteAt("ORDER_CANCEL", "99");
+
+        assertEquals(executeAt, result.orElseThrow());
+    }
 }

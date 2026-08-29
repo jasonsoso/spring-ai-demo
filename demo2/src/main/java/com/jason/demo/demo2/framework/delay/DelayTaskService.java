@@ -108,4 +108,9 @@ public class DelayTaskService {
     public List<DelayTaskEntity> listByBizKey(String bizKey) {
         return repository.findByBizKey(bizKey);
     }
+
+    /** 查询仍为 PENDING 的任务计划执行时间。 */
+    public Optional<LocalDateTime> findPendingExecuteAt(String taskType, String bizKey) {
+        return repository.findPendingByBizKey(taskType, bizKey).map(DelayTaskEntity::getExecuteAt);
+    }
 }

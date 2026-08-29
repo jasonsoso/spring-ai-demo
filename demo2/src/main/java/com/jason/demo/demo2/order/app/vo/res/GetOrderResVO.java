@@ -35,6 +35,9 @@ public class GetOrderResVO {
     @Schema(description = "更新时间")
     private LocalDateTime updatedAt;
 
+    @Schema(description = "待支付关单截止时间；非待支付或无延时任务时为空")
+    private LocalDateTime payDeadline;
+
     @Schema(description = "商品行快照；无明细时为空数组")
     private List<OrderLineResVO> items;
 }

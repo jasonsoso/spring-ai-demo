@@ -32,6 +32,6 @@ public class OrderListItemResVO {
     @Schema(description = "创建时间")
     private LocalDateTime createdAt;
 
-    @Schema(description = "商品行；列表仅封面/名称/qty/售价")
+    @Schema(description = "商品行；列表/详情含封面/名称/qty/售价，副标题与划线价仅明细表快照")
     private List<OrderLineResVO> items;
 }

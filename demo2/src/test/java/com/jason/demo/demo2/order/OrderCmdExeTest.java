@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -74,12 +75,43 @@ class OrderCmdExeTest {
         Order order = order(55L, OrderStatusEnum.SUBMIT);
         when(orderDomainService.requireOrderWithItems(55L, 9001L)).thenReturn(order);
         when(orderVoConvert.toGetRes(order)).thenReturn(getRes(order));
-        OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
+        when(delayTaskService.findPendingExecuteAt(DelayTaskType.ORDER_CANCEL, "55"))
+                .thenReturn(java.util.Optional.empty());
+        OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService, orderVoConvert, delayTaskService);
 
         GetOrderResVO result = exe.execute(55L);
 
         assertEquals(55L, result.getOrderId());
         verify(orderDomainService).requireOrderWithItems(55L, 9001L);
+        verify(delayTaskService).findPendingExecuteAt(DelayTaskType.ORDER_CANCEL, "55");
+    }
+
+    @Test
+    void get_submit_fillsPayDeadline() {
+        Order order = order(55L, OrderStatusEnum.SUBMIT);
+        LocalDateTime deadline = LocalDateTime.now().plusMinutes(5);
+        when(orderDomainService.requireOrderWithItems(55L, 9001L)).thenReturn(order);
+        when(orderVoConvert.toGetRes(order)).thenReturn(getRes(order));
+        when(delayTaskService.findPendingExecuteAt(DelayTaskType.ORDER_CANCEL, "55"))
+                .thenReturn(java.util.Optional.of(deadline));
+        OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService, orderVoConvert, delayTaskService);
+
+        GetOrderResVO result = exe.execute(55L);
+
+        assertEquals(deadline, result.getPayDeadline());
+    }
+
+    @Test
+    void get_completed_skipsPayDeadline() {
+        Order order = order(55L, OrderStatusEnum.COMPLETED);
+        when(orderDomainService.requireOrderWithItems(55L, 9001L)).thenReturn(order);
+        when(orderVoConvert.toGetRes(order)).thenReturn(getRes(order));
+        OrderGetCmdExe exe = new OrderGetCmdExe(orderDomainService, orderVoConvert, delayTaskService);
+
+        GetOrderResVO result = exe.execute(55L);
+
+        assertEquals(55L, result.getOrderId());
+        verify(delayTaskService, never()).findPendingExecuteAt(any(), any());
     }
 
     @Test

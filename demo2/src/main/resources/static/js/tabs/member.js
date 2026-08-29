@@ -17,6 +17,8 @@ let memberOrderDetailRenderSeq = 0;
 let memberPreviewQty = 1;
 let memberOrderListTab = 'ALL';
 let memberPreviewData = null;
+let memberOrderCountdownTimer = null;
+let memberOrderCountdownRefreshOnce = '';
 
 /** 雪花 ID：后端 Long 经 Jackson 序列化为字符串，前端始终按 string 传递 */
 function memberSnowflakeId(value) {
@@ -169,6 +171,9 @@ function memberRender() {
     if (!page) {
         return;
     }
+    if (memberMobileView !== 'orderDetail') {
+        memberStopOrderCountdown();
+    }
     document.getElementById('memberNavHome').classList.toggle('active', memberMobileTab === 'home');
     document.getElementById('memberNavOrders').classList.toggle('active', memberMobileTab === 'orders');
     document.getElementById('memberNavMe').classList.toggle('active', memberMobileTab === 'me');
@@ -204,18 +209,32 @@ function memberProductEmoji(name) {
     return icons[name] || '🛍️';
 }
 
-function memberProductIconHtml(name, coverUrl) {
+function memberResolvedCoverUrl(name, coverUrl) {
     if (coverUrl) {
-        return '<img class="member-product-icon member-product-icon-img" alt="" src="'
-            + memberEscapeHtml(coverUrl) + '">';
+        return coverUrl;
+    }
+    const covers = {
+        '拿铁': '/images/product/latte.png',
+        '生椰拿铁': '/images/product/coconut-latte.png',
+        '芝士蛋糕': '/images/product/cheesecake.png'
+    };
+    return covers[name] || '';
+}
+
+function memberProductIconHtml(name, coverUrl) {
+    const src = memberResolvedCoverUrl(name, coverUrl);
+    if (src) {
+        return '<img class="member-product-icon member-product-icon-img" alt="'
+            + memberEscapeHtml(name || '') + '" src="' + memberEscapeHtml(src) + '">';
     }
     return '<span class="member-product-icon">' + memberProductEmoji(name) + '</span>';
 }
 
 function memberDetailCoverHtml(name, coverUrl) {
-    if (coverUrl) {
+    const src = memberResolvedCoverUrl(name, coverUrl);
+    if (src) {
         return '<img class="member-detail-cover" alt="' + memberEscapeHtml(name) + '" src="'
-            + memberEscapeHtml(coverUrl) + '">';
+            + memberEscapeHtml(src) + '">';
     }
     return '<div class="member-detail-cover-fallback">' + memberProductEmoji(name) + '</div>';
 }
@@ -395,10 +414,6 @@ async function memberPlaceOrder() {
             })
         });
         memberOrderLastOrderId = memberSnowflakeId(data.orderId);
-        const orderIdInput = document.getElementById('memberOrderId');
-        if (orderIdInput) {
-            orderIdInput.value = memberOrderLastOrderId;
-        }
         memberAppendLog('已下单 orderId=' + memberOrderLastOrderId);
         memberMobileView = 'orderDetail';
         memberRender();
@@ -430,41 +445,138 @@ function memberOrderStatusLabel(status) {
 
 function memberFillOrderId(orderId) {
     memberOrderLastOrderId = memberSnowflakeId(orderId);
-    const orderIdInput = document.getElementById('memberOrderId');
-    if (orderIdInput) {
-        orderIdInput.value = memberOrderLastOrderId;
-    }
 }
 
 function memberOpenOrder(orderId) {
-    memberFillOrderId(orderId);
+    const nextId = memberSnowflakeId(orderId);
+    if (memberOrderCountdownRefreshOnce !== nextId) {
+        memberOrderCountdownRefreshOnce = '';
+    }
+    memberFillOrderId(nextId);
     memberMobileView = 'orderDetail';
     memberRender();
 }
 
+function memberOrderMetaRow(label, value) {
+    if (!value) {
+        return '';
+    }
+    return '<div class="member-order-detail-meta-row"><span>' + memberEscapeHtml(label)
+        + '</span><span>' + memberEscapeHtml(memberDateTimeLabel(value)) + '</span></div>';
+}
+
+function memberDateTimeLabel(value) {
+    return String(value || '').replace('T', ' ').slice(0, 19);
+}
+
+function memberParseDateTime(value) {
+    if (!value) {
+        return null;
+    }
+    const date = new Date(String(value).trim().replace(' ', 'T'));
+    return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function memberFormatRemain(ms) {
+    if (ms <= 0) {
+        return '00:00';
+    }
+    const totalSec = Math.ceil(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function memberStopOrderCountdown() {
+    if (memberOrderCountdownTimer) {
+        clearInterval(memberOrderCountdownTimer);
+        memberOrderCountdownTimer = null;
+    }
+}
+
+function memberStartOrderCountdown(deadlineStr, orderId, seq) {
+    memberStopOrderCountdown();
+    const box = document.getElementById('memberOrderCountdownBox');
+    const timeEl = document.getElementById('memberOrderCountdown');
+    if (!box || !timeEl) {
+        return;
+    }
+    const deadline = memberParseDateTime(deadlineStr);
+    if (!deadline) {
+        timeEl.textContent = '--:--';
+        return;
+    }
+    const tick = function () {
+        if (seq !== memberOrderDetailRenderSeq || memberMobileView !== 'orderDetail') {
+            memberStopOrderCountdown();
+            return;
+        }
+        const remain = deadline.getTime() - Date.now();
+        timeEl.textContent = memberFormatRemain(remain);
+        box.classList.toggle('member-order-countdown--urgent', remain > 0 && remain < 60000);
+        box.classList.toggle('member-order-countdown--expired', remain <= 0);
+        if (remain > 0) {
+            return;
+        }
+        memberStopOrderCountdown();
+        if (memberOrderCountdownRefreshOnce !== orderId) {
+            memberOrderCountdownRefreshOnce = orderId;
+            memberRenderOrderDetail();
+        }
+    };
+    tick();
+    if (memberOrderCountdownTimer == null && deadline.getTime() > Date.now()) {
+        memberOrderCountdownTimer = setInterval(tick, 1000);
+    }
+}
+
 function memberOrderDetailHtml(order) {
+    const orderId = memberSnowflakeId(order.orderId);
+    const status = order.orderStatus;
     const items = order.items || [];
-    const lines = items.map(function (row) {
-        return '<div class="member-order-card"><strong>' + memberEscapeHtml(row.productName || '') + '</strong>'
-            + '<p>¥' + memberEscapeHtml(row.sellPrice) + ' × ' + memberEscapeHtml(row.qty) + '</p></div>';
-    }).join('');
-    const actions = order.orderStatus === 'SUBMIT'
+    const lines = items.length
+        ? items.map(memberOrderLineHtml).join('')
+        : memberOrderLineHtml({ productName: '订单', qty: '', sellPrice: order.amount });
+    const countdown = status === 'SUBMIT'
+        ? '<div class="member-order-countdown" id="memberOrderCountdownBox">'
+            + '<span class="member-order-countdown-label">剩余支付时间</span>'
+            + '<span class="member-order-countdown-time" id="memberOrderCountdown">--:--</span>'
+            + '<span class="member-order-countdown-hint">超时未支付将自动取消，请尽快付款</span></div>'
+        : '';
+    const meta = '<div class="member-order-detail-meta">'
+        + memberOrderMetaRow('创建时间', order.createdAt)
+        + memberOrderMetaRow('付款时间', order.payTime)
+        + memberOrderMetaRow('取消时间', order.cancelTime)
+        + '</div>';
+    const actions = status === 'SUBMIT'
         ? '<div class="member-order-detail-actions">'
-            + '<button type="button" class="btn btn-primary" id="memberOrderPayBtn" onclick="memberPayCurrentOrder()">去支付</button>'
             + '<button type="button" class="btn" id="memberOrderCancelBtn" onclick="memberCancelCurrentOrder()">取消</button>'
+            + '<button type="button" class="btn btn-primary" id="memberOrderPayBtn" onclick="memberPayCurrentOrder()">去支付</button>'
             + '</div>'
         : '';
     return '<button type="button" class="member-back-btn" onclick="memberBackFromOrderDetail()">← 返回</button>'
         + '<h2>订单详情</h2>'
-        + lines
-        + '<p class="member-detail-price">¥' + memberEscapeHtml(order.amount) + '</p>'
-        + '<p class="member-detail-stock">' + memberEscapeHtml(memberOrderStatusLabel(order.orderStatus)) + '</p>'
-        + actions;
+        + '<div class="member-order-card member-order-detail-card">'
+        + '<div class="member-order-card-head">'
+        + '<span class="member-order-card-no" title="' + memberEscapeHtml(orderId) + '">订单号 '
+        + memberEscapeHtml(orderId) + '</span>'
+        + '<span class="member-order-card-status ' + memberOrderStatusClass(status) + '">'
+        + memberEscapeHtml(memberOrderStatusLabel(status)) + '</span></div>'
+        + countdown
+        + '<div class="member-order-card-lines">' + lines + '</div>'
+        + '<div class="member-order-card-foot">'
+        + '<span></span>'
+        + '<span class="member-order-card-amount">' + memberEscapeHtml(memberOrderAmountLabel(status))
+        + ' <em>¥' + memberEscapeHtml(order.amount) + '</em></span></div>'
+        + meta
+        + actions
+        + '</div>';
 }
 
 async function memberRenderOrderDetail() {
     const page = document.getElementById('memberPhonePage');
     const seq = ++memberOrderDetailRenderSeq;
+    memberStopOrderCountdown();
     const orderId = memberOrderLastOrderId;
     page.innerHTML = '<button type="button" class="member-back-btn" onclick="memberBackFromOrderDetail()">← 返回</button>'
         + '<div class="member-detail loading">加载中...</div>';
@@ -478,6 +590,9 @@ async function memberRenderOrderDetail() {
             return;
         }
         page.innerHTML = memberOrderDetailHtml(order);
+        if (order.orderStatus === 'SUBMIT') {
+            memberStartOrderCountdown(order.payDeadline, memberSnowflakeId(order.orderId), seq);
+        }
     } catch (e) {
         if (seq !== memberOrderDetailRenderSeq || memberMobileView !== 'orderDetail') {
             return;
@@ -488,14 +603,10 @@ async function memberRenderOrderDetail() {
 }
 
 async function memberMutateCurrentOrder(url, actionLabel) {
-    const payBtn = document.getElementById('memberOrderPayBtn');
-    const cancelBtn = document.getElementById('memberOrderCancelBtn');
-    if (payBtn) {
-        payBtn.disabled = true;
-    }
-    if (cancelBtn) {
-        cancelBtn.disabled = true;
-    }
+    const buttons = document.querySelectorAll('#memberOrderPayBtn, #memberOrderCancelBtn, .member-order-card-actions button');
+    buttons.forEach(function (btn) {
+        btn.disabled = true;
+    });
     try {
         await memberRequest(url, { orderId: memberOrderLastOrderId });
         memberAppendLog(actionLabel + '成功 orderId=' + memberOrderLastOrderId);
@@ -507,12 +618,9 @@ async function memberMutateCurrentOrder(url, actionLabel) {
         }
     } catch (e) {
         memberAppendLog(actionLabel + '失败：' + e.message);
-        if (payBtn) {
-            payBtn.disabled = false;
-        }
-        if (cancelBtn) {
-            cancelBtn.disabled = false;
-        }
+        buttons.forEach(function (btn) {
+            btn.disabled = false;
+        });
     }
 }
 
@@ -543,14 +651,86 @@ function memberOrderTabsHtml(counts) {
         + '</div>';
 }
 
+function memberOrderDateLabel(createdAt) {
+    const match = String(createdAt || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+    return match ? match[2] + '.' + match[3] : '';
+}
+
+function memberOrderStatusClass(status) {
+    if (status === 'SUBMIT') {
+        return 'member-order-card-status--submit';
+    }
+    if (status === 'COMPLETED') {
+        return 'member-order-card-status--done';
+    }
+    if (status === 'CANCEL') {
+        return 'member-order-card-status--cancel';
+    }
+    return '';
+}
+
+function memberOrderAmountLabel(status) {
+    if (status === 'SUBMIT') {
+        return '需付款';
+    }
+    if (status === 'COMPLETED') {
+        return '实付款';
+    }
+    return '合计';
+}
+
+function memberOrderLineHtml(row) {
+    return '<div class="member-order-line">'
+        + memberProductIconHtml(row.productName, row.coverUrl)
+        + '<div class="member-order-line-info"><strong>' + memberEscapeHtml(row.productName || '') + '</strong></div>'
+        + '<div class="member-order-line-meta"><span>¥' + memberEscapeHtml(row.sellPrice) + '</span>'
+        + '<span class="member-order-line-qty">×' + memberEscapeHtml(row.qty) + '</span></div>'
+        + '</div>';
+}
+
 function memberOrderCardHtml(item) {
     const orderId = memberSnowflakeId(item.orderId);
-    const first = (item.items && item.items[0]) ? item.items[0] : {};
-    return '<div class="member-order-card" onclick="memberOpenOrder(\'' + memberEscapeHtml(orderId) + '\')">'
-        + '<strong>' + memberEscapeHtml(first.productName || '订单') + '</strong>'
-        + '<p>¥' + memberEscapeHtml(item.amount) + ' · ' + memberEscapeHtml(memberOrderStatusLabel(item.orderStatus))
-        + (first.qty != null ? ' · x' + memberEscapeHtml(first.qty) : '')
-        + '</p></div>';
+    const status = item.orderStatus;
+    const lines = (item.items && item.items.length)
+        ? item.items.map(memberOrderLineHtml).join('')
+        : memberOrderLineHtml({ productName: '订单', qty: '', sellPrice: item.amount });
+    const hint = status === 'SUBMIT'
+        ? '<div class="member-order-card-hint">订单即将关闭，建议尽快付款</div>'
+        : '';
+    const date = memberOrderDateLabel(item.createdAt);
+    const actions = status === 'SUBMIT'
+        ? '<div class="member-order-card-actions">'
+            + '<button type="button" class="btn member-order-card-btn" onclick="event.stopPropagation();memberCancelOrderFromList(\''
+            + memberEscapeHtml(orderId) + '\')">取消</button>'
+            + '<button type="button" class="btn btn-primary member-order-card-btn" onclick="event.stopPropagation();memberPayOrderFromList(\''
+            + memberEscapeHtml(orderId) + '\')">去支付</button>'
+            + '</div>'
+        : '';
+    return '<div class="member-order-card member-order-list-card" onclick="memberOpenOrder(\''
+        + memberEscapeHtml(orderId) + '\')">'
+        + '<div class="member-order-card-head">'
+        + '<span class="member-order-card-no" title="' + memberEscapeHtml(orderId) + '">订单号 '
+        + memberEscapeHtml(orderId) + '</span>'
+        + '<span class="member-order-card-status ' + memberOrderStatusClass(status) + '">'
+        + memberEscapeHtml(memberOrderStatusLabel(status)) + '</span></div>'
+        + '<div class="member-order-card-lines">' + lines + '</div>'
+        + hint
+        + '<div class="member-order-card-foot">'
+        + '<span>' + memberEscapeHtml(date) + '</span>'
+        + '<span class="member-order-card-amount">' + memberEscapeHtml(memberOrderAmountLabel(status))
+        + ' <em>¥' + memberEscapeHtml(item.amount) + '</em></span></div>'
+        + actions
+        + '</div>';
+}
+
+function memberPayOrderFromList(orderId) {
+    memberFillOrderId(orderId);
+    return memberMutateCurrentOrder('/demo/orders/pay', '支付');
+}
+
+function memberCancelOrderFromList(orderId) {
+    memberFillOrderId(orderId);
+    return memberMutateCurrentOrder('/demo/orders/cancel', '取消');
 }
 
 function memberSwitchOrderListTab(tab) {
@@ -613,7 +793,7 @@ async function memberLoadOrderList() {
     try {
         const [counts, list] = await Promise.all([
             memberRequest('/demo/orders/counts', {}),
-            memberRequest('/demo/orders/list', { tab: memberOrderListTab, pageNo: 1, pageSize: 20 })
+            memberRequest('/demo/orders/list', { tab: memberOrderListTab, pageNo: 1, pageSize: 10 })
         ]);
         if (seq !== memberOrdersRenderSeq || memberMobileTab !== 'orders' || memberMobileView === 'orderDetail') {
             return;
@@ -719,73 +899,13 @@ function memberOrderResultBox() {
     return document.getElementById('memberOrderResult');
 }
 
-function memberAfterDebugOrderMutation(orderId) {
-    if (memberMobileTab === 'orders' && memberMobileView !== 'orderDetail') {
-        memberRenderOrders();
-        return;
-    }
-    if (memberMobileView === 'orderDetail' && memberSnowflakeId(orderId) === memberOrderLastOrderId) {
-        memberRenderOrderDetail();
-    }
-}
-
-async function memberOrderPay() {
-    if (!memberRequireLogin()) {
-        return;
-    }
-    const orderId = document.getElementById('memberOrderId').value.trim() || memberOrderLastOrderId;
-    if (!orderId) {
-        memberAppendLog('模拟支付失败：请先下单或填写 orderId');
-        return;
-    }
-    const resultBox = memberOrderResultBox();
-    resultBox.className = 'result-box member-order-result loading';
-    resultBox.textContent = '支付中...';
-    try {
-        const data = await memberRequest('/demo/orders/pay', { orderId: orderId });
-        resultBox.className = 'result-box member-order-result';
-        resultBox.textContent = JSON.stringify(data, null, 2);
-        memberAppendLog('已支付 orderId=' + orderId);
-        memberAfterDebugOrderMutation(orderId);
-    } catch (e) {
-        resultBox.className = 'result-box member-order-result error';
-        resultBox.textContent = '支付失败：' + e.message;
-        memberAppendLog('支付失败：' + e.message);
-    }
-}
-
-async function memberOrderCancel() {
-    if (!memberRequireLogin()) {
-        return;
-    }
-    const orderId = document.getElementById('memberOrderId').value.trim() || memberOrderLastOrderId;
-    if (!orderId) {
-        memberAppendLog('取消订单失败：请先下单或填写 orderId');
-        return;
-    }
-    const resultBox = memberOrderResultBox();
-    resultBox.className = 'result-box member-order-result loading';
-    resultBox.textContent = '取消中...';
-    try {
-        const data = await memberRequest('/demo/orders/cancel', { orderId: orderId });
-        resultBox.className = 'result-box member-order-result';
-        resultBox.textContent = JSON.stringify(data, null, 2);
-        memberAppendLog('已取消 orderId=' + orderId);
-        memberAfterDebugOrderMutation(orderId);
-    } catch (e) {
-        resultBox.className = 'result-box member-order-result error';
-        resultBox.textContent = '请求失败：' + e.message;
-        memberAppendLog('取消订单请求失败：' + e.message);
-    }
-}
-
 async function memberOrderRefresh() {
     if (!memberRequireLogin()) {
         return;
     }
-    const orderId = document.getElementById('memberOrderId').value.trim() || memberOrderLastOrderId;
+    const orderId = memberOrderLastOrderId;
     if (!orderId) {
-        memberAppendLog('刷新订单失败：请填写 orderId');
+        memberAppendLog('刷新订单失败：请先在 C 端打开一笔订单');
         return;
     }
     const resultBox = memberOrderResultBox();

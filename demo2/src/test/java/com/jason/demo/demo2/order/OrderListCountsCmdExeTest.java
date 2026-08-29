@@ -2,6 +2,7 @@ package com.jason.demo.demo2.order;
 
 import com.jason.demo.demo2.framework.auth.context.LoginContextHolder;
 import com.jason.demo.demo2.framework.auth.context.LoginPrincipal;
+import com.jason.demo.demo2.framework.delay.DelayTaskService;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
 import com.jason.demo.demo2.order.app.convert.OrderVoConvert;
 import com.jason.demo.demo2.order.app.convert.OrderVoConvertImpl;
@@ -57,6 +58,7 @@ class OrderListCountsCmdExeTest {
     @Mock OrderItemRepository orderItemRepository;
     @Mock OrderDomainService orderDomainService;
     @Mock OrderVoConvert orderVoConvert;
+    @Mock DelayTaskService delayTaskService;
 
     private OrderListCmdExe exe;
     private Order order;
@@ -95,7 +97,7 @@ class OrderListCountsCmdExeTest {
     @Test
     void list_all_passesNullStatus() {
         when(orderRepository.countPageByMemberAndTab(9001L, null)).thenReturn(1L);
-        when(orderRepository.pageByMemberAndTab(eq(9001L), isNull(), eq(0), eq(20)))
+        when(orderRepository.pageByMemberAndTab(eq(9001L), isNull(), eq(0), eq(10)))
                 .thenReturn(List.of(order));
         when(orderItemRepository.listByOrderIds(List.of(55L))).thenReturn(Map.of(55L, List.of(item)));
         OrderListReqVO req = new OrderListReqVO();
@@ -104,7 +106,7 @@ class OrderListCountsCmdExeTest {
         assertEquals(1L, vo.getTotal());
         assertEquals("CANCEL", vo.getItems().get(0).getOrderStatus()); // 构造一条 CANCEL 证明 ALL 可含取消
         assertEquals(1, vo.getPageNo());
-        assertEquals(20, vo.getPageSize());
+        assertEquals(10, vo.getPageSize());
         assertEquals("拿铁", vo.getItems().get(0).getItems().get(0).getProductName());
         assertEquals(2, vo.getItems().get(0).getItems().get(0).getQty());
         assertEquals(new BigDecimal("18.00"), vo.getItems().get(0).getItems().get(0).getSellPrice());
@@ -133,7 +135,7 @@ class OrderListCountsCmdExeTest {
     void get_othersOrder_throws30001() {
         when(orderDomainService.requireOrderWithItems(ORDER_ID, MEMBER_ID))
                 .thenThrow(new BusinessException(OrderErrorCodeEnum.ORDER_NOT_FOUND));
-        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
+        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderVoConvert, delayTaskService);
 
         BusinessException ex = assertThrows(BusinessException.class, () -> getExe.execute(ORDER_ID));
 
@@ -147,6 +149,7 @@ class OrderListCountsCmdExeTest {
         Order owned = submitOrder(ORDER_ID);
         owned.setItems(List.of(item));
         when(orderDomainService.requireOrderWithItems(ORDER_ID, MEMBER_ID)).thenReturn(owned);
+        when(delayTaskService.findPendingExecuteAt(any(), any())).thenReturn(java.util.Optional.empty());
         when(orderVoConvert.toGetRes(any())).thenAnswer(inv -> {
             GetOrderResVO vo = new GetOrderResVO();
             Order source = inv.getArgument(0);
@@ -154,7 +157,7 @@ class OrderListCountsCmdExeTest {
             vo.setOrderStatus(source.getOrderStatus());
             return vo;
         });
-        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
+        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderVoConvert, delayTaskService);
 
         GetOrderResVO vo = getExe.execute(ORDER_ID);
 
@@ -174,13 +177,14 @@ class OrderListCountsCmdExeTest {
         Order owned = submitOrder(ORDER_ID);
         owned.setItems(List.of());
         when(orderDomainService.requireOrderWithItems(ORDER_ID, MEMBER_ID)).thenReturn(owned);
+        when(delayTaskService.findPendingExecuteAt(any(), any())).thenReturn(java.util.Optional.empty());
         when(orderVoConvert.toGetRes(any())).thenAnswer(inv -> {
             GetOrderResVO vo = new GetOrderResVO();
             Order source = inv.getArgument(0);
             vo.setOrderId(source.getOrderId());
             return vo;
         });
-        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderVoConvert);
+        OrderGetCmdExe getExe = new OrderGetCmdExe(orderDomainService, orderVoConvert, delayTaskService);
 
         getExe.execute(ORDER_ID);
 

@@ -73,10 +73,8 @@ public class OrderPreviewCmdExe {
             OrderPreviewLineResVO line = new OrderPreviewLineResVO();
             line.setProductId(product.getProductId());
             line.setProductName(product.getProductName());
-            line.setSubtitle(product.getSubtitle());
             line.setCoverUrl(product.getCoverUrl());
             line.setSellPrice(product.getSellPrice());
-            line.setMarketPrice(product.getMarketPrice());
             line.setQty(reqLine.getQty());
             line.setLineAmount(lineAmount);
             line.setAvailableStock(available);

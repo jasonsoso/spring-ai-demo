@@ -16,7 +16,7 @@ public class DelayProperties {
     private String backend = "rocketmq";
 
     /** schedule 未传 delay 时的默认延时 */
-    private Duration defaultDelay = Duration.ofSeconds(30);
+    private Duration defaultDelay = Duration.ofMinutes(5);
 
     /** 台账扫描间隔（毫秒），对应 {@code @Scheduled fixedDelayString} */
     private long scanIntervalMs = 5000;

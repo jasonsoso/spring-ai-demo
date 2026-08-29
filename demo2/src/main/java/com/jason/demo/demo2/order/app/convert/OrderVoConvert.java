@@ -19,6 +19,7 @@ public interface OrderVoConvert {
 
     @Mapping(target = "orderStatus", source = "orderStatus")
     @Mapping(target = "items", source = "items", qualifiedByName = "fullLine")
+    @Mapping(target = "payDeadline", ignore = true)
     GetOrderResVO toGetRes(Order order);
 
     @Mapping(target = "orderStatus", source = "orderStatus")
@@ -33,7 +34,5 @@ public interface OrderVoConvert {
 
     @Named("listLine")
     @Mapping(target = "productId", ignore = true)
-    @Mapping(target = "subtitle", ignore = true)
-    @Mapping(target = "marketPrice", ignore = true)
     OrderLineResVO toListLine(OrderItem item);
 }

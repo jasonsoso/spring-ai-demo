@@ -1391,19 +1391,10 @@
                     </div>
                 </div>
                 <div class="card">
-                    <div class="card-title">🧾 支付 / 查询 / 台账</div>
+                    <div class="card-title">🧾 查询 / 台账</div>
                     <div class="card-body">
-                        <div class="form-row">
-                            <label>orderId</label>
-                            <input type="text" id="memberOrderId" placeholder="C 端下单后自动填入；也可手动填">
-                        </div>
-                        <div class="form-row">
-                            <label></label>
-                            <div class="member-order-actions">
-                                <button type="button" class="btn btn-primary" onclick="memberOrderPay()">模拟支付</button>
-                                <button type="button" class="btn" onclick="memberOrderCancel()">取消订单</button>
-                                <button type="button" class="btn" onclick="memberOrderRefresh()">刷新订单+台账</button>
-                            </div>
+                        <div class="member-side-actions">
+                            <button type="button" class="btn" onclick="memberOrderRefresh()">刷新订单+台账</button>
                         </div>
                         <div id="memberOrderResult" class="result-box member-order-result">结果会显示在这里</div>
                     </div>

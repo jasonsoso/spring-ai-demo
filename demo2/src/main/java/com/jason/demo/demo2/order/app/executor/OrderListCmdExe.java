@@ -36,7 +36,7 @@ public class OrderListCmdExe {
     public OrderListResVO execute(OrderListReqVO req) {
         long memberId = LoginContextHolder.require().memberId();
         int pageNo = req.getPageNo() == null ? 1 : req.getPageNo();
-        int pageSize = req.getPageSize() == null ? 20 : req.getPageSize();
+        int pageSize = req.getPageSize() == null ? 10 : req.getPageSize();
         String orderStatus = req.getTab() == OrderListTabEnum.ALL ? null : req.getTab().name();
         int offset = (pageNo - 1) * pageSize;
         long total = orderRepository.countPageByMemberAndTab(memberId, orderStatus);
