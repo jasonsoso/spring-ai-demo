@@ -23,6 +23,7 @@ const MEMBER_ORDER_PAGE_SIZE = 10;
 let memberPreviewData = null;
 let memberOrderCountdownTimer = null;
 let memberOrderCountdownRefreshOnce = '';
+let memberActionBusy = false;
 
 /** 雪花 ID：后端 Long 经 Jackson 序列化为字符串，前端始终按 string 传递 */
 function memberSnowflakeId(value) {
@@ -112,6 +113,28 @@ function memberShowError(message) {
         clearTimeout(memberToastTimer);
     }
     memberToastTimer = setTimeout(memberHideToast, 2800);
+}
+
+function memberSetButtonBusy(btn, busy, loadingText) {
+    if (!btn) {
+        return;
+    }
+    if (busy) {
+        if (!btn.dataset.idleLabel) {
+            btn.dataset.idleLabel = (btn.textContent || '').trim();
+        }
+        btn.disabled = true;
+        btn.classList.add('member-btn-busy');
+        btn.setAttribute('aria-busy', 'true');
+        btn.innerHTML = '<span class="member-btn-spinner" aria-hidden="true"></span>'
+            + memberEscapeHtml(loadingText || '处理中');
+        return;
+    }
+    btn.disabled = false;
+    btn.classList.remove('member-btn-busy');
+    btn.removeAttribute('aria-busy');
+    btn.textContent = btn.dataset.idleLabel || btn.textContent;
+    delete btn.dataset.idleLabel;
 }
 
 function memberHeaders() {
@@ -376,7 +399,7 @@ function memberPreviewViewHtml(preview) {
         + '<span></span>'
         + '<span class="member-order-card-amount">合计 <em>¥' + memberEscapeHtml(preview.amount) + '</em></span></div>'
         + '<div class="member-order-detail-actions">'
-        + '<button type="button" class="btn btn-primary" id="memberPlaceSubmit" onclick="memberPlaceOrder()">提交订单</button>'
+        + '<button type="button" class="btn btn-primary" id="memberPlaceSubmit" onclick="memberPlaceOrder(this)">提交订单</button>'
         + '</div></div>';
 }
 
@@ -407,17 +430,16 @@ async function memberRenderPreview() {
     }
 }
 
-async function memberPlaceOrder() {
-    const btn = document.getElementById('memberPlaceSubmit');
-    if (btn) {
-        btn.disabled = true;
-    }
-    if (!memberPreviewData) {
-        if (btn) {
-            btn.disabled = false;
-        }
+async function memberPlaceOrder(btn) {
+    btn = btn || document.getElementById('memberPlaceSubmit');
+    if (memberActionBusy) {
         return;
     }
+    if (!memberPreviewData) {
+        return;
+    }
+    memberActionBusy = true;
+    memberSetButtonBusy(btn, true, '提交中');
     try {
         const data = await memberRequest('/demo/orders/orderPlace', {
             placeToken: memberPreviewData.placeToken,
@@ -440,9 +462,9 @@ async function memberPlaceOrder() {
             return;
         }
         memberAppendLog('下单失败：' + e.message);
-        if (btn) {
-            btn.disabled = false;
-        }
+        memberSetButtonBusy(btn, false);
+    } finally {
+        memberActionBusy = false;
     }
 }
 
@@ -566,8 +588,8 @@ function memberOrderDetailHtml(order) {
         + '</div>';
     const actions = status === 'SUBMIT'
         ? '<div class="member-order-detail-actions">'
-            + '<button type="button" class="btn" id="memberOrderCancelBtn" onclick="memberCancelCurrentOrder()">取消</button>'
-            + '<button type="button" class="btn btn-primary" id="memberOrderPayBtn" onclick="memberPayCurrentOrder()">去支付</button>'
+            + '<button type="button" class="btn" id="memberOrderCancelBtn" onclick="memberCancelCurrentOrder(this)">取消</button>'
+            + '<button type="button" class="btn btn-primary" id="memberOrderPayBtn" onclick="memberPayCurrentOrder(this)">去支付</button>'
             + '</div>'
         : '';
     return '<button type="button" class="member-back-btn" onclick="memberBackFromOrderDetail()">← 返回</button>'
@@ -618,11 +640,16 @@ async function memberRenderOrderDetail() {
     }
 }
 
-async function memberMutateCurrentOrder(url, actionLabel) {
+async function memberMutateCurrentOrder(url, actionLabel, clickedBtn) {
+    if (memberActionBusy) {
+        return;
+    }
+    memberActionBusy = true;
     const buttons = document.querySelectorAll('#memberOrderPayBtn, #memberOrderCancelBtn, .member-order-card-actions button');
     buttons.forEach(function (btn) {
         btn.disabled = true;
     });
+    memberSetButtonBusy(clickedBtn, true, actionLabel === '支付' ? '支付中' : '取消中');
     try {
         await memberRequest(url, { orderId: memberOrderLastOrderId });
         memberAppendLog(actionLabel + '成功 orderId=' + memberOrderLastOrderId);
@@ -634,18 +661,21 @@ async function memberMutateCurrentOrder(url, actionLabel) {
         }
     } catch (e) {
         memberAppendLog(actionLabel + '失败：' + e.message);
+        memberSetButtonBusy(clickedBtn, false);
         buttons.forEach(function (btn) {
             btn.disabled = false;
         });
+    } finally {
+        memberActionBusy = false;
     }
 }
 
-async function memberPayCurrentOrder() {
-    await memberMutateCurrentOrder('/demo/orders/pay', '支付');
+async function memberPayCurrentOrder(btn) {
+    await memberMutateCurrentOrder('/demo/orders/pay', '支付', btn || document.getElementById('memberOrderPayBtn'));
 }
 
-async function memberCancelCurrentOrder() {
-    await memberMutateCurrentOrder('/demo/orders/cancel', '取消');
+async function memberCancelCurrentOrder(btn) {
+    await memberMutateCurrentOrder('/demo/orders/cancel', '取消', btn || document.getElementById('memberOrderCancelBtn'));
 }
 
 function memberOrderTabBtn(tab, label, count) {
@@ -716,9 +746,9 @@ function memberOrderCardHtml(item) {
     const date = memberOrderDateLabel(item.createdAt);
     const actions = status === 'SUBMIT'
         ? '<div class="member-order-card-actions">'
-            + '<button type="button" class="btn member-order-card-btn" onclick="event.stopPropagation();memberCancelOrderFromList(\''
+            + '<button type="button" class="btn member-order-card-btn" onclick="event.stopPropagation();memberCancelOrderFromList(this,\''
             + memberEscapeHtml(orderId) + '\')">取消</button>'
-            + '<button type="button" class="btn btn-primary member-order-card-btn" onclick="event.stopPropagation();memberPayOrderFromList(\''
+            + '<button type="button" class="btn btn-primary member-order-card-btn" onclick="event.stopPropagation();memberPayOrderFromList(this,\''
             + memberEscapeHtml(orderId) + '\')">去支付</button>'
             + '</div>'
         : '';
@@ -739,14 +769,14 @@ function memberOrderCardHtml(item) {
         + '</div>';
 }
 
-function memberPayOrderFromList(orderId) {
+function memberPayOrderFromList(btn, orderId) {
     memberFillOrderId(orderId);
-    return memberMutateCurrentOrder('/demo/orders/pay', '支付');
+    return memberMutateCurrentOrder('/demo/orders/pay', '支付', btn);
 }
 
-function memberCancelOrderFromList(orderId) {
+function memberCancelOrderFromList(btn, orderId) {
     memberFillOrderId(orderId);
-    return memberMutateCurrentOrder('/demo/orders/cancel', '取消');
+    return memberMutateCurrentOrder('/demo/orders/cancel', '取消', btn);
 }
 
 function memberSwitchOrderListTab(tab) {

@@ -112,9 +112,13 @@ const MemberAuth = (function () {
             memberShowError('请输入密码');
             return;
         }
-
-        if (mode === 'login') {
-            try {
+        const btn = overlay.querySelector('.member-auth-submit');
+        if (btn && btn.classList.contains('member-btn-busy')) {
+            return;
+        }
+        memberSetButtonBusy(btn, true, mode === 'login' ? '登录中' : '注册中');
+        try {
+            if (mode === 'login') {
                 const data = await memberRequest('/demo/members/login', {
                     phone: input.phone,
                     password: input.password
@@ -130,23 +134,23 @@ const MemberAuth = (function () {
                 if (callback) {
                     callback();
                 }
-            } catch (e) {
-                memberAppendLog('登录失败：' + e.message);
+                return;
             }
-            return;
-        }
-
-        try {
             const data = await memberRequest('/demo/members/register', {
                 phone: input.phone,
                 password: input.password,
                 avatarUrl: input.avatarUrl
             });
             memberAppendLog('注册成功：' + JSON.stringify(data));
+            memberSetButtonBusy(btn, false);
             setMode('login');
             memberShowError('注册成功，请登录');
         } catch (e) {
-            memberAppendLog('注册失败：' + e.message);
+            memberAppendLog((mode === 'login' ? '登录失败：' : '注册失败：') + e.message);
+        } finally {
+            if (btn && btn.classList.contains('member-btn-busy') && overlay.contains(btn) && isOpenState) {
+                memberSetButtonBusy(btn, false);
+            }
         }
     }
 
