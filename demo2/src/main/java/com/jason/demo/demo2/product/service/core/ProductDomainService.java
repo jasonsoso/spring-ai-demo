@@ -23,7 +23,12 @@ public class ProductDomainService {
         this.productRepository = productRepository;
     }
 
-    @Cached(name = ProductCacheNames.LIST, cacheType = CacheType.BOTH, expire = 300, localExpire = 60)
+    @Cached(
+            name = ProductCacheNames.LIST,
+            key = "'onShelf'",
+            cacheType = CacheType.BOTH,
+            expire = 300,
+            localExpire = 60)
     public List<ProductWithStock> listOnShelf() {
         return productRepository.listOnShelfWithStock();
     }
@@ -51,7 +56,7 @@ public class ProductDomainService {
         return productRepository.requireByProductId(productId);
     }
 
-    @CacheInvalidate(name = ProductCacheNames.LIST)
+    @CacheInvalidate(name = ProductCacheNames.LIST, key = "'onShelf'")
     @CacheInvalidate(name = ProductCacheNames.DETAIL, key = "#productId")
     public Product offShelf(long productId) {
         Product product = productRepository.requireByProductId(productId);
@@ -60,7 +65,7 @@ public class ProductDomainService {
         return product;
     }
 
-    @CacheInvalidate(name = ProductCacheNames.LIST)
+    @CacheInvalidate(name = ProductCacheNames.LIST, key = "'onShelf'")
     @CacheInvalidate(name = ProductCacheNames.DETAIL, key = "#productId")
     public Product onShelf(long productId) {
         Product product = productRepository.requireByProductId(productId);
