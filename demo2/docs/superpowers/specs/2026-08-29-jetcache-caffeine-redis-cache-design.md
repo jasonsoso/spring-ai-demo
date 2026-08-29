@@ -35,7 +35,7 @@
 | 缓存内容 | `ProductWithStock` / `List<ProductWithStock>`（MySQL 投影） |
 | 可售 | 列表/详情 CmdExe 每次 `overlayAvail`；订单路径 `requireOnShelf` 每次打 MySQL，overlay miss 时回退的是实时 `stock` |
 | 已售 `sellStock` | 仅列表/详情缓存路径会陈旧，直到上下架失效或 TTL；订单读的是实时 MySQL |
-| 失效 | 上/下架主动清列表 + 该 `productId` 详情；TTL 仅兜底 |
+| 失效 | 上/下架主动清列表 + 该 `productId` 详情；TTL 仅兜底（L1 **1 分钟**，L2 **5 分钟**） |
 | 多实例 L1 | 本版不做 pub/sub / `syncLocal` |
 | 值序列化 | Kryo5（领域对象未实现 `Serializable`） |
 | key 转换 | jackson3（2.8）；不使用 fastjson2 |
@@ -171,14 +171,14 @@ jetcache.decodeFilterAllowPatterns=com.jason.demo.demo2.product.
 jetcache.local.default.type=caffeine
 jetcache.local.default.limit=1000
 jetcache.local.default.keyConvertor=jackson3
-jetcache.local.default.expireAfterWriteInMillis=120000
+jetcache.local.default.expireAfterWriteInMillis=60000
 jetcache.remote.default.type=redisson
 jetcache.remote.default.redissonClient=redisson
 jetcache.remote.default.keyConvertor=jackson3
 jetcache.remote.default.valueEncoder=kryo5
 jetcache.remote.default.valueDecoder=kryo5
 jetcache.remote.default.keyPrefix=demo2:cache:
-jetcache.remote.default.expireAfterWriteInMillis=600000
+jetcache.remote.default.expireAfterWriteInMillis=300000
 ```
 
 不启用 `syncLocal`，不配 `broadcastChannel`（本版不做多实例 L1 失效广播）。
@@ -188,8 +188,8 @@ jetcache.remote.default.expireAfterWriteInMillis=600000
 | 注解属性 | 值 | 含义 |
 |----------|-----|------|
 | `cacheType` | `CacheType.BOTH` | L1 + L2 |
-| `localExpire` | `120` | Caffeine 2 分钟 |
-| `expire` | `600` | Redis 10 分钟 |
+| `localExpire` | `60` | Caffeine 1 分钟 |
+| `expire` | `300` | Redis 5 分钟 |
 
 ### 3.4 缓存 name 与 key
 
@@ -208,13 +208,13 @@ jetcache.remote.default.expireAfterWriteInMillis=600000
 
 ```text
 listOnShelf()
-  @Cached(name = LIST, cacheType = BOTH, expire = 600, localExpire = 120)
+  @Cached(name = LIST, cacheType = BOTH, expire = 300, localExpire = 60)
 
 requireOnShelf(long productId)
   无注解；查库 + 上架校验。订单 / 热库存 / WithCache 内部复用。
 
 requireOnShelfWithCache(long productId)
-  @Cached(name = DETAIL, key = "#productId", cacheType = BOTH, expire = 600, localExpire = 120)
+  @Cached(name = DETAIL, key = "#productId", cacheType = BOTH, expire = 300, localExpire = 60)
   方法体：return requireOnShelf(productId);
   仅 ProductGetCmdExe 调用。
 
