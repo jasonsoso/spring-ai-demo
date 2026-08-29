@@ -23,7 +23,7 @@ public class ProductGetCmdExe {
     }
 
     public ProductDetailResVO execute(long productId) {
-        ProductDetailResVO detail = productVoConvert.toDetail(productDomainService.requireOnShelf(productId));
+        ProductDetailResVO detail = productVoConvert.toDetail(productDomainService.requireOnShelfWithCache(productId));
         // 与列表相同：只覆盖 availableStock
         productStockHotService.overlayAvail(productId).ifPresent(detail::setAvailableStock);
         return detail;

@@ -78,7 +78,7 @@ class ProductCmdExeTest {
         ProductDetailResVO detail = new ProductDetailResVO();
         detail.setProductId(9001L);
         detail.setDetailContent("详情");
-        when(productDomainService.requireOnShelf(9001L)).thenReturn(row);
+        when(productDomainService.requireOnShelfWithCache(9001L)).thenReturn(row);
         when(productVoConvert.toDetail(row)).thenReturn(detail);
         when(productStockHotService.overlayAvail(9001L)).thenReturn(Optional.empty());
 

@@ -1,10 +1,14 @@
 package com.jason.demo.demo2.product.service.core;
 
+import com.alicp.jetcache.anno.CacheInvalidate;
+import com.alicp.jetcache.anno.CacheType;
+import com.alicp.jetcache.anno.Cached;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
 import com.jason.demo.demo2.product.service.common.ProductErrorCodeEnum;
 import com.jason.demo.demo2.product.service.common.ProductStatusEnum;
 import com.jason.demo.demo2.product.service.core.domain.Product;
 import com.jason.demo.demo2.product.service.core.domain.ProductWithStock;
+import com.jason.demo.demo2.product.service.infrastructure.cache.ProductCacheNames;
 import com.jason.demo.demo2.product.service.infrastructure.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +23,7 @@ public class ProductDomainService {
         this.productRepository = productRepository;
     }
 
+    @Cached(name = ProductCacheNames.LIST, cacheType = CacheType.BOTH, expire = 300, localExpire = 60)
     public List<ProductWithStock> listOnShelf() {
         return productRepository.listOnShelfWithStock();
     }
@@ -32,10 +37,22 @@ public class ProductDomainService {
         return row;
     }
 
+    @Cached(
+            name = ProductCacheNames.DETAIL,
+            key = "#productId",
+            cacheType = CacheType.BOTH,
+            expire = 300,
+            localExpire = 60)
+    public ProductWithStock requireOnShelfWithCache(long productId) {
+        return requireOnShelf(productId);
+    }
+
     public Product requireProduct(long productId) {
         return productRepository.requireByProductId(productId);
     }
 
+    @CacheInvalidate(name = ProductCacheNames.LIST)
+    @CacheInvalidate(name = ProductCacheNames.DETAIL, key = "#productId")
     public Product offShelf(long productId) {
         Product product = productRepository.requireByProductId(productId);
         productRepository.updateStatus(productId, ProductStatusEnum.OFF_SHELF);
@@ -43,6 +60,8 @@ public class ProductDomainService {
         return product;
     }
 
+    @CacheInvalidate(name = ProductCacheNames.LIST)
+    @CacheInvalidate(name = ProductCacheNames.DETAIL, key = "#productId")
     public Product onShelf(long productId) {
         Product product = productRepository.requireByProductId(productId);
         productRepository.updateStatus(productId, ProductStatusEnum.ON_SHELF);
