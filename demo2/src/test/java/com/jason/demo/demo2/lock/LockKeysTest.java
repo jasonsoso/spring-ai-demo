@@ -30,4 +30,9 @@ class LockKeysTest {
     void delayScannerFallbackKey_isStable() {
         assertThat(LockKeys.delayScannerFallbackKey()).isEqualTo("delay:scanner:fallback");
     }
+
+    @Test
+    void stockReconcileKey_isStable() {
+        assertThat(LockKeys.stockReconcileKey()).isEqualTo("product:stock:reconcile");
+    }
 }

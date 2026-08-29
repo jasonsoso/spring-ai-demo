@@ -31,4 +31,8 @@ public final class LockKeys {
     public static String delayScannerFallbackKey() {
         return "delay:scanner:fallback";
     }
+
+    public static String stockReconcileKey() {
+        return "product:stock:reconcile";
+    }
 }
