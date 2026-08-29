@@ -34,6 +34,7 @@
         <embabel-agent.version>2.0.0-SNAPSHOT</embabel-agent.version>
         <agentscope.version>2.0.0</agentscope.version>
         <lock4j.version>2.2.7</lock4j.version>
+        <jetcache.version>2.8.0.RC</jetcache.version>
         <rocketmq-client.version>5.5.0</rocketmq-client.version>
         <!-- Spring Boot 4 专用；勿降到 boot3-starter。Boot4 支持自 MP 3.5.13 起 -->
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
@@ -363,6 +364,15 @@
             <groupId>org.redisson</groupId>
             <artifactId>redisson-spring-boot-starter</artifactId>
             <version>4.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.alicp.jetcache</groupId>
+            <artifactId>jetcache-starter-redisson</artifactId>
+            <version>${jetcache.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
