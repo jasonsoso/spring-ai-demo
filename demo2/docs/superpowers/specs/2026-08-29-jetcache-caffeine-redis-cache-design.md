@@ -28,7 +28,8 @@
 | 框架 | JetCache（不是手写两级 Cache，也不是 Redisson `RLocalCachedMap`） |
 | L1 | Caffeine |
 | L2 | 复用已有 `RedissonClient`（`jetcache-starter-redisson`），不引 Jedis |
-| 版本 | 首选 JetCache **2.7.9**；若与 Spring Boot 4.1 / Redisson 4.1 依赖冲突，改用 **2.8.0.RC**，方案不变 |
+| 版本 | 首选 JetCache **2.8.0.RC**（Boot 4.1 + `keyConvertor=jackson3`）；若 RC 无法落地再退 **2.7.9**，key 改用 `jackson`（Jackson 2），方案其余不变 |
+| 序列化 | **不主动引入、不使用 fastjson2**。Key：`jackson3`；Value：`kryo5`。不用 JSON 编 value，也不复用 HTTP 的 `JsonMapper`（Long 会写成字符串，缓存反序列化会坏） |
 | 注解位置 | `ProductDomainService`（由 **其它 Bean** 调用带 `@Cached` 的方法，AOP 才生效） |
 | 详情拆方法 | `requireOnShelf` 无缓存（实时）；新建 `requireOnShelfWithCache` 仅给商品详情接口 |
 | 缓存内容 | `ProductWithStock` / `List<ProductWithStock>`（MySQL 投影） |
@@ -37,7 +38,7 @@
 | 失效 | 上/下架主动清列表 + 该 `productId` 详情；TTL 仅兜底 |
 | 多实例 L1 | 本版不做 pub/sub / `syncLocal` |
 | 值序列化 | Kryo5（领域对象未实现 `Serializable`） |
-| key 转换 | fastjson2 |
+| key 转换 | jackson3（2.8）；不使用 fastjson2 |
 | Redis 前缀 | `demo2:cache:`，与 `demo2:stock:` 隔离 |
 | 订单 | **不改订单代码**，继续调 `requireOnShelf`，不走详情缓存 |
 
@@ -156,21 +157,24 @@ jetcache.remote.default.redissonClient=redisson
 
 ### 3.2 Maven
 
-- `com.alicp.jetcache:jetcache-starter-redisson:2.7.9`
+- `com.alicp.jetcache:jetcache-starter-redisson:2.8.0.RC`
 - Caffeine：若 starter 未传递引入，显式加 `com.github.ben-manes.caffeine:caffeine`（版本走 Boot BOM）
+- **不要**显式加 `fastjson2`。JetCache 可能仍传递该依赖（默认 keyConvertor 实现），配置里写 `jackson3` 即不走它；不要为了「干净」强行 exclusion，以免 starter 启动期 classload 失败。
 
 ### 3.3 `application.properties`（约定）
 
 ```properties
 jetcache.statIntervalMinutes=0
 jetcache.areaInCacheName=false
+jetcache.decodeFilterEnabled=true
+jetcache.decodeFilterAllowPatterns=com.jason.demo.demo2.product.
 jetcache.local.default.type=caffeine
 jetcache.local.default.limit=1000
-jetcache.local.default.keyConvertor=fastjson2
+jetcache.local.default.keyConvertor=jackson3
 jetcache.local.default.expireAfterWriteInMillis=120000
 jetcache.remote.default.type=redisson
 jetcache.remote.default.redissonClient=redisson
-jetcache.remote.default.keyConvertor=fastjson2
+jetcache.remote.default.keyConvertor=jackson3
 jetcache.remote.default.valueEncoder=kryo5
 jetcache.remote.default.valueDecoder=kryo5
 jetcache.remote.default.keyPrefix=demo2:cache:
@@ -221,11 +225,22 @@ onShelf(long productId) / offShelf(long productId)
 
 同一方法两条 `@CacheInvalidate` 使用 JetCache 的 `@Repeatable`（`CacheInvalidateContainer`），不要自写切面。
 
-### 3.6 序列化
+### 3.6 序列化（key vs value）
 
-- Key：fastjson2。
-- Value：Kryo5。`Product` / `ProductStock` 继承 Lombok `@Data` 的 DO，已有无参构造；`ProductWithStock` 目前只有全参构造，**必须补无参构造**。Kryo 按字段编解码，不必改成完整 JavaBean。
-- 不缓存 `Optional`；`requireOnShelfWithCache` 只缓存成功返回值。
+两件不同的事，不要混：
+
+| | 作用 | 本版 |
+|--|------|------|
+| `keyConvertor` | 把方法参数变成缓存 key 字符串 | **jackson3**（demo2 已是 `tools.jackson` / Jackson 3） |
+| `valueEncoder` | 把返回值写入 Redis | **kryo5** |
+
+**不用 fastjson2：** 对本 demo 没有额外好处。它只是 JetCache 的默认 key 转换器（快、无 Jackson 依赖的项目省事）。本仓库 HTTP/Redis JSON 已统一 Jackson 3，再为 key 拉一套 fastjson 语义没有收益。
+
+**value 不用 jackson3 / fastjson2 JSON：** JetCache 官方也不默认注册 JSON value 编解码（泛型擦除、`Object` 字段会解成 `JSONObject`/`Map`，排错成本高）。`List<ProductWithStock>` 更适合 Kryo 这种 Java 对象图。即便要用 JSON value，也**禁止**复用 `JacksonJsonCustomizer` 那套 Long→字符串，否则 `productId` 反序列化会坏。
+
+**2.8 反序列化过滤器：** Kryo 路径同样生效。必须 `decodeFilterAllowPatterns=com.jason.demo.demo2.product.`，否则自定义领域类会被拒。
+
+`Product` / `ProductStock` 已有无参构造；`ProductWithStock` **必须补无参构造**。不缓存 `Optional`；`requireOnShelfWithCache` 只缓存成功返回值。
 
 ---
 
@@ -283,6 +298,8 @@ onShelf(long productId) / offShelf(long productId)
 ## 7. 实现时注意
 
 - `@EnableMethodCache` 的 `basePackages` 必须覆盖 `com.jason.demo.demo2.product`；放宽到 `com.jason.demo.demo2` 以便后续模块直接打注解。
+- 首选 2.8.0.RC 以使用 `jackson3` keyConvertor；退回 2.7.9 时改为 `keyConvertor=jackson`，并确认 2.7 无 decode filter 或按该版本文档处理。
+- 禁止把 `JacksonJsonCustomizer` 的 `JsonMapper` 交给 JetCache 当 value 编解码。
 - 禁止在 Controller 或返回 `JsonResult` 的方法上加 `@Cached`。
 - 禁止 `@Cached` 包住 `overlayAvail` 的结果。
 - 禁止订单 / `ProductStockHotService` 改调 `requireOnShelfWithCache`。
