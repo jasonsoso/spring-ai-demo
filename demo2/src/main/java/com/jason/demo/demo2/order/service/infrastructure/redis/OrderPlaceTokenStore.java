@@ -1,6 +1,6 @@
 package com.jason.demo.demo2.order.service.infrastructure.redis;
 
-import com.jason.demo.demo2.order.config.OrderProperties;
+import com.jason.demo.demo2.order.service.infrastructure.config.OrderProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;

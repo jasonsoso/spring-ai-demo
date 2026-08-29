@@ -1,6 +1,6 @@
 package com.jason.demo.demo2.order;
 
-import com.jason.demo.demo2.order.config.OrderProperties;
+import com.jason.demo.demo2.order.service.infrastructure.config.OrderProperties;
 import com.jason.demo.demo2.order.service.infrastructure.redis.OrderPlaceTokenKeys;
 import com.jason.demo.demo2.order.service.infrastructure.redis.OrderPlaceTokenPayload;
 import com.jason.demo.demo2.order.service.infrastructure.redis.OrderPlaceTokenStore;

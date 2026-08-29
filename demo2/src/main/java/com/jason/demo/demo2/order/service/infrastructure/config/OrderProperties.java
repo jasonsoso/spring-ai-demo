@@ -1,4 +1,4 @@
-package com.jason.demo.demo2.order.config;
+package com.jason.demo.demo2.order.service.infrastructure.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;

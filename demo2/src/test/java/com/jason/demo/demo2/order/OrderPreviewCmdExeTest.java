@@ -7,7 +7,7 @@ import com.jason.demo.demo2.order.app.executor.OrderPreviewCmdExe;
 import com.jason.demo.demo2.order.app.vo.req.OrderLineReqVO;
 import com.jason.demo.demo2.order.app.vo.req.OrderPreviewReqVO;
 import com.jason.demo.demo2.order.app.vo.res.OrderPreviewResVO;
-import com.jason.demo.demo2.order.config.OrderProperties;
+import com.jason.demo.demo2.order.service.infrastructure.config.OrderProperties;
 import com.jason.demo.demo2.order.service.common.OrderErrorCodeEnum;
 import com.jason.demo.demo2.order.service.infrastructure.redis.OrderPlaceTokenPayload;
 import com.jason.demo.demo2.order.service.infrastructure.redis.OrderPlaceTokenStore;
