@@ -39,6 +39,7 @@
         <!-- Spring Boot 4 专用；勿降到 boot3-starter。Boot4 支持自 MP 3.5.13 起 -->
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <hutool.version>5.8.35</hutool.version>
+        <shardingsphere.version>5.5.2</shardingsphere.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <transmittable-thread-local.version>2.14.5</transmittable-thread-local.version>
     </properties>
@@ -398,6 +399,11 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-tx</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>shardingsphere-jdbc</artifactId>
+            <version>${shardingsphere.version}</version>
         </dependency>
         <!-- Spring Boot 4.x 专用 starter（不是 mybatis-plus-spring-boot3-starter） -->
         <dependency>
