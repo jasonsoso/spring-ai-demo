@@ -176,7 +176,7 @@ cmd /c "mysql -uroot -p123456 < demo2/src/main/resources/db/order-shard-schema.s
 |------|------|
 | `order_ds_0` / `order_ds_1` | 每库 `demo_order_0..31` + `demo_order_item_0..31` |
 | `spring_ai_agent2.demo_order*` | 旧单表，应用不再读写，不 DROP |
-| `shardingsphere.yaml` | 三数据源、binding、`sql-show: true` |
+| `shardingsphere.yaml` | 三数据源、binding、`!SINGLE ds_default.*`、`sql-show: true` |
 | `application.properties` | `ShardingSphereDriver` + `jdbc:shardingsphere:classpath:shardingsphere.yaml` |
 
 ---
@@ -225,7 +225,7 @@ order
 | 点 | spec | 实现 |
 |----|------|------|
 | 发号 | 直接 `embed(nextId())` | **synchronized + 撞号再取雪花**（覆盖低 9 位后同一毫秒会撞） |
-| 算法返回值 | 未强调集合类型 | `doSharding` 返回 `ArrayList`，方便单测 `assertEquals(List.of(...))` |
+| 未分片表 | spec 写在 `!SHARDING.defaultDataSourceName` | **5.5.2 无此字段**；改 `!SINGLE` `tables: ds_default.*` |
 
 ---
 
@@ -233,4 +233,4 @@ order
 
 | 日期 | 说明 |
 |------|------|
-| 2026-08-30 | 初版归档：2×32 分片 + 9 bit 基因 + CLASS_BASED 复合算法 + 调试台 |
+| 2026-08-30 | 启动验收：`!SHARDING.defaultDataSourceName` 在 5.5.2 非法，改为 `!SINGLE` |

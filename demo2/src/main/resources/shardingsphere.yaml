@@ -2,6 +2,7 @@
 # 账密写死在此（SS yaml 不解析 application.properties 的 ${DB_PASSWORD}）。
 # 库/表策略共用 OrderComplexShardingAlgorithm：有 member_id 用会员，只有 order_id 拆基因。
 # 主表与明细 binding，JOIN 不会笛卡尔扫分片。事务类型默认 LOCAL，不上 XA。
+# 5.5 已从 !SHARDING 去掉 defaultDataSourceName；未分片表用 !SINGLE 钉到 ds_default。
 databaseName: demo2_logic
 
 dataSources:
@@ -47,16 +48,18 @@ rules:
           complex:
             shardingColumns: member_id,order_id
             shardingAlgorithmName: order-complex
-    # JOIN 主表+明细只路由一次；未声明的表走 ds_default
     bindingTables:
       - demo_order,demo_order_item
-    defaultDataSourceName: ds_default
     shardingAlgorithms:
       order-complex:
         type: CLASS_BASED
         props:
           strategy: COMPLEX
           algorithmClassName: com.jason.demo.demo2.order.service.infrastructure.shard.OrderComplexShardingAlgorithm
+  - !SINGLE
+    tables:
+      - ds_default.*
+    defaultDataSource: ds_default
 
 props:
-  sql-show: true   # 控制台打印改写后的真实 SQL，验收单库单表用
+  sql-show: true

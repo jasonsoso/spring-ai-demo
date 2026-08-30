@@ -289,7 +289,7 @@ flowchart TD
 - `actualDataNodes`：`order_ds_$->{0..1}.demo_order_$->{0..31}`（明细同构）
 - binding：`demo_order, demo_order_item`
 - 库、表策略均为 COMPLEX，分片列 `member_id, order_id`，算法指向 `OrderComplexShardingAlgorithm`
-- 未配置逻辑表走 `ds_default`
+- 未分片表：`!SINGLE` `ds_default.*`（5.5 的 `!SHARDING` 已无 `defaultDataSourceName`）
 - `props.sql-show: true`
 
 算法日志示例：`order shard route, logic=demo_order, virtual=100, ds=order_ds_0, table=demo_order_18, source=member_id`。
