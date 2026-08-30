@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-30  
 **项目**: spring-ai-demo / demo2  
-**状态**: 已确认，待实现  
+**状态**: 已实现  
 **前置**: [2026-08-28-order-module-statemachine-design.md](./2026-08-28-order-module-statemachine-design.md)、[2026-08-07-snowflake-service-isolation-design.md](./2026-08-07-snowflake-service-isolation-design.md)、[2026-08-23-order-ddd-package-refactor-design.md](./2026-08-23-order-ddd-package-refactor-design.md)  
 **范围**: 仅 `demo_order` / `demo_order_item`。会员、商品、延时任务、库存流水仍在默认库 `spring_ai_agent2`。
 
