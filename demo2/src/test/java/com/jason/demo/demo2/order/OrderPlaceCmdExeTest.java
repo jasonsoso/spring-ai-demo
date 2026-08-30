@@ -6,6 +6,7 @@ import com.jason.demo.demo2.framework.delay.DelayTaskService;
 import com.jason.demo.demo2.framework.delay.DelayTaskType;
 import com.jason.demo.demo2.framework.delay.config.DelayProperties;
 import com.jason.demo.demo2.framework.id.SnowflakeIdGenerator;
+import com.jason.demo.demo2.order.service.infrastructure.shard.OrderIdGenerator;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
 import com.jason.demo.demo2.order.app.executor.OrderPlaceCmdExe;
 import com.jason.demo.demo2.order.app.vo.req.OrderLineReqVO;
@@ -60,6 +61,7 @@ class OrderPlaceCmdExeTest {
     @Mock ProductStockHotService hotService;
     @Mock OrderStateMachineExecutor executor;
     @Mock DelayTaskService delayTaskService;
+    @Mock OrderIdGenerator orderIdGenerator;
     @Mock SnowflakeIdGenerator idGenerator;
     @Mock OrderDomainService orderDomainService;
 
@@ -146,7 +148,8 @@ class OrderPlaceCmdExeTest {
         stock.setStock(100);
         when(productDomainService.requireOnShelf(PRODUCT_ID)).thenReturn(new ProductWithStock(product, stock));
         when(hotService.overlayAvail(PRODUCT_ID)).thenReturn(Optional.empty());
-        when(idGenerator.nextId()).thenReturn(55L, 66L);
+        when(orderIdGenerator.nextOrderId(9001L)).thenReturn(55L);
+        when(idGenerator.nextId()).thenReturn(66L);
         when(delayTaskService.schedule(eq(DelayTaskType.ORDER_CANCEL), eq("55"), isNull(), eq(Duration.ofSeconds(30))))
                 .thenReturn(77L);
         OrderPlaceCmdExe exe = newExe();
@@ -177,7 +180,8 @@ class OrderPlaceCmdExeTest {
         stock.setStock(100);
         when(productDomainService.requireOnShelf(PRODUCT_ID)).thenReturn(new ProductWithStock(product, stock));
         when(hotService.overlayAvail(PRODUCT_ID)).thenReturn(Optional.empty());
-        when(idGenerator.nextId()).thenReturn(55L, 66L);
+        when(orderIdGenerator.nextOrderId(9001L)).thenReturn(55L);
+        when(idGenerator.nextId()).thenReturn(66L);
         when(delayTaskService.schedule(eq(DelayTaskType.ORDER_CANCEL), eq("55"), isNull(), eq(Duration.ofSeconds(45))))
                 .thenReturn(77L);
         OrderPlaceCmdExe exe = newExe();
@@ -195,6 +199,7 @@ class OrderPlaceCmdExeTest {
                 hotService,
                 executor,
                 delayTaskService,
+                orderIdGenerator,
                 idGenerator,
                 delayProperties,
                 orderDomainService);

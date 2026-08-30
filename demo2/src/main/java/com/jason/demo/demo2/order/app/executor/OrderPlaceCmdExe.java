@@ -5,6 +5,7 @@ import com.jason.demo.demo2.framework.delay.DelayTaskService;
 import com.jason.demo.demo2.framework.delay.DelayTaskType;
 import com.jason.demo.demo2.framework.delay.config.DelayProperties;
 import com.jason.demo.demo2.framework.id.SnowflakeIdGenerator;
+import com.jason.demo.demo2.order.service.infrastructure.shard.OrderIdGenerator;
 import com.jason.demo.demo2.framework.web.exception.BusinessException;
 import com.jason.demo.demo2.framework.web.exception.CommonErrorCodeEnum;
 import com.jason.demo.demo2.order.app.vo.req.OrderLineReqVO;
@@ -47,6 +48,7 @@ public class OrderPlaceCmdExe {
     private final ProductStockHotService hotService;
     private final OrderStateMachineExecutor executor;
     private final DelayTaskService delayTaskService;
+    private final OrderIdGenerator orderIdGenerator;
     private final SnowflakeIdGenerator idGenerator;
     private final DelayProperties delayProperties;
     private final OrderDomainService orderDomainService;
@@ -57,6 +59,7 @@ public class OrderPlaceCmdExe {
             ProductStockHotService hotService,
             OrderStateMachineExecutor executor,
             DelayTaskService delayTaskService,
+            OrderIdGenerator orderIdGenerator,
             SnowflakeIdGenerator idGenerator,
             DelayProperties delayProperties,
             OrderDomainService orderDomainService) {
@@ -65,6 +68,7 @@ public class OrderPlaceCmdExe {
         this.hotService = hotService;
         this.executor = executor;
         this.delayTaskService = delayTaskService;
+        this.orderIdGenerator = orderIdGenerator;
         this.idGenerator = idGenerator;
         this.delayProperties = delayProperties;
         this.orderDomainService = orderDomainService;
@@ -103,7 +107,7 @@ public class OrderPlaceCmdExe {
                 return toRes(orderDomainService.requireOrderWithItems(existing.get(), memberId), null, effectiveDelay);
             }
 
-            long orderId = idGenerator.nextId();
+            long orderId = orderIdGenerator.nextOrderId(memberId);
             List<OrderItem> items = new ArrayList<>();
             for (OrderLineReqVO reqLine : reqItems) {
                 ProductWithStock row = productDomainService.requireOnShelf(reqLine.getProductId());
