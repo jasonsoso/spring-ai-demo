@@ -7,12 +7,21 @@ import org.springframework.stereotype.Component;
 public class OrderIdGenerator {
 
     private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private long lastId;
 
     public OrderIdGenerator(SnowflakeIdGenerator snowflakeIdGenerator) {
         this.snowflakeIdGenerator = snowflakeIdGenerator;
     }
 
-    public long nextOrderId(long memberId) {
-        return OrderShardGene.embed(snowflakeIdGenerator.nextId(), memberId);
+    /**
+     * 低 9 位被基因覆盖后，同一毫秒内序号只差低位会撞号；撞了就再取雪花。
+     */
+    public synchronized long nextOrderId(long memberId) {
+        long id;
+        do {
+            id = OrderShardGene.embed(snowflakeIdGenerator.nextId(), memberId);
+        } while (id == lastId);
+        lastId = id;
+        return id;
     }
 }
