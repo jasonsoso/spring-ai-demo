@@ -452,6 +452,7 @@ async function memberPlaceOrder(btn) {
             })
         });
         memberOrderLastOrderId = memberSnowflakeId(data.orderId);
+        memberFillShardOrderId(memberOrderLastOrderId);
         memberAppendLog('已下单 orderId=' + memberOrderLastOrderId);
         memberMobileView = 'orderDetail';
         memberRender();
@@ -483,6 +484,33 @@ function memberOrderStatusLabel(status) {
 
 function memberFillOrderId(orderId) {
     memberOrderLastOrderId = memberSnowflakeId(orderId);
+    memberFillShardOrderId(memberOrderLastOrderId);
+}
+
+function memberShardExplain() {
+    const orderIdRaw = (document.getElementById('memberShardOrderId').value || '').trim();
+    const memberIdRaw = (document.getElementById('memberShardMemberId').value || '').trim();
+    const body = {};
+    if (orderIdRaw) {
+        body.orderId = orderIdRaw;
+    }
+    if (memberIdRaw) {
+        body.memberId = memberIdRaw;
+    }
+    const resultBox = document.getElementById('memberShardResult');
+    memberRequest('/demo/orders/shardExplain', body).then(function (data) {
+        resultBox.textContent = JSON.stringify(data, null, 2);
+        memberAppendLog('分片 ' + data.ds + '.' + data.table + ' virtual=' + data.virtual);
+    }).catch(function (e) {
+        resultBox.textContent = e.message || String(e);
+    });
+}
+
+function memberFillShardOrderId(orderId) {
+    const input = document.getElementById('memberShardOrderId');
+    if (input) {
+        input.value = memberSnowflakeId(orderId);
+    }
 }
 
 function memberOpenOrder(orderId) {

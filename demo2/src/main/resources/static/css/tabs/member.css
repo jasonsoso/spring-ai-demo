@@ -728,6 +728,20 @@
     gap: 16px;
 }
 
+.member-side-panel label {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+}
+
+.member-side-panel input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 4px;
+    padding: 6px 8px;
+}
+
 .member-side-actions {
     display: flex;
     flex-wrap: wrap;

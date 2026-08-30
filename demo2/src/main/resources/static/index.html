@@ -1391,6 +1391,19 @@
                     </div>
                 </div>
                 <div class="card">
+                    <div class="card-title">分片调试</div>
+                    <div class="card-body">
+                        <label for="memberShardOrderId">orderId</label>
+                        <input id="memberShardOrderId" type="text" placeholder="可只填订单号">
+                        <label for="memberShardMemberId">memberId</label>
+                        <input id="memberShardMemberId" type="text" placeholder="可只填会员 ID">
+                        <div class="member-side-actions">
+                            <button type="button" class="btn" onclick="memberShardExplain()">计算路由</button>
+                        </div>
+                        <div id="memberShardResult" class="result-box member-order-result">输入 orderId 或 memberId 后计算</div>
+                    </div>
+                </div>
+                <div class="card">
                     <div class="card-title">🧾 查询 / 台账</div>
                     <div class="card-body">
                         <div class="member-side-actions">
