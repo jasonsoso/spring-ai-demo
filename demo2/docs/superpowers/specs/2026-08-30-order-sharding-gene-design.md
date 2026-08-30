@@ -2,7 +2,7 @@
 
 **日期**: 2026-08-30  
 **项目**: spring-ai-demo / demo2  
-**状态**: 已实现  
+**状态**: 已实现（见 [archive/2026-08-30-order-sharding-gene.md](../archive/2026-08-30-order-sharding-gene.md)）  
 **前置**: [2026-08-28-order-module-statemachine-design.md](./2026-08-28-order-module-statemachine-design.md)、[2026-08-07-snowflake-service-isolation-design.md](./2026-08-07-snowflake-service-isolation-design.md)、[2026-08-23-order-ddd-package-refactor-design.md](./2026-08-23-order-ddd-package-refactor-design.md)  
 **范围**: 仅 `demo_order` / `demo_order_item`。会员、商品、延时任务、库存流水仍在默认库 `spring_ai_agent2`。
 
@@ -53,6 +53,49 @@
 
 ## 2. 架构
 
+### 2.0 总架构
+
+应用只认一个 JDBC URL（`ShardingSphereDriver`）。逻辑表 `demo_order` / `demo_order_item` 进分片；会员、商品、延时任务走 `ds_default`。算法无 Spring 注入，只调纯函数。
+
+```mermaid
+flowchart LR
+  subgraph C端
+    UI[member.js]
+    DBG[分片调试台]
+  end
+
+  subgraph app
+    CTL[OrderController]
+    SHARD[OrderShardController]
+    PLACE[OrderPlaceCmdExe]
+    EXP[OrderExpireCmdExe]
+    EXPLAIN[OrderShardExplainCmdExe]
+  end
+
+  subgraph infra
+    GEN[OrderIdGenerator]
+    GENE[OrderShardGene]
+    ALG[OrderComplexShardingAlgorithm]
+    SS[ShardingSphereDriver]
+  end
+
+  subgraph 物理库
+    DEF[(ds_default\nspring_ai_agent2)]
+    DS0[(order_ds_0\n表 0..31)]
+    DS1[(order_ds_1\n表 0..31)]
+  end
+
+  UI --> CTL --> PLACE
+  PLACE --> GEN --> GENE
+  DBG --> SHARD --> EXPLAIN --> GENE
+  EXP --> SS
+  PLACE --> SS
+  SS --> ALG --> GENE
+  SS --> DEF
+  SS --> DS0
+  SS --> DS1
+```
+
 ### 2.1 物理拓扑
 
 同一 MySQL 实例新建：
@@ -102,6 +145,17 @@ table   = (virtual / 2) % TABLE_COUNT    // 现在 32；以后改 256
 
 **禁止**写成 `table = virtual % 32`：2 与 32 不互质，会出现「一库只落偶数表、另一库只落奇数表」。
 
+```mermaid
+flowchart TD
+  subgraph 基因
+    M[memberId] -->|mod 512| V[virtual 0..511]
+    O[orderId] -->|AND 0x1FF| V
+  end
+  V -->|virtual % 2| DS["ds = order_ds_0 / 1"]
+  V -->|"(virtual / 2) % 32"| T["table = demo_order_0..31"]
+  T --> I["明细 binding 同后缀"]
+```
+
 发号：`raw = SnowflakeIdGenerator.nextId()`，再
 
 ```text
@@ -133,6 +187,16 @@ orderId = (raw & ~0x1FF) | (memberId % 512)
 | 两个都没有 | **抛错，禁止广播 64 张表** |
 
 `IN` 多个 `order_id`（同会员列表查明细）：各 ID 基因相同则单分片；若不一致按值分别路由，禁止无键广播。
+
+```mermaid
+flowchart TD
+  SQL[分片 SQL] --> COL{精确列}
+  COL -->|有 member_id| MV["virtual = memberId % 512"]
+  COL -->|只有 order_id| OV["virtual = orderId AND 0x1FF"]
+  COL -->|两者都没有| ERR[抛错 禁止广播]
+  MV --> PICK[挑 ds + 表]
+  OV --> PICK
+```
 
 下单插入主表+明细都带 `member_id`，同一物理库，本地事务即可。
 
@@ -234,31 +298,34 @@ orderId = (raw & ~0x1FF) | (memberId % 512)
 
 ## 4. 数据流
 
-```text
-下单（有 memberId）
-  OrderPlaceCmdExe
-    → OrderIdGenerator.nextOrderId(memberId)
-    → itemId = SnowflakeIdGenerator.nextId()
-    → Action @Transactional
-         insert 主表+明细（均带 member_id）
-         → 算法 virtual=memberId%512 → order_ds_{v%2}.demo_order_{(v/2)%32}
-         → 明细 binding 同库同后缀
-         → Redis reserve（不在 JDBC 事务）
-    → 提交后 delay_task 写 ds_default
+```mermaid
+sequenceDiagram
+  actor U as 会员
+  participant C as PlaceCmdExe
+  participant G as OrderIdGenerator
+  participant A as PlaceAction
+  participant SS as ShardingSphere
+  participant DB as order_ds_*
+  participant R as Redis 热库存
+  participant D as delay_task ds_default
 
-列表 / 计数
-  SQL 仅 member_id → 单分片
-
-详情 / 支付 / 取消 / 超时关单 / 按单查明细
-  SQL 仅 order_id 或 order_id+member_id
-    → 仅 order_id：virtual=orderId&0x1FF
-    → 两者都有：按 member_id；基因不一致则 404
-  登录路径仍 findByIdAndMemberId / CAS 带 memberId
-  OrderExpireCmdExe 仍只拿 orderId，靠基因直达
-
-调试台
-  shardExplain → OrderShardGene 纯计算 → 展示
+  U->>C: orderPlace
+  C->>G: nextOrderId(memberId)
+  Note over G: (snowflake AND ~0x1FF) OR (memberId % 512)
+  C->>A: fireEvent INIT SUBMIT_ORDER
+  A->>SS: insert 主表+明细 带 member_id
+  SS->>DB: 单库单表 LOCAL TX
+  A->>R: reserve
+  C->>D: 提交后 schedule
 ```
+
+| 路径 | 分片列 | 结果 |
+|------|--------|------|
+| 下单 insert | `member_id` | 单库单表；明细 binding 同后缀 |
+| 列表 / 计数 | 仅 `member_id` | 单分片 |
+| 详情 / 支付 / 取消 | `order_id` + `member_id` | 按会员；基因不一致则 404 |
+| 超时关单 / `findById` | 仅 `order_id` | 拆低 9 位直达 |
+| 调试台 | 不查库 | `OrderShardGene` 纯计算 |
 
 ---
 

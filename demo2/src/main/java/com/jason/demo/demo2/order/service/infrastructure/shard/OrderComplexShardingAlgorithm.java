@@ -12,12 +12,18 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+/**
+ * ShardingSphere CLASS_BASED 复合算法。由 SS 反射创建，无 Spring 注入，只调 {@link OrderShardGene}。
+ *
+ * <p>优先级：有 {@code member_id} 用会员；只有 {@code order_id} 拆基因；两者都没有则抛错（禁止广播 64 张表）。
+ * 库策略与表策略共用本类：{@code availableTargetNames} 分别是 {@code order_ds_*} 或 {@code demo_order_*}。
+ */
 @Slf4j
 public class OrderComplexShardingAlgorithm implements ComplexKeysShardingAlgorithm<Comparable<?>> {
 
     @Override
     public void init(Properties props) {
-        // CLASS_BASED 会调 TypedSPI.init；无需配置项
+        // CLASS_BASED 会调 TypedSPI.init；公式写死在 OrderShardGene，这里不要读配置
     }
 
     @Override
@@ -30,6 +36,7 @@ public class OrderComplexShardingAlgorithm implements ComplexKeysShardingAlgorit
             throw new IllegalArgumentException(
                     "order shard requires member_id or order_id, broadcast forbidden");
         }
+        // 两边都有时跟运行时一致：用 member_id。基因对不上则本分片无行，业务 404。
         Set<String> result = new LinkedHashSet<>();
         String source = memberIds.isEmpty() ? "order_id" : "member_id";
         Collection<Long> values = memberIds.isEmpty() ? orderIds : memberIds;

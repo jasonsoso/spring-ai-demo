@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 分片调试入口，故意不放进带 {@code @LoginRequired} 的 {@code OrderController}。
+ */
 @Tag(name = "订单分片")
 @RestController
 @RequestMapping("/demo/orders")

@@ -107,6 +107,7 @@ public class OrderPlaceCmdExe {
                 return toRes(orderDomainService.requireOrderWithItems(existing.get(), memberId), null, effectiveDelay);
             }
 
+            // 订单号嵌会员基因；明细 itemId 仍是普通雪花，靠 binding 跟主表同分片
             long orderId = orderIdGenerator.nextOrderId(memberId);
             List<OrderItem> items = new ArrayList<>();
             for (OrderLineReqVO reqLine : reqItems) {

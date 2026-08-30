@@ -10,7 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * 超时关单，无登录态。非 SUBMIT 只打日志，不 fireEvent。
+ * 超时关单，无登录态，SQL 只有 orderId；靠订单号低 9 位基因直达库表，禁止无键广播。
+ * 非 SUBMIT 只打日志，不 fireEvent。
  */
 @Slf4j
 @Service

@@ -8,6 +8,7 @@ import com.jason.demo.demo2.order.service.common.OrderShardSourceEnum;
 import com.jason.demo.demo2.order.service.infrastructure.shard.OrderShardGene;
 import org.springframework.stereotype.Service;
 
+/** 分片路由试算：只调 {@link OrderShardGene}，不查库。两边都有时展示跟算法一样用 memberId。 */
 @Service
 public class OrderShardExplainCmdExe {
 

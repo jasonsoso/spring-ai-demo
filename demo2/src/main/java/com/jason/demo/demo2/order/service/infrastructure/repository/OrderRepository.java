@@ -40,6 +40,7 @@ public class OrderRepository {
         orderItemRepository.insertAll(order.getItems());
     }
 
+    /** 仅 orderId：ShardingSphere 从订单号拆基因，超时关单走这条。 */
     public Optional<Order> findById(long orderId) {
         return Optional.ofNullable(orderDoConvert.toDomain(orderMapper.selectById(orderId)));
     }

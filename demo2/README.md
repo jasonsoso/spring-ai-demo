@@ -14,6 +14,7 @@
 - [快速开始](#快速开始)
 - [热库存（Redis + MySQL）](#热库存redis--mysql)
 - [订单模块（COLA 状态机）](#订单模块cola-状态机)
+- [订单分库分表（基因法）](#订单分库分表基因法)
 - [前端说明](#前端说明)
 - [配置说明](#配置说明)
 - [可观测性](#可观测性)
@@ -721,6 +722,8 @@ Milvus 相关端口：`19530`（gRPC）、`9000`/`9001`（MinIO）
 CREATE DATABASE spring_ai_agent2 CHARACTER SET utf8mb4;
 ```
 
+订单分库分表另建 `order_ds_0` / `order_ds_1`（128 张表），执行 `src/main/resources/db/order-shard-schema.sql`。Windows 请用 `cmd /c "mysql -uroot -p123456 < order-shard-schema.sql"`，不要用 PowerShell 管道（会坏 `DELIMITER`）。
+
 > Spring AI JDBC ChatMemory 会在首次启动时自动建表（`initialize-schema=never` 时需手动执行 DDL），如遇建表失败可改为 `always`。
 
 ### 3. 配置 API Key
@@ -898,10 +901,13 @@ C 端打通：商品详情 → 预览（不落库）→ 下单预占库存 → �
 
 **Spec / Plan / 归档**：`docs/superpowers/specs/2026-08-28-order-module-statemachine-design.md`、`docs/superpowers/plans/2026-08-28-order-module-statemachine.md`、`docs/superpowers/archive/2026-08-28-order-module-statemachine.md`
 
+分库分表见下一章 [订单分库分表（基因法）](#订单分库分表基因法)。
+
 ### 依赖与建表
 
 - 已有库执行 `src/main/resources/db/order-module-schema.sql`（`order_status` / `pay_status` / `demo_order_item`）
 - 新库先 `delay-order-schema.sql` 建 `demo_order`，再跑本脚本 ALTER
+- **分片绿场**另执行 `order-shard-schema.sql`（`order_ds_0` / `order_ds_1` 共 128 张表）；旧 `spring_ai_agent2.demo_order*` 应用不再读写
 - Redis（`placeToken`）、热库存（下单/支付/取消调 `ProductStockHotService`）、延时关单（`framework.delay`）
 
 配置：`app.order.place-token-ttl=30m`。
@@ -1000,9 +1006,9 @@ sequenceDiagram
   end
 ```
 
-### HTTP（均需登录）
+### HTTP
 
-全部 `POST /demo/orders/{action}` + JSON。Scalar → 订单。
+业务接口均需登录，全部 `POST /demo/orders/{action}` + JSON。Scalar → 订单。分片试算**不登录**。
 
 | 路径 | 说明 |
 |------|------|
@@ -1013,6 +1019,7 @@ sequenceDiagram
 | `/get` | 详情（含明细快照） |
 | `/list` | `tab`: `ALL` / `SUBMIT` / `COMPLETED` |
 | `/counts` | 待支付 / 已完成数量（一条 `GROUP BY`） |
+| `/shardExplain` | 分片路由试算，不登录、不查库 |
 
 ```bash
 token="<登录响应中的 token>"
@@ -1047,6 +1054,108 @@ curl -s -X POST http://localhost:8081/demo/orders/counts \
 ```
 
 界面：Tab「会员 C 端 Demo」→ 商品详情「立即购买」→ 预览/下单 →「我的订单」。seed 商品若 Redis 无 Hash，预占会 `40010`，先下架再上架灌入。
+
+---
+
+## 订单分库分表（基因法）
+
+订单主表、明细按 **`memberId` 分片**（2 库 × 32 表）。订单号低 9 bit 嵌入虚拟分片，超时关单只带 `orderId` 也能直达库表。接入 ShardingSphere-JDBC 5.5.2（官方 Driver + yaml，无 Spring Starter）。
+
+**Spec / Plan / 归档**：`docs/superpowers/specs/2026-08-30-order-sharding-gene-design.md`、`docs/superpowers/plans/2026-08-30-order-sharding-gene.md`、`docs/superpowers/archive/2026-08-30-order-sharding-gene.md`
+
+建表：`src/main/resources/db/order-shard-schema.sql`（PowerShell 不要管道，用 `cmd /c "mysql ... < file.sql"`）。旧库单表不迁不 DROP。热库存须保持开启；事务 LOCAL，不上 XA。
+
+### 架构
+
+逻辑表 `demo_order` / `demo_order_item` 进分片；会员、商品、延时任务走 `ds_default`。算法无 Spring 注入。
+
+```mermaid
+flowchart LR
+  subgraph C端
+    UI[member.js]
+    DBG[分片调试]
+  end
+  subgraph app
+    PLACE[OrderPlaceCmdExe]
+    EXP[OrderExpireCmdExe]
+    EXPLAIN[shardExplain]
+  end
+  subgraph shard
+    GEN[OrderIdGenerator]
+    GENE[OrderShardGene]
+    ALG[复合算法]
+  end
+  subgraph 库
+    DEF[(ds_default)]
+    DS0[(order_ds_0)]
+    DS1[(order_ds_1)]
+  end
+  UI --> PLACE --> GEN --> GENE
+  DBG --> EXPLAIN --> GENE
+  PLACE --> ALG
+  EXP --> ALG
+  ALG --> GENE
+  ALG --> DEF
+  ALG --> DS0
+  ALG --> DS1
+```
+
+### 基因公式
+
+`virtual = memberId % 512` 或 `orderId & 0x1FF`；`ds = virtual % 2`；`table = (virtual / 2) % 32`。禁止 `table = virtual % 32`（2 与 32 不互质）。
+
+```mermaid
+flowchart TD
+  M[memberId] -->|mod 512| V[virtual]
+  O[orderId] -->|AND 0x1FF| V
+  V -->|mod 2| DS[order_ds_0 或 1]
+  V -->|除 2 再 mod 32| T[demo_order_0..31]
+  T --> I[明细同后缀]
+```
+
+例：`612 % 512 = 100` → `order_ds_0.demo_order_18`。发号 `(raw & ~0x1FF) | virtual`；同一毫秒撞号则重取雪花。`itemId` 仍普通雪花。
+
+### 路由
+
+```mermaid
+flowchart TD
+  SQL[分片 SQL] --> C{精确列}
+  C -->|有 member_id| M[按会员]
+  C -->|只有 order_id| O[拆基因]
+  C -->|都没有| E[抛错 禁止广播]
+  M --> P[单库单表]
+  O --> P
+```
+
+列表/计数带 `member_id`；详情/支付带 `order_id+member_id`；超时关单只有 `order_id`。主表与明细 binding。
+
+### 下单时序（分片）
+
+```mermaid
+sequenceDiagram
+  participant C as PlaceCmdExe
+  participant G as OrderIdGenerator
+  participant A as PlaceAction
+  participant SS as ShardingSphere
+  participant DB as order_ds_*
+  participant D as delay_task
+
+  C->>G: nextOrderId(memberId)
+  C->>A: fireEvent SUBMIT_ORDER
+  A->>SS: insert 主表+明细
+  SS->>DB: LOCAL 单分片
+  C->>D: 提交后写 ds_default
+```
+
+### 调试
+
+`POST /demo/orders/shardExplain`，会员 Tab 右侧「分片调试」。不登录、不查库。orderId 用字符串传。
+
+```bash
+curl -s -X POST http://localhost:8081/demo/orders/shardExplain \
+  -H "Content-Type: application/json" \
+  -d "{\"orderId\":\"<orderId>\"}"
+```
 
 ---
 
@@ -1142,10 +1251,9 @@ spring.ai.openai.api-key=xxx              # 智谱 AI API Key（Embedding）
 spring.ai.openai.base-url=https://open.bigmodel.cn/api/paas/v4
 spring.ai.openai.embedding.model=embedding-2
 
-# ===== MySQL =====
-spring.datasource.url=jdbc:mysql://127.0.0.1:3306/spring_ai_agent2
-spring.datasource.username=root
-spring.datasource.password=123456
+# ===== MySQL（经 ShardingSphere；物理账密见 shardingsphere.yaml）=====
+spring.datasource.driver-class-name=org.apache.shardingsphere.driver.ShardingSphereDriver
+spring.datasource.url=jdbc:shardingsphere:classpath:shardingsphere.yaml
 
 # ===== 商品热库存（详见 README「热库存」专章）=====
 app.product.stock.redis-hot-enabled=true
@@ -1978,6 +2086,7 @@ graph TB
 - **Subagent 编排**：`SubagentAgentConfig` 为协调器单独注册 `TaskTool` + `architect`/`builder` 子代理（`agent.tasks.paths`）；子代理在独立上下文中运行，主会话仅挂 Task 工具
 - **A2A 内嵌 Server**：`A2aWeatherAgentConfig` 暴露 `AgentCard` 与 `DefaultAgentExecutor`；`A2aOrchestratorConfig` 通过 `A2ASubagentExecutor` 跨协议调用同进程天气 Agent；发现端点 `/.well-known/agent-card.json`
 - **可观测性默认关闭 OTLP**：日常开发仅暴露 Actuator 本地端点；全链路可视化需先启动 `docker/observability` 再使用 `otel` Profile，避免未启动 Collector 时 `ConnectException: localhost:4318`
+- **订单分片**：JDBC 走 `ShardingSphereDriver`；`demo_order*` 按会员基因进 `order_ds_0/1`，其余表仍 `spring_ai_agent2`。公式写死 9 bit / 2 库 / 32 表，禁止 `table = virtual % 32`
 
 ---
 
@@ -3290,6 +3399,48 @@ sequenceDiagram
   C->>D: schedule 超时关单
 ```
 
+### 33. 订单分片 — 架构
+
+```mermaid
+flowchart LR
+  PLACE[PlaceCmdExe] --> GEN[OrderIdGenerator]
+  EXP[ExpireCmdExe] --> SS[ShardingSphere]
+  GEN --> GENE[OrderShardGene]
+  SS --> ALG[复合算法]
+  ALG --> GENE
+  ALG --> DEF[(ds_default)]
+  ALG --> DS0[(order_ds_0)]
+  ALG --> DS1[(order_ds_1)]
+```
+
+逻辑表进分片，会员/商品/延时走默认库。详见 [订单分库分表](#订单分库分表基因法)。
+
+### 34. 订单分片 — 基因路由
+
+```mermaid
+flowchart TD
+  M[memberId] -->|mod 512| V[virtual]
+  O[orderId] -->|AND 0x1FF| V
+  V -->|mod 2| DS[库]
+  V -->|除 2 再 mod 32| T[表]
+```
+
+禁止 `table = virtual % 32`。例：`612` → `order_ds_0.demo_order_18`。
+
+### 35. 订单分片 — 查询直达
+
+```mermaid
+flowchart TD
+  SQL[SQL] --> C{列}
+  C -->|member_id| M[按会员]
+  C -->|仅 order_id| G[拆基因]
+  C -->|都没有| E[禁广播]
+  M --> P[单库单表]
+  G --> P
+```
+
+超时关单只带 `orderId`，靠低 9 位直达。
+
 ---
 
 ## 目录结构
@@ -3484,6 +3635,10 @@ demo2/
 **Q：商品详情有库存，下单预占却返回 40010？**
 
 热路径默认开启。seed 商品已上架但 Redis 可能没有 Hash，闸门视为未加载，不会用 MySQL 可售灌 Redis。演示请先 `offShelf` 再 `onShelf`（HSETNX），或关 `app.product.stock.redis-hot-enabled`。详见 [热库存（Redis + MySQL）](#热库存redis--mysql)。
+
+**Q：订单 SQL 打到 64 张表 / 找不到表？**
+
+先确认已执行 `order-shard-schema.sql`（`order_ds_0` / `order_ds_1` 各 32+32 张表），并重启应用让 `ShardingSphereDriver` 生效。超时关单只带 `orderId` 靠基因直达；SQL 既无 `member_id` 也无 `order_id` 会被算法拒绝（禁止广播）。路由试算：`POST /demo/orders/shardExplain`。详见 [订单分库分表（基因法）](#订单分库分表基因法)。
 
 **Q：启动时报 Milvus 连接失败怎么办？**
 

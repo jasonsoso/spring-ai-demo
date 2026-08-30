@@ -1,5 +1,7 @@
 # 订单分库分表与订单号基因法 Implementation Plan
 
+> **Status:** 已实现（2026-08-30）。归档见 [archive/2026-08-30-order-sharding-gene.md](../archive/2026-08-30-order-sharding-gene.md)。
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 按 `memberId` 对 `demo_order` / `demo_order_item` 做 2 库 × 32 表分片，订单号低 9 位嵌入虚拟分片，只拿 `orderId` 也能直达库表；会员页右侧可算路由。
@@ -1150,5 +1152,5 @@ git commit -m "feat(order): add shard routing debug card on member tab"
 
 ## 实施后文档（最后一个 commit）
 
-- 将 spec 状态改为「已实现」。
-- 不在本计划写 archive（交给 finishing-a-development-branch / 交付时再归档）。
+- spec 状态已改为「已实现」。
+- 归档：`docs/superpowers/archive/2026-08-30-order-sharding-gene.md`。

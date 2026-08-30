@@ -487,6 +487,7 @@ function memberFillOrderId(orderId) {
     memberFillShardOrderId(memberOrderLastOrderId);
 }
 
+/** 右侧「分片调试」：纯计算，不登录。orderId 用字符串避免 JS 精度丢失。 */
 function memberShardExplain() {
     const orderIdRaw = (document.getElementById('memberShardOrderId').value || '').trim();
     const memberIdRaw = (document.getElementById('memberShardMemberId').value || '').trim();

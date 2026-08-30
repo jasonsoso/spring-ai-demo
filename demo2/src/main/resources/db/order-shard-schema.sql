@@ -1,6 +1,7 @@
--- demo2 订单分库分表绿场脚本
--- 用 root 执行一次。不 DROP spring_ai_agent2.demo_order / demo_order_item。
--- 本机密码不是 123456 时自行改连接。
+-- demo2 订单分库分表绿场脚本（2 schema × 32 主表 × 32 明细 = 128 张表）
+-- 用 root 执行一次。不 DROP、不迁 spring_ai_agent2.demo_order / demo_order_item。
+-- PowerShell 管道会坏 DELIMITER，请用：cmd /c "mysql -uroot -p123456 < order-shard-schema.sql"
+-- 存储过程必须先 USE 某个库（下面用 order_ds_0）才能 CREATE PROCEDURE。
 
 CREATE DATABASE IF NOT EXISTS order_ds_0 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 CREATE DATABASE IF NOT EXISTS order_ds_1 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
