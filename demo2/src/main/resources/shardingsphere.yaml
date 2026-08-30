@@ -1,0 +1,57 @@
+databaseName: demo2_logic
+
+dataSources:
+  ds_default:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/spring_ai_agent2?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+  order_ds_0:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/order_ds_0?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+  order_ds_1:
+    dataSourceClassName: com.zaxxer.hikari.HikariDataSource
+    driverClassName: com.mysql.cj.jdbc.Driver
+    jdbcUrl: jdbc:mysql://127.0.0.1:3306/order_ds_1?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+
+rules:
+  - !SHARDING
+    tables:
+      demo_order:
+        actualDataNodes: order_ds_$->{0..1}.demo_order_$->{0..31}
+        databaseStrategy:
+          complex:
+            shardingColumns: member_id,order_id
+            shardingAlgorithmName: order-complex
+        tableStrategy:
+          complex:
+            shardingColumns: member_id,order_id
+            shardingAlgorithmName: order-complex
+      demo_order_item:
+        actualDataNodes: order_ds_$->{0..1}.demo_order_item_$->{0..31}
+        databaseStrategy:
+          complex:
+            shardingColumns: member_id,order_id
+            shardingAlgorithmName: order-complex
+        tableStrategy:
+          complex:
+            shardingColumns: member_id,order_id
+            shardingAlgorithmName: order-complex
+    bindingTables:
+      - demo_order,demo_order_item
+    defaultDataSourceName: ds_default
+    shardingAlgorithms:
+      order-complex:
+        type: CLASS_BASED
+        props:
+          strategy: COMPLEX
+          algorithmClassName: com.jason.demo.demo2.order.service.infrastructure.shard.OrderComplexShardingAlgorithm
+
+props:
+  sql-show: true
