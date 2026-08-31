@@ -1113,7 +1113,7 @@ flowchart TD
   T --> I[明细同后缀]
 ```
 
-例：`612 % 512 = 100` → `order_ds_0.demo_order_18`。发号 `(raw & ~0x1FF) | virtual`；同一毫秒撞号则重取雪花。`itemId` 仍普通雪花。
+例：`612 % 512 = 100` → `order_ds_0.demo_order_18`。发号 `((ts-epoch)<<22)|(worker<<17)|(seq<<9)|virtual`；单机 256/ms，多机靠 workerId；`itemId` 仍普通雪花。
 
 ### 路由
 

@@ -1,10 +1,10 @@
 package com.jason.demo.demo2.order.service.infrastructure.shard;
 
 /**
- * 订单分片基因纯函数。常量与公式写死，禁止做成配置项，否则已发出的订单号会对不上。
+ * 订单分片基因与路由纯函数。常量与公式写死，禁止做成配置项，否则已发出的订单号会对不上。
  *
- * <p>基因是 64 位订单号最低 9 bit（{@code 0x1FF}），不是十进制位数。虚拟分片 512 等于天花板 2 库 × 256 表。
- * 现在拓扑 2×32：{@code ds = virtual % 2}，{@code table = (virtual / 2) % 32}。
+ * <p>基因是 64 位订单号最低 9 bit（{@code 0x1FF}）。发号见 {@link OrderIdGenerator}（时间|机器|序号|基因），
+ * 本类只负责 {@code virtual} / 库表下标，不负责拼号。
  *
  * <p>禁止写成 {@code table = virtual % 32}：2 与 32 不互质，会出现「一库只落偶数表、另一库只落奇数表」。
  */
@@ -40,11 +40,6 @@ public final class OrderShardGene {
      */
     public static int tableIndex(long virtual) {
         return (int) ((virtual / DB_COUNT) % TABLE_COUNT);
-    }
-
-    /** 覆盖雪花低 9 位为 {@code memberId % 512}，高位时间戳/机器位保持不变。 */
-    public static long embed(long raw, long memberId) {
-        return (raw & ~GENE_MASK) | virtualOfMember(memberId);
     }
 
     public static String geneBits(long virtual) {

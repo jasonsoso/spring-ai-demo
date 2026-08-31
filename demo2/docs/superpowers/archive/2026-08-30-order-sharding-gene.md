@@ -106,7 +106,9 @@ flowchart TD
 
 例：`memberId=612` → `virtual=100` → `ds=0`、`table=18`。
 
-发号：`(rawSnowflake & ~0x1FF) | (memberId % 512)`。同一毫秒覆盖低位会撞号，`OrderIdGenerator.nextOrderId` 串行，撞了再取雪花。雪花序号原 12 bit 被占 9，剩 3 bit（每毫秒每节点 8 个号）。
+发号（2026-08-31 起）：位图 `[41 时间][5 机器][8 序号][9 基因]`，见
+[2026-08-31-order-id-bit-layout-design.md](../specs/2026-08-31-order-id-bit-layout-design.md)。
+低 9 位仍为基因；`itemId` 仍普通雪花。旧 embed 单只读仍可按基因路由。
 
 扩到 2×256：只改 `TABLE_COUNT` 并搬行，库取模不变，**不用改订单号**。超出天花板（2×512 或 2 库改 3 库）不在本版。
 
@@ -214,7 +216,7 @@ order
 
 ## 9. 测试
 
-`mvn "-Dtest=OrderShardGeneTest,OrderIdGeneratorTest,OrderComplexShardingAlgorithmTest,OrderShardExplainCmdExeTest,OrderPlaceCmdExeTest" test`（PowerShell 须给 `-Dtest` 加引号）。19 个用例：公式、禁止错误取模、发号撞号重试、仅 member / 仅 order / 禁广播、调试三种输入。
+`mvn "-Dtest=OrderShardGeneTest,OrderIdGeneratorTest,OrderComplexShardingAlgorithmTest,OrderShardExplainCmdExeTest,OrderPlaceCmdExeTest" test`（PowerShell 须给 `-Dtest` 加引号）。覆盖公式、禁止错误取模、位图发号（基因/机器/序号/回拨）、仅 member / 仅 order / 禁广播、调试三种输入。
 
 单测不启 128 张真实表。手工：下单 → 调试台只填 orderId / 只填 memberId → 日志单库单表、无 64 表广播。
 
@@ -224,7 +226,8 @@ order
 
 | 点 | spec | 实现 |
 |----|------|------|
-| 发号 | 直接 `embed(nextId())` | **synchronized + 撞号再取雪花**（覆盖低 9 位后同一毫秒会撞） |
+| 发号（初版） | 直接 `embed(nextId())` | 曾用 **synchronized + 撞号再取雪花** |
+| 发号（2026-08-31） | — | **位图 `[时间][机器][序号][基因]`**，见 [order-id-bit-layout](../specs/2026-08-31-order-id-bit-layout-design.md) |
 | 未分片表 | spec 写在 `!SHARDING.defaultDataSourceName` | **5.5.2 无此字段**；改 `!SINGLE` `tables: ds_default.*` |
 
 ---
@@ -234,3 +237,4 @@ order
 | 日期 | 说明 |
 |------|------|
 | 2026-08-30 | 启动验收：`!SHARDING.defaultDataSourceName` 在 5.5.2 非法，改为 `!SINGLE` |
+| 2026-08-31 | 订单号改为机器+序号+基因位图，去掉 embed 撞号重试 |

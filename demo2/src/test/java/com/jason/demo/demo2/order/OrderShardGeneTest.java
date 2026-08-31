@@ -37,14 +37,6 @@ class OrderShardGeneTest {
     }
 
     @Test
-    void embed_replacesLow9BitsOnly() {
-        long raw = 0x1234_5678_9ABC_DE00L;
-        long orderId = OrderShardGene.embed(raw, 612L);
-        assertEquals(100L, orderId & 0x1FFL);
-        assertEquals(raw >> 9, orderId >> 9);
-    }
-
-    @Test
     void bothDatabasesUseAll32Tables() {
         Set<String> ds0 = new HashSet<>();
         Set<String> ds1 = new HashSet<>();
