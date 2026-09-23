@@ -19,7 +19,8 @@
 
 1. 用双会话逐步脚本，亲手造出三类现象并观察等待关系。  
 2. 每类都给出：**当场解除** + **业务上如何避免**。  
-3. 零代码改动；直连物理库执行即可。
+3. 给出 **DBA 视角** 的定位与解锁顺序（先找持锁方，再劝提交 / `KILL`，避免重启实例）。  
+4. 零代码改动；直连物理库执行即可。
 
 ### 1.3 已确认决策
 
@@ -69,46 +70,110 @@ ORDER BY id;
 
 ---
 
-## 3. 卡住时急救（先看这里）
+## 3. DBA 视角：定位与解锁（先看这里）
 
-在 **会话 C**（或任意空闲连接）：
+原则：**先定位持锁会话，再决定「劝提交 / 持锁方自行解锁」还是 `KILL`**。不要一上来重启 mysqld。
+
+每换下一演示场景前，确保 A/B 都无未结束事务、无表锁。
+
+### 3.1 标准处置顺序
+
+**① 看谁卡住了**（会话 C 或任意空闲连接）：
 
 ```sql
 SHOW FULL PROCESSLIST;
+
+-- 或过滤看长时间占用
+SELECT id, user, host, db, command, time, state, info
+FROM information_schema.PROCESSLIST
+WHERE command != 'Sleep' OR time > 0
+ORDER BY time DESC;
 ```
 
-找到长时间 `Locked` / 未提交事务的线程，记下 `Id`：
+关注：`State` 含 `Locked` / `Waiting for ... lock`，`Time` 很大，`Info` 是被堵住的 SQL。记下等待方与可疑持锁方的 `Id`。
+
+**② 看谁持有未提交事务 / 行锁（InnoDB）**
 
 ```sql
-KILL <thread_id>;
+-- 未结束事务 = 常见持锁方；trx_mysql_thread_id 对应 PROCESSLIST.Id
+SELECT trx_id, trx_state, trx_started, trx_mysql_thread_id, trx_query,
+       TIMESTAMPDIFF(SECOND, trx_started, NOW()) AS trx_age_sec
+FROM information_schema.INNODB_TRX
+ORDER BY trx_started;
+
+-- MySQL 8：谁在等谁（请求方 trx → 阻塞方 trx）
+SELECT * FROM performance_schema.data_lock_waits;
+
+-- 谁持有哪些锁（可按表过滤）
+SELECT ENGINE_TRANSACTION_ID, OBJECT_SCHEMA, OBJECT_NAME, INDEX_NAME,
+       LOCK_TYPE, LOCK_MODE, LOCK_STATUS, LOCK_DATA
+FROM performance_schema.data_locks
+WHERE OBJECT_SCHEMA = 'spring_ai_agent2' AND OBJECT_NAME = 'demo_product';
 ```
 
-| 场景 | 正规解除（优先） | 粗暴解除 |
-|------|------------------|----------|
-| 行锁（场景一、二） | 持锁会话 `COMMIT;` 或 `ROLLBACK;` | `KILL` 持锁连接 |
-| 表锁（场景三） | 持锁会话 `UNLOCK TABLES;`（**不能**用 `COMMIT` 代替） | `KILL` 持锁连接 |
+从 `data_lock_waits` 找到阻塞方事务，再用 `INNODB_TRX.trx_mysql_thread_id` 对上 `PROCESSLIST.Id`，得到要沟通或 `KILL` 的线程。
 
-每换下一场景前，确保 A/B 都无未结束事务、无表锁。
+**③ 按优先级处置**
+
+| 优先级 | 动作 | 何时用 |
+|--------|------|--------|
+| 1 | 联系业务/开发：让持锁会话 `COMMIT` / `ROLLBACK`（表锁则 `UNLOCK TABLES`） | 能找到人、事务还能收场 |
+| 2 | 明确是自己的演示连接：在**持锁连接**上提交/回滚/解锁 | 教学、本机双会话 |
+| 3 | `KILL <thread_id>;` | 人找不到、事务挂很久、阻塞关键链路 |
+| 4 | 重启 mysqld | **仅极端情况**；会断全部连接，一般不需要 |
+
+```sql
+-- 杀掉持锁线程：该连接未提交事务会回滚，从而释放行锁
+KILL <trx_mysql_thread_id>;
+```
+
+`KILL` 后：行锁随事务回滚释放；被堵住的会话会报错或由客户端重试。
+
+线上补充：先判断阻塞是否影响核心链路；杀前尽量通知业务；慎杀只读长事务以外的「看起来闲、实际在报账」的会话。
+
+### 3.2 按锁类型怎么解
+
+| 类型 | 正规解除（优先） | DBA 粗暴解除 | 注意 |
+|------|------------------|--------------|------|
+| 行锁（场景一、二：`FOR UPDATE` / 未提交 `UPDATE`） | 持锁连接 `COMMIT;` 或 `ROLLBACK;` | `KILL` 持锁线程的 `trx_mysql_thread_id` | **`UNLOCK TABLES` 解不了 InnoDB 行锁** |
+| 真·表锁（场景三：`LOCK TABLES … WRITE`） | 必须在**持锁那个连接**执行 `UNLOCK TABLES;` | `KILL` 该连接（会话结束会清表锁） | **`COMMIT` 不能代替 `UNLOCK TABLES`** |
+| 锁等待超时（等待方已失败） | 仍要处理持锁方（提交/解锁/`KILL`） | 同左 | 超时只让**等待方**放弃，**不会**清掉持锁事务 |
+
+查看超时阈值：
+
+```sql
+SHOW VARIABLES LIKE 'innodb_lock_wait_timeout';
+-- 默认常 50 秒；超时后等待方报错，持锁方仍可能占着锁
+```
+
+### 3.3 演示时最短口令
+
+1. 会话 C：`SHOW FULL PROCESSLIST;` + `SELECT … FROM information_schema.INNODB_TRX;`  
+2. 区分行锁还是表锁（有没有人执行过 `LOCK TABLES`；表锁时 `data_locks` 未必有 InnoDB 行锁条目）  
+3. 行锁 → 持锁方 `ROLLBACK`/`COMMIT`，或 `KILL <id>`  
+4. 表锁 → 持锁方 `UNLOCK TABLES`，或 `KILL <id>`  
 
 ---
 
 ## 4. 通用观察脚本（会话 C）
 
-MySQL 8.x（本项目默认按 8）：
+与第 3 节配合使用；演示卡住时开旁观连接执行。MySQL 8.x（本项目默认按 8）：
 
 ```sql
 -- 会话是否卡住
 SHOW FULL PROCESSLIST;
 
--- 未提交事务
-SELECT trx_id, trx_state, trx_started, trx_mysql_thread_id, trx_query
-FROM information_schema.INNODB_TRX;
+-- 未提交事务（含持锁时长）
+SELECT trx_id, trx_state, trx_started, trx_mysql_thread_id, trx_query,
+       TIMESTAMPDIFF(SECOND, trx_started, NOW()) AS trx_age_sec
+FROM information_schema.INNODB_TRX
+ORDER BY trx_started;
 
 -- 谁持有哪些锁
 SELECT ENGINE_TRANSACTION_ID, OBJECT_SCHEMA, OBJECT_NAME, INDEX_NAME,
        LOCK_TYPE, LOCK_MODE, LOCK_STATUS, LOCK_DATA
 FROM performance_schema.data_locks
-WHERE OBJECT_NAME = 'demo_product';
+WHERE OBJECT_SCHEMA = 'spring_ai_agent2' AND OBJECT_NAME = 'demo_product';
 
 -- 谁在等谁
 SELECT *
@@ -363,9 +428,12 @@ UNLOCK TABLES;
 
 **处理口诀**
 
-1. 先 `SHOW FULL PROCESSLIST` + `INNODB_TRX` 找到持锁方。  
-2. 能沟通就让对方提交/解锁；不能就 `KILL`。  
-3. 根治：唯一键短事务；禁止无索引 / 过宽条件加锁；禁止业务 `LOCK TABLES`。
+1. 先 `SHOW FULL PROCESSLIST` + `INNODB_TRX`（+ `data_lock_waits`）找到持锁方线程 Id。  
+2. 能沟通就让对方提交/解锁；不能就 `KILL`；**不要**先重启实例。  
+3. 行锁靠 `COMMIT`/`ROLLBACK`/`KILL`；表锁靠 `UNLOCK TABLES`/`KILL`。  
+4. 根治：唯一键短事务；禁止无索引 / 过宽条件加锁；禁止业务 `LOCK TABLES`。  
+
+完整 DBA 步骤见 **第 3 节**。
 
 ---
 
@@ -385,4 +453,5 @@ UNLOCK TABLES;
 - [x] 无 TBD/TODO 占位  
 - [x] 三场景均含：造锁 → 冲突 → 观察 → 解除 → 解法  
 - [x] 明确直连 `spring_ai_agent2`、双会话、急救与 `UNLOCK TABLES`  
+- [x] 含 DBA 定位顺序、按锁类型解锁、`KILL` 与超时说明（第 3 节）  
 - [x] 范围仅文档 + `demo_product`，与「不改代码」一致  

@@ -16,7 +16,9 @@ import java.util.Set;
  * ShardingSphere CLASS_BASED 复合算法。由 SS 反射创建，无 Spring 注入，只调 {@link OrderShardGene}。
  *
  * <p>优先级：有 {@code member_id} 用会员；只有 {@code order_id} 拆基因；两者都没有则抛错（禁止广播 64 张表）。
- * 库策略与表策略共用本类：{@code availableTargetNames} 分别是 {@code order_ds_*} 或 {@code demo_order_*}。
+ * 库策略与表策略共用本类，各调一次：{@code availableTargetNames} 分别是 {@code order_ds_*} 或 {@code demo_order_*}。
+ *
+ * <p>入参只有逻辑表名和分片键，没有 SQL 原文。SQL 原文由 {@code sql-show} 打到 logger {@code ShardingSphere-SQL}。
  */
 @Slf4j
 public class OrderComplexShardingAlgorithm implements ComplexKeysShardingAlgorithm<Comparable<?>> {
@@ -30,18 +32,21 @@ public class OrderComplexShardingAlgorithm implements ComplexKeysShardingAlgorit
     public Collection<String> doSharding(
             Collection<String> availableTargetNames,
             ComplexKeysShardingValue<Comparable<?>> shardingValue) {
+        // 只认等值 / IN。范围条件（>、BETWEEN）不在这个 map 里，会落到下面的禁止广播。
         Collection<Long> memberIds = longs(shardingValue, "member_id", "memberId");
         Collection<Long> orderIds = longs(shardingValue, "order_id", "orderId");
         if (memberIds.isEmpty() && orderIds.isEmpty()) {
             throw new IllegalArgumentException(
                     "order shard requires member_id or order_id, broadcast forbidden");
         }
-        // 两边都有时跟运行时一致：用 member_id。基因对不上则本分片无行，业务 404。
+        // 会员优先。两边都有时忽略 order_id：基因和会员不一致就落到会员那张表，查不到由业务返回 404。
         Set<String> result = new LinkedHashSet<>();
         String source = memberIds.isEmpty() ? "order_id" : "member_id";
         Collection<Long> values = memberIds.isEmpty() ? orderIds : memberIds;
         boolean fromOrderId = memberIds.isEmpty();
+        // IN 多个 id 会得到多个目标。库策略、表策略各进一次本方法。
         for (Long id : values) {
+            // 会员：memberId % 512；只有订单号：取低 9 位基因。同一个 virtual 再拆库和表。
             long virtual = fromOrderId
                     ? OrderShardGene.virtualOfOrderId(id)
                     : OrderShardGene.virtualOfMember(id);
@@ -57,6 +62,7 @@ public class OrderComplexShardingAlgorithm implements ComplexKeysShardingAlgorit
         return new ArrayList<>(result);
     }
 
+    /** 只给日志展示用。真正选中的库或表在 {@link #pickTarget}。 */
     private static String logicTableName(String logic, long virtual) {
         if (logic != null && logic.contains("item")) {
             return OrderShardGene.itemTableName(virtual);
@@ -64,6 +70,10 @@ public class OrderComplexShardingAlgorithm implements ComplexKeysShardingAlgorit
         return OrderShardGene.orderTableName(virtual);
     }
 
+    /**
+     * 同一次路由先选库、再选表，两次进来的 {@code available} 不同。
+     * 候选名以 {@code order_ds_} 开头就是在选库，否则按逻辑表名决定主表还是明细表。
+     */
     private static String pickTarget(Collection<String> available, String logic, long virtual) {
         String expected;
         if (isDatabaseTargets(available)) {
@@ -79,10 +89,14 @@ public class OrderComplexShardingAlgorithm implements ComplexKeysShardingAlgorit
         return expected;
     }
 
+    /** 库候选是 {@code order_ds_0/1}，表候选是 {@code demo_order_*} / {@code demo_order_item_*}。 */
     private static boolean isDatabaseTargets(Collection<String> available) {
         return available.stream().anyMatch(n -> n.startsWith("order_ds_"));
     }
 
+    /**
+     * 从等值 / IN 里取出指定列。SS 传来的列名可能是 {@code member_id} 或 {@code memberId}，去掉下划线再比。
+     */
     private static Collection<Long> longs(
             ComplexKeysShardingValue<Comparable<?>> value, String... columnNames) {
         Map<String, Collection<Comparable<?>>> map = value.getColumnNameAndShardingValuesMap();

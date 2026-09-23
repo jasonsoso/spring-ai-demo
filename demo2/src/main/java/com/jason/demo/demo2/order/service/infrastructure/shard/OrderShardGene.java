@@ -12,15 +12,19 @@ public final class OrderShardGene {
 
     /** 基因位数；天花板 2×256 = 512 = 2^9。 */
     public static final int GENE_BITS = 9;
+    /** 虚拟分片数，等于 2^GENE_BITS。会员和订单号都先落到这 512 个槽，再拆库表。 */
     public static final int VIRTUAL_COUNT = 512;
+    /** 物理库数。库下标 = virtual % DB_COUNT。 */
     public static final int DB_COUNT = 2;
     /** 现在每库表数；扩到 256 只需改这里并搬行，不用改订单号。 */
     public static final int TABLE_COUNT = 32;
+    /** 低 9 位掩码，与 GENE_BITS 对齐。 */
     public static final long GENE_MASK = 0x1FFL;
 
     private OrderShardGene() {
     }
 
+    /** 下单时写入订单号低 9 位的值。同一会员永远同一个 virtual，所以总进同一库表。 */
     public static long virtualOfMember(long memberId) {
         return memberId % VIRTUAL_COUNT;
     }
@@ -30,6 +34,7 @@ public final class OrderShardGene {
         return orderId & GENE_MASK;
     }
 
+    /** 偶数 virtual 进 order_ds_0，奇数进 order_ds_1。 */
     public static int dsIndex(long virtual) {
         return (int) (virtual % DB_COUNT);
     }
@@ -42,11 +47,13 @@ public final class OrderShardGene {
         return (int) ((virtual / DB_COUNT) % TABLE_COUNT);
     }
 
+    /** 调试展示用，把 virtual 补成 9 位二进制，高位补 0。不参与路由。 */
     public static String geneBits(long virtual) {
         String bits = Long.toBinaryString(virtual & GENE_MASK);
         return "0".repeat(GENE_BITS - bits.length()) + bits;
     }
 
+    /** 名字必须和 shardingsphere.yaml 的 actualDataNodes 一致。 */
     public static String dsName(long virtual) {
         return "order_ds_" + dsIndex(virtual);
     }
