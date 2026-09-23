@@ -1,201 +1,65 @@
-### Task 3: 方案 A DomainService（FOR UPDATE、内存 after、confirm 幂等、ADJUST）
+### Task 3: 改仍在用的公式说明
 
 **Files:**
-- Modify: `demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/mapper/ProductStockMapper.java`
-- Modify: `demo2/src/main/resources/mapper/product/ProductStockMapper.xml`
-- Modify: `demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/repository/ProductStockRepository.java`
-- Modify: `demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/repository/ProductStockLogRepository.java`
-- Modify: `demo2/src/main/java/com/jason/demo/demo2/product/service/core/ProductStockDomainService.java`
-- Modify: `demo2/src/test/java/com/jason/demo/demo2/product/ProductStockDomainServiceTest.java`
-- Modify: `demo2/src/test/java/com/jason/demo/demo2/product/ProductStockMapperXmlTest.java`
+- Modify: `demo2/README.md`（约 1105、1110、1116、3422、3428 行）
+- Modify: `demo2/docs/superpowers/specs/2026-08-30-order-sharding-gene-design.md` 第 2.2 节公式
+- Modify: `demo2/docs/superpowers/specs/2026-08-31-order-id-bit-layout-design.md` 基因来源
+- Modify: `demo2/docs/superpowers/specs/2026-09-23-order-shard-murmur-virtual-design.md` 状态行
 
 **Interfaces:**
-- Consumes: Task 2 `ProductStock.copy/apply*`、Task 1 `idempotentKey` / `stockSeq`
-- Produces: `requireByProductIdForUpdate`、`existsOpt`、`existsByIdempotentKey`、`adjust`、直写 SQL 带 `stock_seq+=1`
+- Consumes: 槽位 `612 → 61 → order_ds_1.demo_order_30`
+- Produces: 无代码
 
-直写 XML（在现有 `reserve`/`confirm`/`release` 的 SET 列表增加一行）：
+- [ ] **Step 1: 改 `demo2/README.md` 基因公式**
 
-```xml
-            stock_seq = stock_seq + 1,
+「基因公式」一节换成：
+
+```markdown
+`virtual = MurmurHash3(memberId) & 0x1FF` 或 `orderId & 0x1FF`；`ds = virtual % 2`；`table = (virtual / 2) % 32`。哈希是 x86 32 位、种子 0、会员号小端 8 字节。禁止 `memberId % 512`：Hutool 雪花最低 12 位是序号，逐个注册时序号恒为 0，取低位会全部进 `order_ds_0.demo_order_0`。禁止 `table = virtual % 32`（2 与 32 不互质）。
 ```
 
-Mapper 追加：
+图里 `M[memberId] -->|mod 512| V[virtual]` 改为 `M[memberId] -->|MurmurHash3 再取低 9 位| V[virtual]`。例子改为：`612` → 槽位 `61` → `order_ds_1.demo_order_30`。
 
-```java
-    int adjustActual(@Param("productId") long productId, @Param("targetActual") int targetActual);
+第 34 节同样改箭头文字，例子改为 `612` → `order_ds_1.demo_order_30`，并写明禁止 `memberId % 512`。
+
+- [ ] **Step 2: 改 2026-08-30 公式段**
+
+`2026-08-30-order-sharding-gene-design.md` 里：
+
+```text
+virtual = memberId % 512
+        = orderId  & 0x1FF   // 只拿订单号时
 ```
 
-XML 追加：
+换成：
 
-```xml
-    <update id="adjustActual">
-        UPDATE demo_product_stock
-        SET actual_stock = #{targetActual},
-            stock = #{targetActual} - withhold_stock,
-            stock_seq = stock_seq + 1,
-            updated_at = NOW(3)
-        WHERE product_id = #{productId}
-          AND #{targetActual} >= withhold_stock
-    </update>
+```text
+virtual = MurmurHash3_x86_32(memberId 小端 8 字节, seed 0) & 0x1FF
+        = orderId & 0x1FF    // 只拿订单号时
 ```
 
-`ProductStockRepository` 增加：
+紧接着加一句：禁止 `memberId % 512`，原因与 README 相同。同文件其余公式改为：
 
-```java
-    public ProductStock requireByProductIdForUpdate(long productId) {
-        ProductStockDO row = productStockMapper.selectOne(new LambdaQueryWrapper<ProductStockDO>()
-                .eq(ProductStockDO::getProductId, productId)
-                .last("FOR UPDATE"));
-        if (row == null) {
-            throw new BusinessException(ProductErrorCodeEnum.STOCK_NOT_FOUND);
-        }
-        return productStockDoConvert.toDomain(row);
-    }
+- 图：`M[memberId] -->|MurmurHash3 再取低 9 位| V[virtual 0..511]`
+- 发号说明里的 `memberId % 512` 改为 `MurmurHash3(memberId) & 0x1FF`
+- 表「有 `member_id`」改为 `` `MurmurHash3(memberId) & 0x1FF` ``
+- 流程图 `virtual = memberId % 512` 改为 `virtual = MurmurHash3(memberId) AND 0x1FF`
+- 调试示例 `612` 的响应：`virtual` / `memberVirtual` / `orderVirtual` 为 `61`，`geneBits` 为 `000111101`，`ds` 为 `order_ds_1`，`table` 为 `demo_order_30`，`itemTable` 为 `demo_order_item_30`。括注改为 `ds = 61 % 2 = 1`，`table = (61 / 2) % 32 = 30`
 
-    public boolean adjustActual(long productId, int targetActual) {
-        return productStockMapper.adjustActual(productId, targetActual) > 0;
-    }
-```
+- [ ] **Step 3: 改 2026-08-31 的基因来源**
 
-`ProductStockLogRepository` 增加：
+`2026-08-31-order-id-bit-layout-design.md` 中基因行和发号式的 `memberId % 512` 改为 `MurmurHash3(memberId) & 0x1FF`。`virtual = orderId & 0x1FF`、41/5/8/9 位宽、每毫秒 256 个号不改。
 
-```java
-    public boolean existsByIdempotentKey(String idempotentKey) {
-        return productStockLogMapper.selectCount(new LambdaQueryWrapper<ProductStockLogDO>()
-                .eq(ProductStockLogDO::getIdempotentKey, idempotentKey)) > 0;
-    }
+把 `2026-09-23-order-shard-murmur-virtual-design.md` 的状态从「待实现」改为「已实现」，并加上本 plan 的链接。
 
-    public boolean existsOpt(long orderId, long productId, ProductStockOptTypeEnum optType) {
-        return productStockLogMapper.selectCount(new LambdaQueryWrapper<ProductStockLogDO>()
-                .eq(ProductStockLogDO::getOrderId, orderId)
-                .eq(ProductStockLogDO::getProductId, productId)
-                .eq(ProductStockLogDO::getOptType, optType.name())) > 0;
-    }
-```
-
-- [ ] **Step 1: Write the failing tests（改 `ProductStockDomainServiceTest`）**
-
-把 `reserve_success_writesLog` 改为：**只 stub `requireByProductIdForUpdate` 一次**，禁止第二次查 after；断言流水 `beforeStock=100`、`afterStock=95`、`idempotentKey=100:9001:RESERVE`。
-
-新增：
-
-```java
-    @Test
-    void confirm_idempotent_whenConfirmLogExists() {
-        when(productStockLogRepository.existsOpt(ORDER_ID, PRODUCT_ID, ProductStockOptTypeEnum.CONFIRM))
-                .thenReturn(true);
-
-        service.confirm(PRODUCT_ID, ORDER_ID, 2);
-
-        verify(productStockRepository, never()).confirm(anyLong(), anyInt());
-    }
-
-    @Test
-    void adjust_updatesActual() {
-        ProductStock locked = stock(90, 10, 100);
-        locked.setStockSeq(3L);
-        when(productStockRepository.requireByProductIdForUpdate(PRODUCT_ID)).thenReturn(locked);
-        when(productStockRepository.adjustActual(PRODUCT_ID, 80)).thenReturn(true);
-        when(idGenerator.nextId()).thenReturn(2000L);
-
-        ProductStock result = service.adjust(PRODUCT_ID, 80, 55L);
-
-        assertEquals(80, result.getActualStock());
-        assertEquals(70, result.getStock());
-        ArgumentCaptor<ProductStockLogDO> captor = ArgumentCaptor.forClass(ProductStockLogDO.class);
-        verify(productStockLogRepository).insertLog(captor.capture());
-        assertEquals("ADJUST:55", captor.getValue().getIdempotentKey());
-    }
-```
-
-`stock(...)` helper 补 `setStockSeq(0L)`。`reserve_success_writesLog` / `confirm_incrementsSellStock` / `release_restoresStock_fromReserveQty` 全部改为 `when(requireByProductIdForUpdate).thenReturn(before)`，**不要** `thenReturn(before, after)`。
-
-`ProductStockMapperXmlTest` 增加：
-
-```java
-        assertTrue(configuration.hasStatement(NAMESPACE + ".adjustActual"));
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 4: 再跑四个测试类**
 
 ```powershell
-.\mvnw.cmd test "-Dtest=ProductStockDomainServiceTest,ProductStockMapperXmlTest"
+mvn test "-Dtest=OrderShardGeneTest,OrderIdGeneratorTest,OrderShardExplainCmdExeTest,OrderComplexShardingAlgorithmTest" -q
 ```
 
-Expected: FAIL（`requireByProductIdForUpdate` / `adjust` 不存在，或旧测试仍按二次 SELECT stub）
+Expected: PASS。文档改动不应让测试失败。
 
-- [ ] **Step 3: Implement DomainService**
+- [ ] **Step 5: Commit**
 
-`writeLog` 增加参数 `String idempotentKey`，写入 `log.setIdempotentKey(idempotentKey)`。
-
-`reserve`：
-
-```java
-    @Transactional
-    public void reserve(long productId, long orderId, int qty) {
-        if (qty <= 0) {
-            throw new BusinessException(CommonErrorCodeEnum.BAD_REQUEST, "qty must be positive");
-        }
-        String key = ProductStockIdempotentKeys.of(orderId, productId, ProductStockOptTypeEnum.RESERVE);
-        if (productStockLogRepository.existsByIdempotentKey(key)) {
-            return;
-        }
-        ProductStock before = productStockRepository.requireByProductIdForUpdate(productId);
-        if (!productStockRepository.reserve(productId, qty)) {
-            throw new BusinessException(ProductErrorCodeEnum.STOCK_INSUFFICIENT);
-        }
-        ProductStock after = before.copy().applyReserve(qty);
-        after.setStockSeq(nullToZero(before.getStockSeq()) + 1);
-        after.assertBalance();
-        writeLog(before, after, ProductStockOptTypeEnum.RESERVE, orderId, qty, null, key);
-    }
-```
-
-`confirm`：若 `existsOpt(..., CONFIRM)` 直接 return；否则 FOR UPDATE → `confirm` SQL → `before.copy().applyConfirm(effectiveQty)`，**不要**再 `requireByProductId`。
-
-`release`：保持「无 pending RESERVE 则 return」；有则 FOR UPDATE + `applyRelease`。
-
-`adjust`（本 Task **不**校验上下架与 Redis seq，那是 Task 8 CmdExe 的职责）：
-
-```java
-    @Transactional
-    public ProductStock adjust(long productId, int targetActual, long adjustId) {
-        String key = ProductStockIdempotentKeys.ofAdjust(adjustId);
-        if (productStockLogRepository.existsByIdempotentKey(key)) {
-            return productStockRepository.requireByProductId(productId);
-        }
-        ProductStock before = productStockRepository.requireByProductIdForUpdate(productId);
-        if (targetActual < 0 || targetActual < before.getWithholdStock()) {
-            throw new BusinessException(ProductErrorCodeEnum.ADJUST_INVALID_TARGET);
-        }
-        if (!productStockRepository.adjustActual(productId, targetActual)) {
-            throw new BusinessException(ProductErrorCodeEnum.ADJUST_INVALID_TARGET);
-        }
-        ProductStock after = before.copy().applyAdjust(targetActual);
-        after.setStockSeq(nullToZero(before.getStockSeq()) + 1);
-        after.assertBalance();
-        writeLog(before, after, ProductStockOptTypeEnum.ADJUST, 0L, Math.abs(targetActual - before.getActualStock()),
-                "adjust", key);
-        return after;
-    }
-```
-
-`nullToZero`：`v == null ? 0L : v`。
-
-- [ ] **Step 4: Run tests to verify they pass**
-
-```powershell
-.\mvnw.cmd test "-Dtest=ProductStockDomainServiceTest,ProductStockMapperXmlTest,ProductStockTest,ProductStockLogRepositoryTest"
-```
-
-Expected: PASS
-
-- [ ] **Step 5: Commit**（仅当用户要求）
-
-```bash
-git add demo2/src/main/java/com/jason/demo/demo2/product/service/core/ProductStockDomainService.java demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure demo2/src/main/resources/mapper/product/ProductStockMapper.xml demo2/src/test/java/com/jason/demo/demo2/product/ProductStockDomainServiceTest.java demo2/src/test/java/com/jason/demo/demo2/product/ProductStockMapperXmlTest.java
-git commit -m "fix(product): lock stock row, derive after-image, make confirm idempotent"
-```
-
----
-
+仅当用户要求提交时执行。本次不要提交。

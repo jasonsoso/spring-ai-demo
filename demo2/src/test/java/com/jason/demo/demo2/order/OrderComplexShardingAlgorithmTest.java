@@ -20,11 +20,11 @@ class OrderComplexShardingAlgorithmTest {
 
     @Test
     void memberIdOnly_routesDbAndTable() {
-        assertEquals(List.of("order_ds_0"), algorithm.doSharding(List.of("order_ds_0", "order_ds_1"),
+        assertEquals(List.of("order_ds_1"), algorithm.doSharding(List.of("order_ds_0", "order_ds_1"),
                 value("demo_order", "member_id", 612L)));
-        assertEquals(List.of("demo_order_18"), algorithm.doSharding(orderTables(),
+        assertEquals(List.of("demo_order_30"), algorithm.doSharding(orderTables(),
                 value("demo_order", "member_id", 612L)));
-        assertEquals(List.of("demo_order_item_18"), algorithm.doSharding(itemTables(),
+        assertEquals(List.of("demo_order_item_30"), algorithm.doSharding(itemTables(),
                 value("demo_order_item", "member_id", 612L)));
     }
 
@@ -40,7 +40,7 @@ class OrderComplexShardingAlgorithmTest {
     @Test
     void bothPresent_usesMemberId() {
         long mismatchedOrderId = (99L << 9) | 7L;
-        assertEquals(List.of("demo_order_18"), algorithm.doSharding(orderTables(),
+        assertEquals(List.of("demo_order_30"), algorithm.doSharding(orderTables(),
                 both("demo_order", 612L, mismatchedOrderId)));
     }
 

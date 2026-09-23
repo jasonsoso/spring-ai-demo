@@ -1,216 +1,72 @@
-### Task 2: `ProductStock` 内存推演与 reverse
+﻿### Task 2: 发号、调试和分片测试跟上新槽位
 
 **Files:**
-- Modify: `demo2/src/main/java/com/jason/demo/demo2/product/service/core/domain/ProductStock.java`
-- Create: `demo2/src/test/java/com/jason/demo/demo2/product/ProductStockTest.java`
+- Modify: `demo2/src/main/java/com/jason/demo/demo2/order/service/infrastructure/shard/OrderComplexShardingAlgorithm.java`（约第 50 行注释）
+- Test: `demo2/src/test/java/com/jason/demo/demo2/order/OrderIdGeneratorTest.java`
+- Test: `demo2/src/test/java/com/jason/demo/demo2/order/OrderShardExplainCmdExeTest.java`
+- Test: `demo2/src/test/java/com/jason/demo/demo2/order/OrderComplexShardingAlgorithmTest.java`
 
 **Interfaces:**
-- Consumes: `ProductStockDO.stockSeq`
-- Produces: `copy` / `applyReserve` / `applyConfirm` / `applyRelease` / `applyAdjust` / `reverse`
+- Consumes: `OrderShardGene.virtualOfMember(long)`，会员 `612` → `61`，会员 `1` → `324`
+- Produces: 无新方法。只带 `orderId` 且低 9 位为 100 时仍是 `order_ds_0` / `demo_order_18`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 改 `OrderIdGeneratorTest` 的基因断言**
 
-```java
-package com.jason.demo.demo2.product;
-
-import com.jason.demo.demo2.product.service.common.ProductStockOptTypeEnum;
-import com.jason.demo.demo2.product.service.core.domain.ProductStock;
-import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-
-class ProductStockTest {
-
-    @Test
-    void from_copiesStockSeq() {
-        ProductStock source = base(100, 0, 100, 10);
-        source.setStockSeq(7L);
-        ProductStock copy = ProductStock.from(source);
-        assertEquals(7L, copy.getStockSeq());
-        assertEquals(100, copy.getStock());
-    }
-
-    @Test
-    void applyReserve_thenReverse_restores() {
-        ProductStock before = base(100, 0, 100, 10);
-        ProductStock after = before.copy().applyReserve(3);
-        after.assertBalance();
-        assertEquals(97, after.getStock());
-        assertEquals(3, after.getWithholdStock());
-        ProductStock restored = ProductStock.reverse(after, ProductStockOptTypeEnum.RESERVE, 3);
-        assertEquals(100, restored.getStock());
-        assertEquals(0, restored.getWithholdStock());
-        assertNotSame(after, restored);
-    }
-
-    @Test
-    void applyConfirm_doesNotChangeAvail() {
-        ProductStock after = base(97, 3, 100, 10).applyConfirm(3);
-        after.assertBalance();
-        assertEquals(97, after.getStock());
-        assertEquals(0, after.getWithholdStock());
-        assertEquals(97, after.getActualStock());
-        assertEquals(13, after.getSellStock());
-        ProductStock restored = ProductStock.reverse(after, ProductStockOptTypeEnum.CONFIRM, 3);
-        assertEquals(100, restored.getActualStock());
-        assertEquals(3, restored.getWithholdStock());
-        assertEquals(10, restored.getSellStock());
-    }
-
-    @Test
-    void applyRelease_restoresAvail() {
-        ProductStock after = base(97, 3, 100, 10).applyRelease(3);
-        after.assertBalance();
-        assertEquals(100, after.getStock());
-        assertEquals(0, after.getWithholdStock());
-    }
-
-    @Test
-    void applyAdjust_setsActualAndAvail() {
-        ProductStock after = base(90, 10, 100, 5).applyAdjust(80);
-        after.assertBalance();
-        assertEquals(80, after.getActualStock());
-        assertEquals(70, after.getStock());
-        assertEquals(10, after.getWithholdStock());
-    }
-
-    @Test
-    void applyAdjust_rejectsBelowWithhold() {
-        assertThrows(IllegalArgumentException.class, () -> base(90, 10, 100, 5).applyAdjust(9));
-    }
-
-    private static ProductStock base(int stock, int withhold, int actual, int sell) {
-        ProductStock s = new ProductStock();
-        s.setStockId(1L);
-        s.setProductId(9L);
-        s.setStock(stock);
-        s.setWithholdStock(withhold);
-        s.setActualStock(actual);
-        s.setSellStock(sell);
-        s.setStockSeq(0L);
-        return s;
-    }
-}
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-```powershell
-.\mvnw.cmd test "-Dtest=ProductStockTest"
-```
-
-Expected: FAIL（`copy`/`applyReserve` 等方法不存在）
-
-- [ ] **Step 3: Write minimal implementation**
-
-完整替换 `ProductStock.java`：
+`nextOrderId_low9BitsMatchMemberVirtual` 与 `differentWorkers_sameMillisSeqGene_differ` 里两处 `100L` 改为 `61L`。`sequenceOverflow_waitsNextMillis` 末尾：
 
 ```java
-package com.jason.demo.demo2.product.service.core.domain;
-
-import com.jason.demo.demo2.product.service.common.ProductStockOptTypeEnum;
-import com.jason.demo.demo2.product.service.infrastructure.dao.entity.ProductStockDO;
-
-public class ProductStock extends ProductStockDO {
-
-    public static ProductStock from(ProductStockDO source) {
-        if (source == null) {
-            return null;
-        }
-        ProductStock stock = new ProductStock();
-        stock.setId(source.getId());
-        stock.setStockId(source.getStockId());
-        stock.setProductId(source.getProductId());
-        stock.setActualStock(source.getActualStock());
-        stock.setStock(source.getStock());
-        stock.setWithholdStock(source.getWithholdStock());
-        stock.setSellStock(source.getSellStock());
-        stock.setStockSeq(source.getStockSeq());
-        stock.setUpdatedAt(source.getUpdatedAt());
-        return stock;
-    }
-
-    public ProductStock copy() {
-        return ProductStock.from(this);
-    }
-
-    public ProductStock applyReserve(int qty) {
-        setStock(getStock() - qty);
-        setWithholdStock(getWithholdStock() + qty);
-        return this;
-    }
-
-    public ProductStock applyConfirm(int qty) {
-        setActualStock(getActualStock() - qty);
-        setWithholdStock(getWithholdStock() - qty);
-        setSellStock(getSellStock() + qty);
-        return this;
-    }
-
-    public ProductStock applyRelease(int qty) {
-        setStock(getStock() + qty);
-        setWithholdStock(getWithholdStock() - qty);
-        return this;
-    }
-
-    public ProductStock applyAdjust(int targetActual) {
-        if (targetActual < 0 || targetActual < getWithholdStock()) {
-            throw new IllegalArgumentException("targetActual must be >= withhold");
-        }
-        setActualStock(targetActual);
-        setStock(targetActual - getWithholdStock());
-        return this;
-    }
-
-    public static ProductStock reverse(ProductStock after, ProductStockOptTypeEnum op, int n) {
-        ProductStock before = after.copy();
-        switch (op) {
-            case RESERVE -> {
-                before.setStock(after.getStock() + n);
-                before.setWithholdStock(after.getWithholdStock() - n);
-            }
-            case CONFIRM -> {
-                before.setActualStock(after.getActualStock() + n);
-                before.setWithholdStock(after.getWithholdStock() + n);
-                before.setSellStock(after.getSellStock() - n);
-            }
-            case RELEASE -> {
-                before.setStock(after.getStock() - n);
-                before.setWithholdStock(after.getWithholdStock() + n);
-            }
-            default -> throw new IllegalArgumentException("cannot reverse " + op);
-        }
-        return before;
-    }
-
-    public void assertBalance() {
-        if (getStock() == null || getActualStock() == null || getWithholdStock() == null) {
-            throw new IllegalStateException("stock fields must not be null");
-        }
-        if (!getStock().equals(getActualStock() - getWithholdStock())) {
-            throw new IllegalStateException("stock balance violated: stock="
-                    + getStock() + ", actual=" + getActualStock() + ", withhold=" + getWithholdStock());
-        }
-    }
-}
+assertEquals(324L, OrderShardGene.virtualOfOrderId(id));
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+序号位、机器位断言不动。
+
+- [ ] **Step 2: 改 `OrderShardExplainCmdExeTest.memberOnly`**
+
+```java
+assertEquals(61L, res.getVirtual());
+assertEquals("000111101", res.getGeneBits());
+assertEquals("order_ds_1", res.getDs());
+assertEquals("demo_order_30", res.getTable());
+assertEquals("demo_order_item_30", res.getItemTable());
+assertEquals(OrderShardSourceEnum.MEMBER_ID.name(), res.getSource());
+assertEquals(61L, res.getMemberVirtual());
+```
+
+`orderOnly` 保持订单号低 9 位 `100`、表 `demo_order_18`。
+
+`both_matchAndMismatch`：匹配用例的订单号改为 `(1L << 9) | 61L`，表改为 `demo_order_30`。不匹配用例的表也改为 `demo_order_30`（会员优先）。
+
+- [ ] **Step 3: 改 `OrderComplexShardingAlgorithmTest`**
+
+`memberIdOnly_routesDbAndTable`：
+
+```java
+assertEquals(List.of("order_ds_1"), algorithm.doSharding(List.of("order_ds_0", "order_ds_1"),
+        value("demo_order", "member_id", 612L)));
+assertEquals(List.of("demo_order_30"), algorithm.doSharding(orderTables(),
+        value("demo_order", "member_id", 612L)));
+assertEquals(List.of("demo_order_item_30"), algorithm.doSharding(itemTables(),
+        value("demo_order_item", "member_id", 612L)));
+```
+
+`orderIdOnly_extractsGene` 保持基因 `100`、`order_ds_0`、`demo_order_18`。
+
+`bothPresent_usesMemberId` 的表改为 `demo_order_30`。
+
+`OrderComplexShardingAlgorithm` 循环内注释改为：
+
+```java
+// 会员：MurmurHash3 后取低 9 位；只有订单号：取低 9 位基因。同一个 virtual 再拆库和表。
+```
+
+- [ ] **Step 4: 跑四个测试类**
 
 ```powershell
-.\mvnw.cmd test "-Dtest=ProductStockTest"
+mvn test "-Dtest=OrderShardGeneTest,OrderIdGeneratorTest,OrderShardExplainCmdExeTest,OrderComplexShardingAlgorithmTest" -q
 ```
 
-Expected: PASS
+Expected: PASS。`Tests run: 19`（基因 5 + 发号 6 + 调试 4 + 算法 4）。
 
-- [ ] **Step 5: Commit**（仅当用户要求）
+- [ ] **Step 5: Commit**
 
-```bash
-git add demo2/src/main/java/com/jason/demo/demo2/product/service/core/domain/ProductStock.java demo2/src/test/java/com/jason/demo/demo2/product/ProductStockTest.java
-git commit -m "feat(product): compute stock after-image in memory and reverse from it"
-```
-
----
-
+仅当用户要求提交时执行。本次不要提交。

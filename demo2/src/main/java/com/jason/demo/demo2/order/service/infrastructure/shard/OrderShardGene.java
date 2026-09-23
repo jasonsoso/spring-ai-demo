@@ -1,5 +1,7 @@
 package com.jason.demo.demo2.order.service.infrastructure.shard;
 
+import com.google.common.hash.Hashing;
+
 /**
  * 订单分片基因与路由纯函数。常量与公式写死，禁止做成配置项，否则已发出的订单号会对不上。
  *
@@ -24,9 +26,17 @@ public final class OrderShardGene {
     private OrderShardGene() {
     }
 
-    /** 下单时写入订单号低 9 位的值。同一会员永远同一个 virtual，所以总进同一库表。 */
+    /**
+     * Guava {@code Hashing.murmur3_32_fixed()} 后对 {@link #VIRTUAL_COUNT} 取余。种子 0，{@code hashLong} 按小端 8 字节。
+     * 用 {@code Math.floorMod}：哈希 {@code int} 可能为负，Java {@code %} 会得到负数。
+     * 不用已废弃的 {@code murmur3_32()}，那份和参考实现不一致，槽位会对不上。
+     *
+     * <p>不要写成 {@code memberId % 512}。Hutool 雪花最低 12 位是序号，逐个注册时序号恒为 0，
+     * 取低位会把订单全部打进 {@code order_ds_0.demo_order_0}。
+     */
     public static long virtualOfMember(long memberId) {
-        return memberId % VIRTUAL_COUNT;
+        int hash = Hashing.murmur3_32_fixed().hashLong(memberId).asInt();
+        return Math.floorMod(hash, VIRTUAL_COUNT);
     }
 
     /** 只拿订单号时拆低 9 位，供超时关单 / selectById 直达库表。 */

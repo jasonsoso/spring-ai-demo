@@ -2,7 +2,7 @@
 
 **日期**: 2026-09-23  
 **项目**: spring-ai-demo / demo2  
-**状态**: 待实现  
+**状态**: 已实现（并入 [archive/2026-08-30-order-sharding-gene.md](../archive/2026-08-30-order-sharding-gene.md)）  
 **前置**: [2026-08-30-order-sharding-gene-design.md](./2026-08-30-order-sharding-gene-design.md)、[2026-08-31-order-id-bit-layout-design.md](./2026-08-31-order-id-bit-layout-design.md)  
 **范围**: 只改「会员号 → 槽位」的算法。会员号生成、库表拆法、订单号位图、只拿订单号时的拆法都不改。
 
@@ -28,12 +28,12 @@
 | 维度 | 选择 |
 |------|------|
 | 会员号 | 不改，仍 `SnowflakeIdGenerator.nextId()` |
-| 槽位 | MurmurHash3（x86 32 位，种子 0）再和 `0x1FF` 按位与 |
+| 槽位 | MurmurHash3（x86 32 位，种子 0）再 `Math.floorMod(hash, 512)` |
 | 不用 | ShardingSphere `HASH_MOD`；`Long.hashCode`；黄金分割乘法 |
 | 库 / 表 | 仍 `virtual % 2`、`(virtual / 2) % 32` |
 | 只拿订单号 | 仍 `orderId & 0x1FF` |
 | 已有分片订单 | 不迁移、不改号。分片库中此前 7 笔已删除 |
-| 依赖 | 不引入 Guava。算法写在 `OrderShardGene` 内 |
+| 依赖 | Guava `Hashing.murmur3_32_fixed().hashLong`（种子 0，小端 8 字节）。不用已废弃的 `murmur3_32()` |
 
 不用 `HASH_MOD`：它是单列标准算法，接不上现在「有会员号用会员号、只有订单号读末尾余数」的复合策略；库 `% 2`、表 `% 32` 分开取模还会让一个库只落偶数表。
 
@@ -45,7 +45,7 @@
 
 ```text
 hash    = MurmurHash3_x86_32(会员号的 8 字节, seed = 0)
-virtual = hash & 0x1FF                 // 0..511
+virtual = floorMod(hash, 512)          // 0..511；512 是 2^9，与 hash & 0x1FF 相同
         = orderId & 0x1FF              // 只拿订单号时
 
 ds      = virtual % 2
@@ -54,9 +54,9 @@ table   = (virtual / 2) % 32
 
 会员号按**小端**、无符号 8 字节送入。块内 4 字节也按小端拼，每个字节先 `& 0xFF`，避免 Java 字节的符号位进高位。常数用 Austin Appleby 的 x86 32 位版本：`c1 = 0xcc9e2d51`，`c2 = 0x1b873593`，尾部 `fmix` 用 `0x85ebca6b` 与 `0xc2b2ae35`。种子固定 0。
 
-余数用按位与，不用 Java 的 `%`。哈希的 `int` 可能为负，负数取模会得到负数。
+余数用 `Math.floorMod`，不用 Java 的 `%`。哈希的 `int` 可能为负，负数用 `%` 会得到负数。`512 = 2^9`，所以 `floorMod(hash, 512)` 与 `hash & 0x1FF` 是同一个余数。
 
-这个函数写死。换种子、换端序或改成别的哈希，已发出的订单号会对不上会员。
+`OrderShardGene.virtualOfMember` 调用 Guava `Hashing.murmur3_32_fixed().hashLong(memberId)`，再 `floorMod(hash, VIRTUAL_COUNT)`。换种子、换端序或改成别的哈希，已发出的订单号会对不上会员。
 
 发号仍走 `OrderIdGenerator.nextOrderId`，它已经调用 `virtualOfMember`。订单号位图不变：`[41 时间][5 机器][8 序号][9 基因]`，基因改成上面的 `virtual`。
 
@@ -64,7 +64,7 @@ table   = (virtual / 2) % 32
 
 ## 3. 改动边界
 
-只改 `OrderShardGene.virtualOfMember`（及同类里的私有哈希方法）。
+只改 `OrderShardGene.virtualOfMember`。哈希用 Guava，不再在类里手写 MurmurHash3。
 
 不改：
 

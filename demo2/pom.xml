@@ -420,6 +420,12 @@
             <artifactId>hutool-core</artifactId>
             <version>${hutool.version}</version>
         </dependency>
+        <!-- 会员槽位 MurmurHash3：Hashing.murmur3_32_fixed()。Boot 4.1 BOM 不管 Guava。 -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>33.7.1-jre</version>
+        </dependency>
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>

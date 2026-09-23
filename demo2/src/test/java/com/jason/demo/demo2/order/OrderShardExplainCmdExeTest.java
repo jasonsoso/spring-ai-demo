@@ -28,13 +28,13 @@ class OrderShardExplainCmdExeTest {
         OrderShardExplainReqVO req = new OrderShardExplainReqVO();
         req.setMemberId(612L);
         OrderShardExplainResVO res = exe.execute(req);
-        assertEquals(100L, res.getVirtual());
-        assertEquals("001100100", res.getGeneBits());
-        assertEquals("order_ds_0", res.getDs());
-        assertEquals("demo_order_18", res.getTable());
-        assertEquals("demo_order_item_18", res.getItemTable());
+        assertEquals(61L, res.getVirtual());
+        assertEquals("000111101", res.getGeneBits());
+        assertEquals("order_ds_1", res.getDs());
+        assertEquals("demo_order_30", res.getTable());
+        assertEquals("demo_order_item_30", res.getItemTable());
         assertEquals(OrderShardSourceEnum.MEMBER_ID.name(), res.getSource());
-        assertEquals(100L, res.getMemberVirtual());
+        assertEquals(61L, res.getMemberVirtual());
         assertNull(res.getOrderVirtual());
         assertNull(res.getGeneMatch());
     }
@@ -54,17 +54,17 @@ class OrderShardExplainCmdExeTest {
     void both_matchAndMismatch() {
         OrderShardExplainReqVO match = new OrderShardExplainReqVO();
         match.setMemberId(612L);
-        match.setOrderId((1L << 9) | 100L);
+        match.setOrderId((1L << 9) | 61L);
         OrderShardExplainResVO ok = exe.execute(match);
         assertEquals(OrderShardSourceEnum.MEMBER_ID.name(), ok.getSource());
         assertTrue(ok.getGeneMatch());
-        assertEquals("demo_order_18", ok.getTable());
+        assertEquals("demo_order_30", ok.getTable());
 
         OrderShardExplainReqVO bad = new OrderShardExplainReqVO();
         bad.setMemberId(612L);
         bad.setOrderId((1L << 9) | 7L);
         OrderShardExplainResVO res = exe.execute(bad);
         assertEquals(Boolean.FALSE, res.getGeneMatch());
-        assertEquals("demo_order_18", res.getTable());
+        assertEquals("demo_order_30", res.getTable());
     }
 }

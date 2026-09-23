@@ -13,7 +13,7 @@
 
 ### 1.1 背景
 
-分库分表已落地：订单号低 **9 bit** 为基因（`memberId % 512`），天花板 **2 库 × 256 表**。
+分库分表已落地：订单号低 **9 bit** 为基因（`MurmurHash3(memberId) & 0x1FF`），天花板 **2 库 × 256 表**。
 
 当前实现是 **Hutool 标准雪花再 `embed` 覆盖低 9 位**：
 
@@ -39,7 +39,7 @@ embed 后: 低 9 位被基因盖掉 → 序号有效约剩 3 bit（同毫秒同�
 | 维度 | 选择 |
 |------|------|
 | 位图 | `[1 符号][41 时间][5 机器][8 序号][9 基因]` |
-| 基因 | 仍 9 bit；`virtual = memberId % 512`；低位嵌入 |
+| 基因 | 仍 9 bit；`virtual = MurmurHash3(memberId) & 0x1FF`；低位嵌入 |
 | 机器 | 5 bit（0～31）；来自现有 `SnowflakeNodeAllocator` 分配的 **`workerId`** |
 | 数据中心 | **不进入订单号**（原雪花 5 bit 腾给序号侧） |
 | 序号 | 8 bit（0～255）；**每机每毫秒共用一个序号**（不是每基因一个）；跨机靠机器位保证唯一 |
@@ -80,7 +80,7 @@ embed 后: 低 9 位被基因盖掉 → 序号有效约剩 3 bit（同毫秒同�
 | 时间 | 41 | `nowMs - epoch`，epoch = `1288834974657L` |
 | 机器 | 5 | `workerId` ∈ [0, 31] |
 | 序号 | 8 | 同一毫秒内自增，∈ [0, 255] |
-| 基因 | 9 | `memberId % 512` |
+| 基因 | 9 | `MurmurHash3(memberId) & 0x1FF` |
 
 右移让位：机器+序号+基因 = 5+8+9 = **22** bit（与原雪花「数据中心+机器+序号」总宽相同）。
 
@@ -88,7 +88,7 @@ embed 后: 低 9 位被基因盖掉 → 序号有效约剩 3 bit（同毫秒同�
 orderId = ((ts - epoch) << 22)
         | (workerId << 17)
         | (seq << 9)
-        | (memberId % 512)
+        | (MurmurHash3(memberId) & 0x1FF)
 ```
 
 拆基因（**不变**）：
@@ -143,7 +143,7 @@ table   = (virtual / 2) % 32    // 现网 TABLE_COUNT；天花板改 256 时只�
 
 ```text
 synchronized nextOrderId(memberId):
-  gene = memberId % 512
+  gene = MurmurHash3(memberId) & 0x1FF
   now = currentTimeMillis()
   if now < lastTimestamp:
     抛错（时钟回拨），不盲发
@@ -205,7 +205,7 @@ flowchart LR
 
 | 对象 | 断言 |
 |------|------|
-| 基因 | 连续 `nextOrderId(612)` 低 9 位恒为 100 |
+| 基因 | 连续 `nextOrderId(612)` 低 9 位恒为 61 |
 | 唯一性 | 同 `workerId` 连续数千次（含跨毫秒）两两不同 |
 | 序号 | 同一毫秒内（可 mock 时钟）发满 256 个后进入下一毫秒，序号回到 0 |
 | 机器 | `workerId=1` 与 `workerId=2` 同毫秒同 `seq` 同基因时，`orderId` 不同（差在机器段） |

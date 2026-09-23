@@ -136,8 +136,10 @@ VIRTUAL_COUNT = 512          // 2^9，等于天花板 2×256
 DB_COUNT      = 2
 TABLE_COUNT   = 32           // 现在；天花板 256
 
-virtual = memberId % 512
-        = orderId  & 0x1FF   // 只拿订单号时
+virtual = MurmurHash3_x86_32(memberId 小端 8 字节, seed 0) & 0x1FF
+        = orderId & 0x1FF    // 只拿订单号时
+
+禁止 `memberId % 512`：Hutool 雪花最低 12 位是序号，逐个注册时序号恒为 0，取低位会全部进 `order_ds_0.demo_order_0`。
 
 ds      = virtual % 2                    // 0..1，扩表不变
 table   = (virtual / 2) % TABLE_COUNT    // 现在 32；以后改 256
@@ -148,7 +150,7 @@ table   = (virtual / 2) % TABLE_COUNT    // 现在 32；以后改 256
 ```mermaid
 flowchart TD
   subgraph 基因
-    M[memberId] -->|mod 512| V[virtual 0..511]
+    M[memberId] -->|MurmurHash3 再取低 9 位| V[virtual 0..511]
     O[orderId] -->|AND 0x1FF| V
   end
   V -->|virtual % 2| DS["ds = order_ds_0 / 1"]
@@ -159,7 +161,7 @@ flowchart TD
 发号：`raw = SnowflakeIdGenerator.nextId()`，再
 
 ```text
-orderId = (raw & ~0x1FF) | (memberId % 512)
+orderId = (raw & ~0x1FF) | (MurmurHash3(memberId) & 0x1FF)
 ```
 
 雪花序号原 12 bit，被占 9 bit，剩 3 bit（每毫秒每节点 8 个号）。Demo 够用。`itemId`、延时任务 ID 仍走未改写的 `nextId()`。
@@ -181,7 +183,7 @@ orderId = (raw & ~0x1FF) | (memberId % 512)
 
 | SQL 分片列 | 怎么算 `virtual` |
 |------------|------------------|
-| 有 `member_id` | `memberId % 512` |
+| 有 `member_id` | `MurmurHash3(memberId) & 0x1FF` |
 | 只有 `order_id` | `orderId & 0x1FF` |
 | 两个都有 | 用 `member_id`；与订单号低 9 位不一致则本分片无行，业务 404 |
 | 两个都没有 | **抛错，禁止广播 64 张表** |
@@ -191,7 +193,7 @@ orderId = (raw & ~0x1FF) | (memberId % 512)
 ```mermaid
 flowchart TD
   SQL[分片 SQL] --> COL{精确列}
-  COL -->|有 member_id| MV["virtual = memberId % 512"]
+  COL -->|有 member_id| MV["virtual = MurmurHash3(memberId) AND 0x1FF"]
   COL -->|只有 order_id| OV["virtual = orderId AND 0x1FF"]
   COL -->|两者都没有| ERR[抛错 禁止广播]
   MV --> PICK[挑 ds + 表]
@@ -245,23 +247,23 @@ flowchart TD
 { "orderId": "2085...", "memberId": 612 }
 ```
 
-`612 % 512 = 100`。响应：
+会员 `612` 槽位 `61`。响应：
 
 ```json
 {
-  "virtual": 100,
-  "geneBits": "001100100",
-  "ds": "order_ds_0",
-  "table": "demo_order_18",
-  "itemTable": "demo_order_item_18",
+  "virtual": 61,
+  "geneBits": "000111101",
+  "ds": "order_ds_1",
+  "table": "demo_order_30",
+  "itemTable": "demo_order_item_30",
   "source": "MEMBER_ID",
-  "memberVirtual": 100,
-  "orderVirtual": 100,
+  "memberVirtual": 61,
+  "orderVirtual": 61,
   "geneMatch": true
 }
 ```
 
-（`ds = 100 % 2 = 0`，`table = (100 / 2) % 32 = 18`。）
+（`ds = 61 % 2 = 1`，`table = (61 / 2) % 32 = 30`。）
 
 | 输入 | `source` | 展示用的 ds/table | `geneMatch` |
 |------|----------|-------------------|-------------|
@@ -311,7 +313,7 @@ sequenceDiagram
 
   U->>C: orderPlace
   C->>G: nextOrderId(memberId)
-  Note over G: (snowflake AND ~0x1FF) OR (memberId % 512)
+  Note over G: (snowflake AND ~0x1FF) OR (MurmurHash3(memberId) & 0x1FF)
   C->>A: fireEvent INIT SUBMIT_ORDER
   A->>SS: insert 主表+明细 带 member_id
   SS->>DB: 单库单表 LOCAL TX
@@ -350,7 +352,7 @@ sequenceDiagram
 | 对象 | 断言 |
 |------|------|
 | `OrderShardGene` | embed / 拆 virtual / ds / table；边界 virtual 0、511；禁止 `table=virtual%32` 的错误分布（两库 0～31 表都有行） |
-| `OrderIdGenerator` | 同一 `memberId` 连续发号，低 9 位恒等于 `memberId%512`，高位仍变化 |
+| `OrderIdGenerator` | 同一 `memberId` 连续发号，低 9 位恒等于 `MurmurHash3(memberId) & 0x1FF`，高位仍变化 |
 | 算法 | 仅 member_id、仅 order_id、两者一致、两者不一致、两者皆无（禁止广播）；主表与明细节点名 |
 | `OrderShardExplainCmdExe` | 三种输入 + 空输入 10002 |
 | 现有 CmdExe | 继续 mock 仓储；下单 mock `OrderIdGenerator` |

@@ -1,138 +1,125 @@
-### Task 1: Schema、DO、错误码、幂等键
+﻿- Consumes: 鐜版湁 `GENE_MASK`銆乣dsIndex`銆乣tableIndex`銆乣geneBits`銆乣dsName`銆乣orderTableName`
+- Produces: `public static long virtualOfMember(long memberId)`锛岃繑鍥?`0..511`
 
-**Files:**
-- Create: `demo2/src/main/resources/db/product-stock-seq-schema.sql`
-- Create: `demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductStockIdempotentKeys.java`
-- Create: `demo2/src/test/java/com/jason/demo/demo2/product/ProductStockIdempotentKeysTest.java`
-- Modify: `demo2/src/main/resources/db/product-module-schema.sql`
-- Modify: `demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductErrorCodeEnum.java`
-- Modify: `demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockDO.java`
-- Modify: `demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockLogDO.java`
+- [ ] **Step 1: 鎶婂け璐ユ祴璇曞啓杩?`OrderShardGeneTest`**
 
-**Interfaces:**
-- Consumes: 无
-- Produces: `ProductStockDO.stockSeq`、`ProductStockLogDO.idempotentKey`、`ProductErrorCodeEnum.ADJUST_REQUIRES_OFF_SHELF/ADJUST_INVALID_TARGET/STOCK_SYNC_LAG`、`ProductStockIdempotentKeys`
-
-- [ ] **Step 1: Write the failing test**
-
+鏇挎崲 `virtual612_routesToDs0Table18` 涓?`boundaries_zeroAnd511` 閲屽 `virtualOfMember` 鐨勬柇瑷€銆俙dsIndex(0L)`銆乣dsIndex(511L)`銆乣geneBits(511L)` 娴嬬殑鏄師濮嬫Ы浣嶆媶娉曪紝涓嶈鏀广€?
 ```java
-package com.jason.demo.demo2.product;
+@Test
+void virtual612_routesToDs1Table30() {
+    long virtual = OrderShardGene.virtualOfMember(612L);
+    assertEquals(61L, virtual);
+    assertEquals(100L, OrderShardGene.virtualOfOrderId((55L << 9) | 100L));
+    assertEquals(1, OrderShardGene.dsIndex(virtual));
+    assertEquals(30, OrderShardGene.tableIndex(virtual));
+    assertEquals("000111101", OrderShardGene.geneBits(virtual));
+    assertEquals("order_ds_1", OrderShardGene.dsName(virtual));
+    assertEquals("demo_order_30", OrderShardGene.orderTableName(virtual));
+    assertEquals("demo_order_item_30", OrderShardGene.itemTableName(virtual));
+}
 
-import com.jason.demo.demo2.product.service.common.ProductErrorCodeEnum;
-import com.jason.demo.demo2.product.service.common.ProductStockIdempotentKeys;
-import com.jason.demo.demo2.product.service.common.ProductStockOptTypeEnum;
-import org.junit.jupiter.api.Test;
+@Test
+void boundaries_zeroAnd511() {
+    assertEquals(252L, OrderShardGene.virtualOfMember(0L));
+    assertEquals(0, OrderShardGene.dsIndex(0L));
+    assertEquals(0, OrderShardGene.tableIndex(0L));
+    assertEquals(60L, OrderShardGene.virtualOfMember(511L));
+    assertEquals(1, OrderShardGene.dsIndex(511L));
+    assertEquals(255 % 32, OrderShardGene.tableIndex(511L));
+    assertEquals("111111111", OrderShardGene.geneBits(511L));
+}
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
-class ProductStockIdempotentKeysTest {
-
-    @Test
-    void of_joinsOrderProductOpt() {
-        assertEquals("100:9001:RESERVE",
-                ProductStockIdempotentKeys.of(100L, 9001L, ProductStockOptTypeEnum.RESERVE));
-        assertEquals("ADJUST:55", ProductStockIdempotentKeys.ofAdjust(55L));
-    }
-
-    @Test
-    void newErrorCodes_areStable() {
-        assertEquals(40008, ProductErrorCodeEnum.ADJUST_REQUIRES_OFF_SHELF.getCode());
-        assertEquals(40009, ProductErrorCodeEnum.ADJUST_INVALID_TARGET.getCode());
-        assertEquals(40010, ProductErrorCodeEnum.STOCK_SYNC_LAG.getCode());
-    }
+@Test
+void snowflakeZeroSequence_plusOneMillisChangesSlot() {
+    long first = 0x1D090DD4C4000000L;
+    long second = 0x1D090E2966800000L;
+    long plusOneMillis = first + (1L << 22);
+    assertEquals(44L, OrderShardGene.virtualOfMember(first));
+    assertEquals("order_ds_0", OrderShardGene.dsName(OrderShardGene.virtualOfMember(first)));
+    assertEquals("demo_order_22", OrderShardGene.orderTableName(OrderShardGene.virtualOfMember(first)));
+    assertEquals(23L, OrderShardGene.virtualOfMember(second));
+    assertEquals("order_ds_1", OrderShardGene.dsName(OrderShardGene.virtualOfMember(second)));
+    assertEquals("demo_order_11", OrderShardGene.orderTableName(OrderShardGene.virtualOfMember(second)));
+    assertEquals(487L, OrderShardGene.virtualOfMember(plusOneMillis));
+    assertNotEquals(OrderShardGene.virtualOfMember(first), OrderShardGene.virtualOfMember(plusOneMillis));
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 璺戞祴璇曪紝纭澶辫触**
 
-Run（在 `demo2/`）:
-
+鍦?`demo2` 鐩綍锛?
 ```powershell
-.\mvnw.cmd test "-Dtest=ProductStockIdempotentKeysTest"
+mvn test "-Dtest=OrderShardGeneTest" -q
 ```
 
-Expected: FAIL（`ProductStockIdempotentKeys` 不存在 和/或 枚举常量不存在）
+Expected: FAIL銆俙virtualOfMember(612L)` 浠嶆槸 `100`锛屼笉鏄?`61`銆?
+- [ ] **Step 3: 瀹炵幇鍝堝笇**
 
-- [ ] **Step 3: Write minimal implementation**
-
-`ProductErrorCodeEnum` 在 `STOCK_NOT_FOUND` 后追加（保留现有 40001–40005、40007）：
-
+鎶?`virtualOfMember` 鎹㈡垚涓嬮潰鐨勬柟娉曪紝骞跺姞涓婁笁涓鏈夋柟娉曘€傜被涓婂凡鏈夌殑銆岀姝?`table = virtual % 32`銆嶆敞閲婁繚鐣欍€?
 ```java
-    ADJUST_REQUIRES_OFF_SHELF(40008, "调整库存前必须先下架"),
-    ADJUST_INVALID_TARGET(40009, "目标现货非法"),
-    STOCK_SYNC_LAG(40010, "库存同步未追上");
-```
+/**
+ * MurmurHash3 鍚庡啀鍙栦綆 9 浣嶃€傜瀛愩€佺搴忋€佸父鏁板啓姝伙紝鏀逛簡宸插彂鍑虹殑璁㈠崟鍙蜂細瀵逛笉涓婁細鍛樸€? *
+ * <p>涓嶈鍐欐垚 {@code memberId % 512}銆侶utool 闆姳鏈€浣?12 浣嶆槸搴忓彿锛岄€愪釜娉ㄥ唽鏃跺簭鍙锋亽涓?0锛? * 鍙栦綆浣嶄細鎶婅鍗曞叏閮ㄦ墦杩?{@code order_ds_0.demo_order_0}銆? */
+public static long virtualOfMember(long memberId) {
+    return murmur3(memberId) & GENE_MASK;
+}
 
-`ProductStockIdempotentKeys.java`：
+/** x86 32 浣嶏紝绉嶅瓙 0銆備細鍛樺彿灏忕 8 瀛楄妭锛氫綆 32 浣嶅湪鍓嶃€?*/
+private static int murmur3(long value) {
+    int hash = mix(0, (int) value);
+    hash = mix(hash, (int) (value >>> 32));
+    hash ^= 8;
+    return fmix(hash);
+}
 
-```java
-package com.jason.demo.demo2.product.service.common;
+private static int mix(int hash, int block) {
+    final int c1 = 0xcc9e2d51;
+    final int c2 = 0x1b873593;
+    int k = block * c1;
+    k = Integer.rotateLeft(k, 15);
+    k *= c2;
+    hash ^= k;
+    hash = Integer.rotateLeft(hash, 13);
+    return hash * 5 + 0xe6546b64;
+}
 
-public final class ProductStockIdempotentKeys {
-
-    private ProductStockIdempotentKeys() {
-    }
-
-    public static String of(long orderId, long productId, ProductStockOptTypeEnum optType) {
-        return orderId + ":" + productId + ":" + optType.name();
-    }
-
-    public static String ofAdjust(long adjustId) {
-        return "ADJUST:" + adjustId;
-    }
+private static int fmix(int hash) {
+    hash ^= hash >>> 16;
+    hash *= 0x85ebca6b;
+    hash ^= hash >>> 13;
+    hash *= 0xc2b2ae35;
+    hash ^= hash >>> 16;
+    return hash;
 }
 ```
 
-`ProductStockDO` 增加：
-
-```java
-    private Long stockSeq;
-```
-
-`ProductStockLogDO` 增加（放在 `optType` 后）：
-
-```java
-    private String idempotentKey;
-```
-
-`product-module-schema.sql`：
-
-- `demo_product_stock` 在 `sell_stock` 后加 `stock_seq BIGINT NOT NULL DEFAULT 0 COMMENT '已投影的 Redis seq'`
-- seed `INSERT INTO demo_product_stock` 增加列 `stock_seq`，三行均写 `0`
-- `demo_product_stock_log` 在 `opt_type` 后加 `idempotent_key VARCHAR(64) NOT NULL COMMENT '幂等键'`，并 `UNIQUE KEY uk_stock_log_idempotent (idempotent_key)`
-
-`product-stock-seq-schema.sql`（已有库执行一次；列/索引已存在时该文件会失败，属预期）：
-
-```sql
-ALTER TABLE demo_product_stock
-    ADD COLUMN stock_seq BIGINT NOT NULL DEFAULT 0 COMMENT '已投影的 Redis seq' AFTER sell_stock;
-
-ALTER TABLE demo_product_stock_log
-    ADD COLUMN idempotent_key VARCHAR(64) NULL COMMENT '幂等键' AFTER opt_type;
-
-UPDATE demo_product_stock_log
-SET idempotent_key = CONCAT(IFNULL(order_id, '0'), ':', product_id, ':', opt_type)
-WHERE idempotent_key IS NULL;
-
-ALTER TABLE demo_product_stock_log
-    MODIFY idempotent_key VARCHAR(64) NOT NULL,
-    ADD UNIQUE KEY uk_stock_log_idempotent (idempotent_key);
-```
-
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: 鍐嶈窇 `OrderShardGeneTest`**
 
 ```powershell
-.\mvnw.cmd test "-Dtest=ProductStockIdempotentKeysTest"
+mvn test "-Dtest=OrderShardGeneTest" -q
 ```
 
-Expected: PASS
+Expected: PASS锛? 涓祴璇曪級銆?
+- [ ] **Step 5: Commit**
 
-- [ ] **Step 5: Commit**（仅当用户要求）
+浠呭綋鐢ㄦ埛瑕佹眰鎻愪氦鏃讹細
 
-```bash
-git add demo2/src/main/resources/db/product-module-schema.sql demo2/src/main/resources/db/product-stock-seq-schema.sql demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductErrorCodeEnum.java demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductStockIdempotentKeys.java demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockDO.java demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockLogDO.java demo2/src/test/java/com/jason/demo/demo2/product/ProductStockIdempotentKeysTest.java
-git commit -m "feat(product): add stock_seq, log idempotent key, and 40008-40010"
+```powershell
+git add demo2/src/main/java/com/jason/demo/demo2/order/service/infrastructure/shard/OrderShardGene.java demo2/src/test/java/com/jason/demo/demo2/order/OrderShardGeneTest.java
+git commit -m "fix(order): hash member id into shard slot with MurmurHash3"
 ```
 
 ---
 
+### Task 2: 鍙戝彿銆佽皟璇曞拰鍒嗙墖娴嬭瘯璺熶笂鏂版Ы浣?
+**Files:**
+- Modify: `demo2/src/main/java/com/jason/demo/demo2/order/service/infrastructure/shard/OrderComplexShardingAlgorithm.java`锛堢害绗?50 琛屾敞閲婏級
+- Test: `demo2/src/test/java/com/jason/demo/demo2/order/OrderIdGeneratorTest.java`
+- Test: `demo2/src/test/java/com/jason/demo/demo2/order/OrderShardExplainCmdExeTest.java`
+- Test: `demo2/src/test/java/com/jason/demo/demo2/order/OrderComplexShardingAlgorithmTest.java`
+
+**Interfaces:**
+- Consumes: `OrderShardGene.virtualOfMember(long)`锛屼細鍛?`612` 鈫?`61`锛屼細鍛?`1` 鈫?`324`
+- Produces: 鏃犳柊鏂规硶銆傚彧甯?`orderId` 涓斾綆 9 浣嶄负 100 鏃朵粛鏄?`order_ds_0` / `demo_order_18`
+
+- [ ] **Step 1: 鏀?`OrderIdGeneratorTest` 鐨勫熀鍥犳柇瑷€**

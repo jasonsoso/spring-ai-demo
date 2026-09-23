@@ -46,7 +46,7 @@ public class OrderComplexShardingAlgorithm implements ComplexKeysShardingAlgorit
         boolean fromOrderId = memberIds.isEmpty();
         // IN 多个 id 会得到多个目标。库策略、表策略各进一次本方法。
         for (Long id : values) {
-            // 会员：memberId % 512；只有订单号：取低 9 位基因。同一个 virtual 再拆库和表。
+            // 会员：MurmurHash3 后取余；只有订单号：取低 9 位基因。同一个 virtual 再拆库和表。
             long virtual = fromOrderId
                     ? OrderShardGene.virtualOfOrderId(id)
                     : OrderShardGene.virtualOfMember(id);

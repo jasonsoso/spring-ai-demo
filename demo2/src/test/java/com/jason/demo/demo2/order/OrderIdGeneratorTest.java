@@ -23,8 +23,8 @@ class OrderIdGeneratorTest {
         OrderIdGenerator gen = new OrderIdGenerator(1L, now::get);
         long first = gen.nextOrderId(612L);
         long second = gen.nextOrderId(612L);
-        assertEquals(100L, OrderShardGene.virtualOfOrderId(first));
-        assertEquals(100L, OrderShardGene.virtualOfOrderId(second));
+        assertEquals(61L, OrderShardGene.virtualOfOrderId(first));
+        assertEquals(61L, OrderShardGene.virtualOfOrderId(second));
         assertNotEquals(first, second);
     }
 
@@ -47,8 +47,8 @@ class OrderIdGeneratorTest {
         OrderIdGenerator w2 = new OrderIdGenerator(2L, () -> ts);
         long a = w1.nextOrderId(612L);
         long b = w2.nextOrderId(612L);
-        assertEquals(100L, OrderShardGene.virtualOfOrderId(a));
-        assertEquals(100L, OrderShardGene.virtualOfOrderId(b));
+        assertEquals(61L, OrderShardGene.virtualOfOrderId(a));
+        assertEquals(61L, OrderShardGene.virtualOfOrderId(b));
         assertNotEquals(a, b);
         assertEquals(1L, (a >> 17) & 0x1FL);
         assertEquals(2L, (b >> 17) & 0x1FL);
@@ -74,7 +74,7 @@ class OrderIdGeneratorTest {
         advancer.join(2000);
         assertEquals(EPOCH + 4_000_001L, (id >> 22) + EPOCH);
         assertEquals(0L, (id >> 9) & 0xFFL);
-        assertEquals(1L, OrderShardGene.virtualOfOrderId(id));
+        assertEquals(324L, OrderShardGene.virtualOfOrderId(id));
     }
 
     @Test

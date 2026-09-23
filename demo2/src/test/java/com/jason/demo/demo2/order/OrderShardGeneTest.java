@@ -13,27 +13,42 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OrderShardGeneTest {
 
     @Test
-    void virtual612_routesToDs0Table18() {
+    void virtual612_routesToDs1Table30() {
         long virtual = OrderShardGene.virtualOfMember(612L);
-        assertEquals(100L, virtual);
+        assertEquals(61L, virtual);
         assertEquals(100L, OrderShardGene.virtualOfOrderId((55L << 9) | 100L));
-        assertEquals(0, OrderShardGene.dsIndex(virtual));
-        assertEquals(18, OrderShardGene.tableIndex(virtual));
-        assertEquals("001100100", OrderShardGene.geneBits(virtual));
-        assertEquals("order_ds_0", OrderShardGene.dsName(virtual));
-        assertEquals("demo_order_18", OrderShardGene.orderTableName(virtual));
-        assertEquals("demo_order_item_18", OrderShardGene.itemTableName(virtual));
+        assertEquals(1, OrderShardGene.dsIndex(virtual));
+        assertEquals(30, OrderShardGene.tableIndex(virtual));
+        assertEquals("000111101", OrderShardGene.geneBits(virtual));
+        assertEquals("order_ds_1", OrderShardGene.dsName(virtual));
+        assertEquals("demo_order_30", OrderShardGene.orderTableName(virtual));
+        assertEquals("demo_order_item_30", OrderShardGene.itemTableName(virtual));
     }
 
     @Test
     void boundaries_zeroAnd511() {
-        assertEquals(0L, OrderShardGene.virtualOfMember(0L));
+        assertEquals(252L, OrderShardGene.virtualOfMember(0L));
         assertEquals(0, OrderShardGene.dsIndex(0L));
         assertEquals(0, OrderShardGene.tableIndex(0L));
-        assertEquals(511L, OrderShardGene.virtualOfMember(511L));
+        assertEquals(60L, OrderShardGene.virtualOfMember(511L));
         assertEquals(1, OrderShardGene.dsIndex(511L));
         assertEquals(255 % 32, OrderShardGene.tableIndex(511L));
         assertEquals("111111111", OrderShardGene.geneBits(511L));
+    }
+
+    @Test
+    void snowflakeZeroSequence_plusOneMillisChangesSlot() {
+        long first = 0x1D090DD4C4000000L;
+        long second = 0x1D090E2966800000L;
+        long plusOneMillis = first + (1L << 22);
+        assertEquals(44L, OrderShardGene.virtualOfMember(first));
+        assertEquals("order_ds_0", OrderShardGene.dsName(OrderShardGene.virtualOfMember(first)));
+        assertEquals("demo_order_22", OrderShardGene.orderTableName(OrderShardGene.virtualOfMember(first)));
+        assertEquals(23L, OrderShardGene.virtualOfMember(second));
+        assertEquals("order_ds_1", OrderShardGene.dsName(OrderShardGene.virtualOfMember(second)));
+        assertEquals("demo_order_11", OrderShardGene.orderTableName(OrderShardGene.virtualOfMember(second)));
+        assertEquals(487L, OrderShardGene.virtualOfMember(plusOneMillis));
+        assertNotEquals(OrderShardGene.virtualOfMember(first), OrderShardGene.virtualOfMember(plusOneMillis));
     }
 
     @Test

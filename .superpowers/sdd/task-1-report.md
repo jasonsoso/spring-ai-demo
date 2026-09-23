@@ -1,127 +1,62 @@
-# Task 1 Report: Schema、DO、错误码、幂等键
+# Task 1 Report: 槽位改为 MurmurHash3
 
-**Date:** 2026-08-27  
-**Branch:** feat/redis-stock-consistency  
-**Status:** DONE
+## Status
 
-## Summary
+DONE
 
-为 Redis 热库存与 MySQL 最终一致方案奠定数据层与公共常量基础：新增 `stock_seq` 列与 `idempotent_key` 列（含 DDL 与迁移脚本）、扩展 DO 字段、追加错误码 40008–40010、实现幂等键工具类，并通过 TDD 单测验证。
+## TDD RED
 
-## Changed Files
-
-| Action | Path |
-|--------|------|
-| Create | `demo2/src/main/resources/db/product-stock-seq-schema.sql` |
-| Create | `demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductStockIdempotentKeys.java` |
-| Create | `demo2/src/test/java/com/jason/demo/demo2/product/ProductStockIdempotentKeysTest.java` |
-| Modify | `demo2/src/main/resources/db/product-module-schema.sql` |
-| Modify | `demo2/src/main/java/com/jason/demo/demo2/product/service/common/ProductErrorCodeEnum.java` |
-| Modify | `demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockDO.java` |
-| Modify | `demo2/src/main/java/com/jason/demo/demo2/product/service/infrastructure/dao/entity/ProductStockLogDO.java` |
-
-## TDD Evidence
-
-### Step 1–2: RED（先写失败测试）
-
-**命令（`demo2/`）：**
+**Command (from `demo2`):**
 
 ```powershell
-.\mvnw.cmd test "-Dtest=ProductStockIdempotentKeysTest"
+Set-Location D:/ai/spring-ai-demo/demo2; mvn test "-Dtest=OrderShardGeneTest" -q
 ```
 
-**结果：** BUILD FAILURE（exit code 1）
+**Result:** FAIL — Tests run: 5, Failures: 3
 
-**失败原因：**
+**Relevant output:**
 
 ```
-[ERROR] ProductStockIdempotentKeysTest.java:[4,51] 找不到符号
-  符号:   类 ProductStockIdempotentKeys
+OrderShardGeneTest.virtual612_routesToDs1Table30:18 expected: <61> but was: <100>
+OrderShardGeneTest.boundaries_zeroAnd511:30 expected: <252> but was: <0>
+OrderShardGeneTest.snowflakeZeroSequence_plusOneMillisChangesSlot:44 expected: <44> but was: <0>
 ```
 
-编译阶段失败：`ProductStockIdempotentKeys` 类尚不存在；`ProductErrorCodeEnum.ADJUST_REQUIRES_OFF_SHELF` 等枚举常量亦未定义。符合 TDD RED 预期。
+Matches brief expectation: `virtualOfMember(612L)` still `100` (modulo), not `61`.
 
-### Step 3–4: GREEN（最小实现后重跑）
+## TDD GREEN
 
-**命令：**
+**Command:**
 
 ```powershell
-.\mvnw.cmd test "-Dtest=ProductStockIdempotentKeysTest"
+mvn test "-Dtest=OrderShardGeneTest" -q
 ```
 
-**结果：** BUILD SUCCESS（exit code 0）
+**Result:** PASS — exit code 0, no failure output (5 tests).
 
-```
-Tests run: 2, Failures: 0, Errors: 0, Skipped: 0
-```
+## Files changed
 
-**覆盖用例：**
+| File | Change |
+|------|--------|
+| `demo2/src/main/java/com/jason/demo/demo2/order/service/infrastructure/shard/OrderShardGene.java` | Replaced `memberId % VIRTUAL_COUNT` with `murmur3(memberId) & GENE_MASK`; added `murmur3`, `mix`, `fmix` and Javadoc per brief. |
+| `demo2/src/test/java/com/jason/demo/demo2/order/OrderShardGeneTest.java` | Renamed/updated `virtual612_routesToDs1Table30`; updated `boundaries_zeroAnd511` assertions for hash slots; added `snowflakeZeroSequence_plusOneMillisChangesSlot`. Left `bothDatabasesUseAll32Tables` and `wrongModulo32_wouldLeaveOddTablesEmptyOnOneDs` unchanged. |
 
-1. `of_joinsOrderProductOpt` — 验证 `of(100, 9001, RESERVE)` → `"100:9001:RESERVE"`，`ofAdjust(55)` → `"ADJUST:55"`
-2. `newErrorCodes_areStable` — 验证 40008/40009/40010 错误码稳定
+## Out of scope (not touched)
 
-## Implementation Details
+- `OrderComplexShardingAlgorithm.java`
+- Other order tests, README, specs
+- Git commit (user did not request)
 
-### ProductErrorCodeEnum
+## Self-review
 
-在 `STOCK_NOT_FOUND(40007)` 后追加（保留既有 40001–40005、40007）：
-
-- `ADJUST_REQUIRES_OFF_SHELF(40008, "调整库存前必须先下架")`
-- `ADJUST_INVALID_TARGET(40009, "目标现货非法")`
-- `STOCK_SYNC_LAG(40010, "库存同步未追上")`
-
-### ProductStockIdempotentKeys
-
-- `of(orderId, productId, optType)` → `"{orderId}:{productId}:{optType.name()}"`
-- `ofAdjust(adjustId)` → `"ADJUST:{adjustId}"`
-- 私有构造，纯静态工具类
-
-### DO 字段
-
-- `ProductStockDO`：新增 `Long stockSeq`（位于 `sellStock` 之后）
-- `ProductStockLogDO`：新增 `String idempotentKey`（位于 `optType` 之后）
-
-### Schema
-
-**product-module-schema.sql（新库 bootstrap）：**
-
-- `demo_product_stock`：`sell_stock` 后增加 `stock_seq BIGINT NOT NULL DEFAULT 0`
-- seed INSERT 三行均写 `stock_seq = 0`
-- `demo_product_stock_log`：`opt_type` 后增加 `idempotent_key VARCHAR(64) NOT NULL`，并 `UNIQUE KEY uk_stock_log_idempotent (idempotent_key)`
-
-**product-stock-seq-schema.sql（已有库一次性迁移）：**
-
-- ALTER 添加 `stock_seq`、`idempotent_key`（nullable 过渡）
-- UPDATE 回填历史流水 `idempotent_key = CONCAT(IFNULL(order_id,'0'), ':', product_id, ':', opt_type)`
-- MODIFY NOT NULL + ADD UNIQUE KEY
-
-> 未对 live 数据库执行 ALTER（按任务要求仅写文件）。
-
-## Self-Review
-
-| 检查项 | 结果 |
-|--------|------|
-| 错误码 40001–40005、40007 未改动 | ✓ |
-| 40008–40010 追加顺序与文案符合 brief | ✓ |
-| DO 字段位置符合 brief（optType 后 / sellStock 后） | ✓ |
-| 幂等键格式与 brief 完全一致 | ✓ |
-| DDL seed 数据含 stock_seq=0 | ✓ |
-| 迁移脚本含历史数据回填逻辑 | ✓ |
-| 未修改 Mapper XML / Repository（本任务范围外） | ✓ |
-| 未触碰 DelayTaskMqListener 无关改动 | ✓ |
-| 未创建 git commit（用户策略） | ✓ |
-
-## Out of Scope（后续 Task 承接）
-
-- `ProductStock.from()` 尚未复制 `stockSeq`（domain 继承 DO，后续 applyDelta/Relay 任务可补）
-- `ProductStockDomainService` 写流水时尚未设置 `idempotentKey`（Task 后续集成）
-- Mapper XML 未更新 INSERT/SELECT 列（本 Task brief 明确不含）
-
-## Concerns
-
-- 无任务范围内 concerns。
-- Maven 编译含仓库既有弃用警告，不影响本次 2 个测试通过。
+1. **Scope:** Only `virtualOfMember` and `OrderShardGeneTest` per task; routing helpers (`dsIndex`, `tableIndex`, `geneBits`, etc.) unchanged.
+2. **Algorithm:** MurmurHash3 x86 32-bit, seed 0, 8-byte little-endian input from `long`, constants and `fmix` match brief verbatim.
+3. **Mask:** `& GENE_MASK` yields `0..511` as required.
+4. **Comments:** Brief’s “禁止 table = virtual % 32” class comment retained; new member-hash Javadoc explains why not `% 512` / snowflake low bits.
+5. **Tests:** `virtualOfOrderId((55L << 9) | 100L)` still asserts `100` — order-id gene path independent of member hash. Boundary test still validates `dsIndex(0L)` / `tableIndex(0L)` / `geneBits(511L)` on literal virtual values, not member hash.
+6. **Distribution:** `bothDatabasesUseAll32Tables` still passes with MurmurHash3 over member ids 0..511 — both DS use all 32 tables.
+7. **Concerns:** None for this task. Downstream tests (Task 2) may still assume old modulo slots until updated.
 
 ## Commits
 
-无（用户策略：不自动 commit）。
+none

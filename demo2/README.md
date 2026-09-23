@@ -1061,7 +1061,7 @@ curl -s -X POST http://localhost:8081/demo/orders/counts \
 
 订单主表、明细按 **`memberId` 分片**（2 库 × 32 表）。订单号低 9 bit 嵌入虚拟分片，超时关单只带 `orderId` 也能直达库表。接入 ShardingSphere-JDBC 5.5.2（官方 Driver + yaml，无 Spring Starter）。
 
-**Spec / Plan / 归档**：`docs/superpowers/specs/2026-08-30-order-sharding-gene-design.md`、`docs/superpowers/plans/2026-08-30-order-sharding-gene.md`、`docs/superpowers/archive/2026-08-30-order-sharding-gene.md`
+**Spec / Plan / 归档**：`docs/superpowers/specs/2026-08-30-order-sharding-gene-design.md`、`docs/superpowers/plans/2026-08-30-order-sharding-gene.md`、`docs/superpowers/archive/2026-08-30-order-sharding-gene.md`。槽位算法 spec / plan：`docs/superpowers/specs/2026-09-23-order-shard-murmur-virtual-design.md`、`docs/superpowers/plans/2026-09-23-order-shard-murmur-virtual.md`（归档已并入基因法那一份）。
 
 建表：`src/main/resources/db/order-shard-schema.sql`（PowerShell 不要管道，用 `cmd /c "mysql ... < file.sql"`）。旧库单表不迁不 DROP。热库存须保持开启；事务 LOCAL，不上 XA。
 
@@ -1102,18 +1102,18 @@ flowchart LR
 
 ### 基因公式
 
-`virtual = memberId % 512` 或 `orderId & 0x1FF`；`ds = virtual % 2`；`table = (virtual / 2) % 32`。禁止 `table = virtual % 32`（2 与 32 不互质）。
+`virtual = floorMod(MurmurHash3(memberId), 512)` 或 `orderId & 0x1FF`；`ds = virtual % 2`；`table = (virtual / 2) % 32`。哈希用 Guava `Hashing.murmur3_32_fixed().hashLong`：x86 32 位、种子 0、会员号小端 8 字节。余数用 `Math.floorMod`，不用 Java `%`（哈希 `int` 可能为负）。`512 = 2^9`，与 `hash & 0x1FF` 相同。禁止 `memberId % 512`：Hutool 雪花最低 12 位是序号，逐个注册时序号恒为 0，取低位会全部进 `order_ds_0.demo_order_0`。禁止已废弃的 `murmur3_32()`。禁止 `table = virtual % 32`（2 与 32 不互质）。
 
 ```mermaid
 flowchart TD
-  M[memberId] -->|mod 512| V[virtual]
+  M[memberId] -->|MurmurHash3 再 floorMod 512| V[virtual]
   O[orderId] -->|AND 0x1FF| V
   V -->|mod 2| DS[order_ds_0 或 1]
   V -->|除 2 再 mod 32| T[demo_order_0..31]
   T --> I[明细同后缀]
 ```
 
-例：`612 % 512 = 100` → `order_ds_0.demo_order_18`。发号 `((ts-epoch)<<22)|(worker<<17)|(seq<<9)|virtual`；单机 256/ms，多机靠 workerId；`itemId` 仍普通雪花。
+例：`612` → 槽位 `61` → `order_ds_1.demo_order_30`。发号 `((ts-epoch)<<22)|(worker<<17)|(seq<<9)|virtual`；单机 256/ms，多机靠 workerId；`itemId` 仍普通雪花。
 
 ### 路由
 
@@ -2086,7 +2086,7 @@ graph TB
 - **Subagent 编排**：`SubagentAgentConfig` 为协调器单独注册 `TaskTool` + `architect`/`builder` 子代理（`agent.tasks.paths`）；子代理在独立上下文中运行，主会话仅挂 Task 工具
 - **A2A 内嵌 Server**：`A2aWeatherAgentConfig` 暴露 `AgentCard` 与 `DefaultAgentExecutor`；`A2aOrchestratorConfig` 通过 `A2ASubagentExecutor` 跨协议调用同进程天气 Agent；发现端点 `/.well-known/agent-card.json`
 - **可观测性默认关闭 OTLP**：日常开发仅暴露 Actuator 本地端点；全链路可视化需先启动 `docker/observability` 再使用 `otel` Profile，避免未启动 Collector 时 `ConnectException: localhost:4318`
-- **订单分片**：JDBC 走 `ShardingSphereDriver`；`demo_order*` 按会员基因进 `order_ds_0/1`，其余表仍 `spring_ai_agent2`。公式写死 9 bit / 2 库 / 32 表，禁止 `table = virtual % 32`
+- **订单分片**：JDBC 走 `ShardingSphereDriver`；`demo_order*` 按会员基因进 `order_ds_0/1`，其余表仍 `spring_ai_agent2`。槽位是 Guava MurmurHash3 再 `floorMod(hash, 512)`，库表仍是 2 库 / 32 表，禁止 `memberId % 512` 和 `table = virtual % 32`
 
 ---
 
@@ -3419,13 +3419,13 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  M[memberId] -->|mod 512| V[virtual]
+  M[memberId] -->|MurmurHash3 再 floorMod 512| V[virtual]
   O[orderId] -->|AND 0x1FF| V
   V -->|mod 2| DS[库]
   V -->|除 2 再 mod 32| T[表]
 ```
 
-禁止 `table = virtual % 32`。例：`612` → `order_ds_0.demo_order_18`。
+禁止 `table = virtual % 32`。禁止 `memberId % 512`（原因见 [基因公式](#基因公式)）。例：`612` → `order_ds_1.demo_order_30`。
 
 ### 35. 订单分片 — 查询直达
 
@@ -3624,7 +3624,8 @@ demo2/
 │       ├── 2026-08-25-unified-json-result.md # 统一 JsonResult 归档
 │       ├── 2026-08-26-product-module.md      # 商品模块归档
 │       ├── 2026-08-27-redis-stock-consistency.md # Redis 热库存归档
-│       └── 2026-08-28-order-module-statemachine.md # 订单 COLA 状态机归档
+│       ├── 2026-08-28-order-module-statemachine.md # 订单 COLA 状态机归档
+│       └── 2026-08-30-order-sharding-gene.md # 订单分库分表基因法归档（含 Murmur 槽位）
 └── pom.xml
 ```
 

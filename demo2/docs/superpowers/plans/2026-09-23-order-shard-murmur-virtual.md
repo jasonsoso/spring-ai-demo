@@ -264,7 +264,7 @@ git commit -m "test(order): expect MurmurHash3 shard slots"
 - Consumes: 槽位 `612 → 61 → order_ds_1.demo_order_30`
 - Produces: 无代码
 
-- [ ] **Step 1: 改 `demo2/README.md` 基因公式**
+- [x] **Step 1: 改 `demo2/README.md` 基因公式**
 
 「基因公式」一节换成：
 
@@ -276,7 +276,7 @@ git commit -m "test(order): expect MurmurHash3 shard slots"
 
 第 34 节同样改箭头文字，例子改为 `612` → `order_ds_1.demo_order_30`，并写明禁止 `memberId % 512`。
 
-- [ ] **Step 2: 改 2026-08-30 公式段**
+- [x] **Step 2: 改 2026-08-30 公式段**
 
 `2026-08-30-order-sharding-gene-design.md` 里：
 
@@ -300,13 +300,13 @@ virtual = MurmurHash3_x86_32(memberId 小端 8 字节, seed 0) & 0x1FF
 - 流程图 `virtual = memberId % 512` 改为 `virtual = MurmurHash3(memberId) AND 0x1FF`
 - 调试示例 `612` 的响应：`virtual` / `memberVirtual` / `orderVirtual` 为 `61`，`geneBits` 为 `000111101`，`ds` 为 `order_ds_1`，`table` 为 `demo_order_30`，`itemTable` 为 `demo_order_item_30`。括注改为 `ds = 61 % 2 = 1`，`table = (61 / 2) % 32 = 30`
 
-- [ ] **Step 3: 改 2026-08-31 的基因来源**
+- [x] **Step 3: 改 2026-08-31 的基因来源**
 
 `2026-08-31-order-id-bit-layout-design.md` 中基因行和发号式的 `memberId % 512` 改为 `MurmurHash3(memberId) & 0x1FF`。`virtual = orderId & 0x1FF`、41/5/8/9 位宽、每毫秒 256 个号不改。
 
 把 `2026-09-23-order-shard-murmur-virtual-design.md` 的状态从「待实现」改为「已实现」，并加上本 plan 的链接。
 
-- [ ] **Step 4: 再跑四个测试类**
+- [x] **Step 4: 再跑四个测试类**
 
 ```powershell
 mvn test "-Dtest=OrderShardGeneTest,OrderIdGeneratorTest,OrderShardExplainCmdExeTest,OrderComplexShardingAlgorithmTest" -q
