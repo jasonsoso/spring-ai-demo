@@ -596,7 +596,7 @@ git commit -m "chore(demo2): override Micrometer to 1.18.0-M2 and tracing to 1.8
 - Consumes: Task 2 至 Task 8 的最终 POM 与基线摘要
 - Produces: 一份结果，含已升级坐标、退回坐标、基线失败、页面点检三态
 
-- [ ] **Step 1: 再跑一次全量测试**
+- [x] **Step 1: 再跑一次全量测试**
 
 ```powershell
 mvn test
@@ -604,7 +604,7 @@ mvn test
 
 预期：相对基线没有新增 Failures/Errors。有新增则回到引入它的那一层任务，按该层回退规则处理，然后从该任务重新往下做。不要在本任务里同时改多个层的版本。
 
-- [ ] **Step 2: 启动应用**
+- [x] **Step 2: 启动应用**
 
 ```powershell
 mvn spring-boot:run
@@ -612,7 +612,7 @@ mvn spring-boot:run
 
 确认 `http://localhost:8081/` 返回 200。
 
-- [ ] **Step 3: 点完全部主操作**
+- [x] **Step 3: 点完全部主操作**
 
 对下表每一行点一次。结果只许写成三种：`通过`、`失败`、`环境阻塞`。
 
@@ -654,13 +654,13 @@ mvn spring-boot:run
 
 `失败` 且属于类缺失或方法签名：退回该功能对应的坐标，重跑 `mvn test`，并重测该行。`环境阻塞` 不退版本。
 
-- [ ] **Step 4: 写执行结果并改 spec 状态**
+- [x] **Step 4: 写执行结果并改 spec 状态**
 
 把 spec 开头的 `**状态**: 已定稿，待实现` 改成 `**状态**: 已实现`。
 
 在本计划「执行结果」填完四段：实际升上去的坐标（含最终版本号）、退回的坐标（目标版本 + 失败现象）、基线里就有的测试失败、上表每一行的三态。
 
-- [ ] **Step 5: 停应用并提交**
+- [x] **Step 5: 停应用并提交**
 
 停掉 `spring-boot:run`。
 
@@ -692,12 +692,73 @@ Skipped（非失败，仅记录）：
 
 ### 已升级
 
-（Task 9 列出最终版本）
+| 坐标 | 最终版本 |
+|------|----------|
+| `spring-boot-starter-parent` | 4.1.1 |
+| `spring-ai.version` | 2.0.1 |
+| MCP `mcp` / `mcp-core` / `mcp-json` / `mcp-json-jackson3` | 2.0.1 |
+| `agentscope.version` | 2.0.3 |
+| `rocketmq-client.version` | 5.5.1 |
+| `spring-retry` | 2.0.13 |
+| `jsoup` | 1.23.2 |
+| `rewrite-maven-plugin` | 6.46.1 |
+| `rewrite-spring` | 6.37.1 |
+| `hutool.version` | 5.8.47 |
+| `swagger-annotations.version` | 2.2.55 |
+| `springdoc-openapi-starter-webmvc-scalar` | 3.1.1 |
+| `spring-ai-agent-utils-bom` | 0.12.0 |
+| `redisson-spring-boot-starter` | 4.7.0 |
+| `lombok.version` | 1.18.48 |
+| `caffeine.version` | 3.3.0 |
+| `mysql.version` | 26.7.0 |
+| `micrometer.version` | 1.18.0-M2 |
+| `micrometer-tracing.version` | 1.8.0-M2 |
 
 ### 已退回
 
-（没有则写「无」）
+| 坐标 | 目标版本 | 保留版本 | 失败现象 |
+|------|----------|----------|----------|
+| `shardingsphere.version` | 5.5.3 | 5.5.2 | `shardingsphere-jdbc` 5.5.3 将 `shardingsphere-sharding-core` 降为 test scope，`ComplexKeysShardingAlgorithm` 不在编译/运行 classpath |
+| `spring-ai-session-bom` | 0.8.0 | 0.2.0 | Session 查询需要列 `e.archived`（`AI_SESSION_EVENT`），当前表无该列：`Unknown column 'e.archived' in 'field list'` |
 
 ### 页面点检
 
-（Task 9 按上表逐行写 `通过` / `失败` / `环境阻塞`）
+Task 9 全量复测（`mvn test`：Tests run: 402, Failures: 0, Errors: 0, Skipped: 1；应用 `http://localhost:8081/` HTTP 200）。
+
+| 页面 | 操作 | 结果 |
+|------|------|------|
+| `chat` | `#sendButton`，输入 `你好` | 通过 |
+| `voice-chat` | `#voiceSendButton` | 通过 |
+| `embedding` | `#embeddingBtn` | 通过 |
+| `rag` | `#ragAskBtn` | 通过 |
+| `rag-opt` | `#ragOptAskBtn` | 环境阻塞 |
+| `ecommerce` | `#ecommerceAskBtn` | 环境阻塞 |
+| `agent` | `#agentPlanBtn` | 通过 |
+| `agent-memory` | `#memoryPlanBtn` | 通过 |
+| `agent-mysql-memory` | `#mysqlMemoryPlanBtn` | 通过 |
+| `agent-auto-memory` | `#autoMemorySendBtn` | 通过 |
+| `agent-session-memory` | `#sessionMemorySendBtn`，输入 `我想周末去杭州` | 通过 |
+| `agent-tools` | `#agentToolsPlanBtn` | 通过 |
+| `tool-reasoning` | `#toolReasoningSendBtn` | 通过 |
+| `mcp` | `#mcpAskBtn` | 通过 |
+| `lkcoffee` | `#lkCoffeeSendBtn` | 通过 |
+| `multi-agent` | `#multiAgentPlanBtn` | 通过 |
+| `ask-user` | `#askUserStartBtn` | 通过 |
+| `todo-write` | `#todoStartBtn` | 通过 |
+| `subagent` | `#subagentStartBtn` | 通过 |
+| `a2a` | `#a2aStartBtn` | 通过 |
+| `embabel` | `#embabelSendBtn` | 通过 |
+| `agentscope` | `#agentscopeSendBtn` | 通过 |
+| `rocketmq` | `rocketmqSend('sync')` | 通过 |
+| `member` 首页 | `#memberNavHome`，`#memberPhonePage` 有内容 | 通过 |
+| `member` 商品详情 | 点一个商品卡片 | 通过 |
+| `member` 下单预览 | 详情里点立即购买 | 通过 |
+| `member` 订单 | `#memberNavOrders` | 通过 |
+| `member` 我的 | `#memberNavMe` | 通过 |
+| `member` 登录态 | 看 `#memberSessionBox` | 通过 |
+| `member` 分片 | `#memberShardMemberId` = `1001`，点「计算路由」 | 通过 |
+| `member` 台账 | 点「刷新订单+台账」，看 `#memberOrderResult` | 通过 |
+| `/scalar` | 打开 `http://localhost:8081/scalar` | 通过 |
+| `/v3/api-docs` | 打开 `http://localhost:8081/v3/api-docs`，HTTP 200 | 通过 |
+
+说明：`rag-opt` / `ecommerce` 返回 HTTP 200，正文提示 Milvus 未运行（`localhost:19530` Connection refused / 「系统繁忙」），按中间件环境问题记为环境阻塞，未退版本。无新增坐标退回。
