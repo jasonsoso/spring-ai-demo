@@ -29,7 +29,7 @@
     <properties>
         <java.version>21</java.version>
         <spring-ai.version>2.0.1</spring-ai.version>
-        <swagger-annotations.version>2.2.47</swagger-annotations.version>
+        <swagger-annotations.version>2.2.55</swagger-annotations.version>
         <!-- Embabel 官方 Boot4/SAI2 迁移在 2.0.0 分支；Maven Central 尚无正式版，使用 snapshot -->
         <embabel-agent.version>2.0.0-SNAPSHOT</embabel-agent.version>
         <agentscope.version>2.0.3</agentscope.version>
@@ -38,7 +38,7 @@
         <rocketmq-client.version>5.5.1</rocketmq-client.version>
         <!-- Spring Boot 4 专用；勿降到 boot3-starter。Boot4 支持自 MP 3.5.13 起 -->
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
-        <hutool.version>5.8.35</hutool.version>
+        <hutool.version>5.8.47</hutool.version>
         <!-- 目标 5.5.3 未采纳：jdbc POM 将 shardingsphere-sharding-core 降为 test scope，ComplexKeysShardingAlgorithm 不在编译/运行 classpath，仅改清单 Java 无法恢复 -->
         <shardingsphere.version>5.5.2</shardingsphere.version>
         <mapstruct.version>1.6.3</mapstruct.version>
@@ -76,13 +76,14 @@
             <dependency>
                 <groupId>org.springaicommunity</groupId>
                 <artifactId>spring-ai-agent-utils-bom</artifactId>
-                <version>0.10.0</version>
+                <version>0.12.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
             <dependency>
                 <groupId>org.springaicommunity</groupId>
                 <artifactId>spring-ai-session-bom</artifactId>
+                <!-- 目标 0.8.0 未采纳：Unknown column 'e.archived' in 'field list' -->
                 <version>0.2.0</version>
                 <type>pom</type>
                 <scope>import</scope>
@@ -237,7 +238,7 @@
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-scalar</artifactId>
-            <version>3.0.3</version>
+            <version>3.1.1</version>
         </dependency>
         <dependency>
             <groupId>io.swagger.core.v3</groupId>
@@ -365,7 +366,7 @@
         <dependency>
             <groupId>org.redisson</groupId>
             <artifactId>redisson-spring-boot-starter</artifactId>
-            <version>4.1.0</version>
+            <version>4.7.0</version>
         </dependency>
         <dependency>
             <groupId>com.alicp.jetcache</groupId>
