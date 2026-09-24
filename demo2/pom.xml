@@ -28,17 +28,18 @@
     </scm>
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>2.0.0</spring-ai.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
         <swagger-annotations.version>2.2.47</swagger-annotations.version>
         <!-- Embabel 官方 Boot4/SAI2 迁移在 2.0.0 分支；Maven Central 尚无正式版，使用 snapshot -->
         <embabel-agent.version>2.0.0-SNAPSHOT</embabel-agent.version>
-        <agentscope.version>2.0.0</agentscope.version>
+        <agentscope.version>2.0.3</agentscope.version>
         <lock4j.version>2.2.7</lock4j.version>
         <jetcache.version>2.8.0.RC</jetcache.version>
-        <rocketmq-client.version>5.5.0</rocketmq-client.version>
+        <rocketmq-client.version>5.5.1</rocketmq-client.version>
         <!-- Spring Boot 4 专用；勿降到 boot3-starter。Boot4 支持自 MP 3.5.13 起 -->
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <hutool.version>5.8.35</hutool.version>
+        <!-- 目标 5.5.3 未采纳：jdbc POM 将 shardingsphere-sharding-core 降为 test scope，ComplexKeysShardingAlgorithm 不在编译/运行 classpath，仅改清单 Java 无法恢复 -->
         <shardingsphere.version>5.5.2</shardingsphere.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <transmittable-thread-local.version>2.14.5</transmittable-thread-local.version>
@@ -103,29 +104,29 @@
                 <scope>import</scope>
             </dependency>
             <!--
-              统一 MCP Java SDK 2.0（与 Spring AI 2.0 一致）。
-              AgentScope 2.0.0 BOM 仍声明 0.17，故在其后强制覆盖。
-              AgentScope Toolkit MCP 走自建 SDK 2.0 stdio Client + AgentTool，不用 McpClientBuilder。
+              统一 MCP Java SDK 2.0.1（与 Spring AI 2.0.1 一致）。
+              覆盖放在 agentscope-bom 之后，避免 BOM 把 MCP 钉回旧版。
+              AgentScope Toolkit MCP 走自建 SDK stdio Client + AgentTool，不用 McpClientBuilder。
             -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp</artifactId>
-                <version>2.0.0</version>
+                <version>2.0.1</version>
             </dependency>
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-core</artifactId>
-                <version>2.0.0</version>
+                <version>2.0.1</version>
             </dependency>
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-json</artifactId>
-                <version>2.0.0</version>
+                <version>2.0.1</version>
             </dependency>
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-json-jackson3</artifactId>
-                <version>2.0.0</version>
+                <version>2.0.1</version>
             </dependency>
             <dependency>
                 <groupId>com.baomidou</groupId>
@@ -287,7 +288,7 @@
         <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
-            <version>1.22.2</version>
+            <version>1.23.2</version>
         </dependency>
         <dependency>
             <groupId>com.embabel.agent</groupId>
@@ -311,7 +312,7 @@
         <dependency>
             <groupId>org.springframework.retry</groupId>
             <artifactId>spring-retry</artifactId>
-            <version>2.0.12</version>
+            <version>2.0.13</version>
         </dependency>
 
         <!-- AgentScope Java 2.0：HarnessAgent Web 上手（版本见 agentscope-bom） -->
@@ -455,7 +456,7 @@
             <plugin>
                 <groupId>org.openrewrite.maven</groupId>
                 <artifactId>rewrite-maven-plugin</artifactId>
-                <version>6.32.0</version>
+                <version>6.46.1</version>
                 <configuration>
                     <exportDatatables>true</exportDatatables>
                 </configuration>
@@ -463,7 +464,7 @@
                     <dependency>
                         <groupId>org.openrewrite.recipe</groupId>
                         <artifactId>rewrite-spring</artifactId>
-                        <version>6.30.4</version>
+                        <version>6.37.1</version>
                     </dependency>
                 </dependencies>
             </plugin>
