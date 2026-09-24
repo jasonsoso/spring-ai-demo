@@ -41,8 +41,7 @@
         <!-- Spring Boot 4 专用；勿降到 boot3-starter。Boot4 支持自 MP 3.5.13 起 -->
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <hutool.version>5.8.47</hutool.version>
-        <!-- 目标 5.5.3 未采纳：jdbc POM 将 shardingsphere-sharding-core 降为 test scope，ComplexKeysShardingAlgorithm 不在编译/运行 classpath，仅改清单 Java 无法恢复 -->
-        <shardingsphere.version>5.5.2</shardingsphere.version>
+        <shardingsphere.version>5.5.3</shardingsphere.version>
         <mysql.version>26.7.0</mysql.version>
         <micrometer.version>1.18.0-M2</micrometer.version>
         <micrometer-tracing.version>1.8.0-M2</micrometer-tracing.version>
@@ -410,6 +409,42 @@
         <dependency>
             <groupId>org.apache.shardingsphere</groupId>
             <artifactId>shardingsphere-jdbc</artifactId>
+            <version>${shardingsphere.version}</version>
+        </dependency>
+        <!-- 5.5.3 的 jdbc 不再传递这些模块 -->
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>shardingsphere-sharding-core</artifactId>
+            <version>${shardingsphere.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>shardingsphere-infra-url-classpath</artifactId>
+            <version>${shardingsphere.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>shardingsphere-parser-sql-engine-mysql</artifactId>
+            <version>${shardingsphere.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>shardingsphere-database-connector-mysql</artifactId>
+            <version>${shardingsphere.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>shardingsphere-infra-data-source-pool-hikari</artifactId>
+            <version>${shardingsphere.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>shardingsphere-standalone-mode-repository-memory</artifactId>
+            <version>${shardingsphere.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>shardingsphere-authority-simple</artifactId>
             <version>${shardingsphere.version}</version>
         </dependency>
         <!-- Spring Boot 4.x 专用 starter（不是 mybatis-plus-spring-boot3-starter） -->
