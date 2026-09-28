@@ -60,14 +60,15 @@ async function refreshSessionMemoryEvents() {
 
         let html = '<h3>Event Store 摘要</h3>';
         html += '<div class="session-memory-stat"><span>总计</span><strong>' + data.totalEvents + '</strong></div>';
-        html += '<div class="session-memory-stat"><span>Active（非 synthetic）</span><strong>' + data.activeEvents + '</strong></div>';
-        html += '<div class="session-memory-stat"><span>Archived 估算</span><strong>' + data.archivedEvents + '</strong></div>';
+        html += '<div class="session-memory-stat"><span>Active</span><strong>' + data.activeEvents + '</strong></div>';
+        html += '<div class="session-memory-stat"><span>Archived</span><strong>' + data.archivedEvents + '</strong></div>';
         html += '<div class="session-memory-stat"><span>Synthetic 摘要</span><strong>' + data.syntheticEvents + '</strong></div>';
         html += '<div class="session-memory-event-list">';
         (data.events || []).forEach(function (ev) {
             html += '<div class="session-memory-event-item">';
             html += escapeHtml(ev.messageType) + ' · ' + escapeHtml(ev.eventId.substring(0, 8)) + '…';
             if (ev.synthetic) html += ' <span style="color:#7c3aed">[SYNTHETIC]</span>';
+            if (ev.archived) html += ' <span style="color:#b45309">[ARCHIVED]</span>';
             if (ev.hasToolCalls) html += ' <span style="color:#059669">[TOOL]</span>';
             html += '<br><span style="color:#9ca3af">' + escapeHtml(ev.timestamp) + '</span>';
             html += '</div>';

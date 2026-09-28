@@ -87,8 +87,7 @@
             <dependency>
                 <groupId>org.springaicommunity</groupId>
                 <artifactId>spring-ai-session-bom</artifactId>
-                <!-- 目标 0.8.0 未采纳：Unknown column 'e.archived' in 'field list' -->
-                <version>0.2.0</version>
+                <version>0.8.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

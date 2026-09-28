@@ -90,9 +90,8 @@ public class SessionMemoryTripAgentService {
 
         List<SessionEvent> all = sessionService.getEvents(userId);
         long synthetic = all.stream().filter(SessionEvent::isSynthetic).count();
-        int promptMessageCount = sessionService.getMessages(userId).size();
-        long activeEvents = Math.max(0, all.size() - synthetic);
-        long archivedEvents = Math.max(0, all.size() - promptMessageCount);
+        long archivedEvents = all.stream().filter(SessionEvent::isArchived).count();
+        long activeEvents = all.size() - archivedEvents;
 
         List<Map<String, Object>> preview = all.stream()
                 .sorted(Comparator.comparing(SessionEvent::getTimestamp).reversed())
@@ -167,6 +166,7 @@ public class SessionMemoryTripAgentService {
         summary.put("eventId", event.getId());
         summary.put("messageType", event.getMessageType().name());
         summary.put("synthetic", event.isSynthetic());
+        summary.put("archived", event.isArchived());
         summary.put("hasToolCalls", event.hasToolCalls());
         summary.put("timestamp", event.getTimestamp().toString());
         return summary;
