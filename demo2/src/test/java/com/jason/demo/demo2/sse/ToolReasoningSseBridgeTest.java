@@ -21,7 +21,7 @@ class ToolReasoningSseBridgeTest {
 
     @AfterEach
     void tearDown() {
-        ToolReasoningStreamContext.clearAll();
+        ToolReasoningStreamContext.clear("test-session");
     }
 
     @Test

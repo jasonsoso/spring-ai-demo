@@ -50,12 +50,6 @@ public final class ToolReasoningStreamContext {
         }
     }
 
-    /** @deprecated tests only — prefer {@link #clear(String)} */
-    @Deprecated
-    static void clearAll() {
-        HOLDERS.clear();
-    }
-
     private static Optional<String> resolveSessionId() {
         try {
             ContextView context = ToolCallReactiveContextHolder.getContext();
