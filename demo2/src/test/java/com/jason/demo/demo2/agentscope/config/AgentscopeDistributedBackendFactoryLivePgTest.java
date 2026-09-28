@@ -41,9 +41,9 @@ class AgentscopeDistributedBackendFactoryLivePgTest {
         AgentscopeDistributedBackend.Remote remote = (AgentscopeDistributedBackend.Remote) backend;
         assertThat(remote.stateStore()).isSameAs(remote.distributedStore().agentStateStore());
         assertThat(remote.distributedStore().sandboxSnapshotSpec().getClass().getSimpleName())
-                .isEqualTo("PostgresSnapshotSpec");
+                .isEqualTo("JdbcSnapshotSpec");
         assertThat(remote.distributedStore().sandboxExecutionGuard().getClass().getSimpleName())
-                .isEqualTo("PostgresSandboxExecutionGuard");
+                .isEqualTo("JdbcSandboxExecutionGuard");
         assertThat(remote.distributedStore().sandboxSnapshotSpec().getClass().getName())
                 .doesNotContain("Noop");
     }
