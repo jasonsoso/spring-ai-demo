@@ -11,6 +11,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Range;
+import org.springframework.data.redis.connection.RedisStreamCommands;
+import org.springframework.data.redis.connection.RedisStreamCommands.StreamEntryDeletionResult;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.PendingMessage;
 import org.springframework.data.redis.connection.stream.PendingMessages;
@@ -56,6 +58,9 @@ class RedisStockOutboxRelayTest {
         properties = new ProductStockProperties();
         relay = new RedisStockOutboxRelay(redis, publisher, properties);
         lenient().when(redis.opsForStream()).thenReturn(streamOps);
+        lenient().when(streamOps.acknowledgeAndDelete(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"),
+                any(RedisStreamCommands.XDelOptions.class), any(String[].class)))
+                .thenReturn(List.of(StreamEntryDeletionResult.DELETED));
     }
 
     @Test
@@ -65,7 +70,7 @@ class RedisStockOutboxRelayTest {
         relay.onRecord(fields, "1-0");
 
         verify(publisher).sendNow(new StockSyncEvent(9001L, 100L, "RESERVE", 2, "100:9001:RESERVE", 4L));
-        verify(streamOps).acknowledge(RedisStockKeys.OUTBOX, "demo2-stock-relay", "1-0");
+        verify(streamOps).acknowledgeAndDelete(RedisStockKeys.OUTBOX, "demo2-stock-relay", acked(), "1-0");
     }
 
     @Test
@@ -74,7 +79,7 @@ class RedisStockOutboxRelayTest {
 
         assertThrows(IllegalStateException.class, () -> relay.onRecord(sampleFields(), "1-0"));
 
-        verify(streamOps, never()).acknowledge(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"), eq("1-0"));
+        verify(streamOps, never()).acknowledgeAndDelete(any(), any(), any(), any(String[].class));
     }
 
     @Test
@@ -103,7 +108,7 @@ class RedisStockOutboxRelayTest {
 
         assertThrows(IllegalStateException.class, () -> relay.claimIdlePending());
 
-        verify(streamOps, never()).acknowledge(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"), eq("2-0"));
+        verify(streamOps, never()).acknowledgeAndDelete(any(), any(), any(), any(String[].class));
     }
 
     @Test
@@ -112,6 +117,10 @@ class RedisStockOutboxRelayTest {
         assertTrue(relay.isAutoStartup());
         properties.setRedisHotEnabled(false);
         assertFalse(relay.isAutoStartup());
+    }
+
+    private static RedisStreamCommands.XDelOptions acked() {
+        return RedisStreamCommands.XDelOptions.deletionPolicy(RedisStreamCommands.StreamDeletionPolicy.ACKNOWLEDGED);
     }
 
     private static Map<String, String> sampleFields() {

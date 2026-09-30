@@ -4,7 +4,7 @@
 services:
   demo2-redis:
     container_name: demo2-redis
-    image: redis:7-alpine
+    image: redis:8.2-alpine
     ports:
       - "6379:6379"
     healthcheck:

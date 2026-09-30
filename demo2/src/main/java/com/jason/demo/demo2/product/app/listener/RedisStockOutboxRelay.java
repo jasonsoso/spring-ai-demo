@@ -7,6 +7,8 @@ import com.jason.demo.demo2.product.service.infrastructure.redis.RedisStockKeys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.data.domain.Range;
+import org.springframework.data.redis.connection.RedisStreamCommands;
+import org.springframework.data.redis.connection.RedisStreamCommands.StreamEntryDeletionResult;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.PendingMessage;
@@ -27,13 +29,17 @@ import java.util.Map;
 
 /**
  * Redis Stream 出箱 → RocketMQ。只负责发消息，禁止调 applyDelta。
- * sendNow 成功才 XACK；失败留在 PEL，由 claim 补发。
+ * sendNow 成功才 XACKDEL（ACKED）；失败留在 PEL，由 claim 补发。
  */
 @Slf4j
 @Component
 public class RedisStockOutboxRelay implements SmartLifecycle {
 
     private static final Duration CLAIM_MIN_IDLE = Duration.ofSeconds(30);
+
+    /** 本组确认后，仅当所有消费组都已确认才删正文。需要 Redis 8.2+ 的 XACKDEL。 */
+    private static final RedisStreamCommands.XDelOptions ACKED = RedisStreamCommands.XDelOptions
+            .deletionPolicy(RedisStreamCommands.StreamDeletionPolicy.ACKNOWLEDGED);
 
     private final StringRedisTemplate redis;
     private final StockSyncEventPublisher publisher;
@@ -89,8 +95,13 @@ public class RedisStockOutboxRelay implements SmartLifecycle {
                 required(fields, "idempotentKey"),
                 Long.parseLong(required(fields, "seq")));
         publisher.sendNow(event);
-        // 必须先 send 再 ACK：抛错则本条仍 pending，避免 Redis 已成功、MySQL 永远收不到
-        redis.opsForStream().acknowledge(RedisStockKeys.OUTBOX, properties.getOutboxGroup(), recordId);
+        // 必须先 send 再 XACKDEL：抛错则本条仍 pending，避免 Redis 已成功、MySQL 永远收不到
+        List<StreamEntryDeletionResult> results = redis.opsForStream().acknowledgeAndDelete(
+                RedisStockKeys.OUTBOX, properties.getOutboxGroup(), ACKED, recordId);
+        StreamEntryDeletionResult result = results == null || results.isEmpty() ? null : results.get(0);
+        if (result != StreamEntryDeletionResult.DELETED) {
+            log.warn("outbox entry not deleted after ack, recordId={}, result={}", recordId, result);
+        }
     }
 
     public void claimIdlePending() {
