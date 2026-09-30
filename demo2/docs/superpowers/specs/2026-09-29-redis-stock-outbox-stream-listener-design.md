@@ -14,29 +14,35 @@
 当前 `RedisStockOutboxRelay` 自己起虚拟线程做 `XREADGROUP`。这条循环有三个缺口：
 
 - `readOnce` 里一条 `sendNow` 抛错，同批后面的记录不再处理。
-- PEL 回收写在同一条读循环里，每 10 轮才跑一次。发送或读取堵住时，补发跟着停。
+- PEL 回收写在同一条读循环里，每 10 轮才跑一次。发送或读取堵住时，补发跟着停。com.jason.demo.demo2.product.service.core.ProductStockDomainService#applyDelta
 - 虚拟线程因 `Error` 退出后，`isRunning` 仍为 true，没有人再拉流。
 
 目标：改成 `StreamListener` + `StreamMessageListenerContainer`，并且比现在更稳。容器只负责拉新消息。确认、PEL 补发、订阅拉起由 Relay 自己保住。
 
 ### 1.1 已确认决策
 
-| 维度 | 选择 |
-|------|------|
-| 拉取 | `StreamMessageListenerContainer` + `StreamListener` |
-| 确认 | `autoAcknowledge(false)`；`sendNow` 成功之后才 `XACK` |
-| 出错 | `cancelOnError` 恒为 false；一条失败不影响同批后续，也不取消订阅 |
-| 补发 | 独立调度 `XAUTOCLAIM`，不绑在读循环上 |
-| 空闲阈值 | 30 秒，大于 `sendImmediate` 最坏耗时 |
-| 看门狗 | 订阅不在跑时重新注册；仍在跑时不重复注册 |
-| 开关 | `redis-hot-enabled=false` 时容器不自动启动，补发和看门狗不跑 |
-| 职责 | Relay 仍然只发 RocketMQ |
+
+| 维度   | 选择                                                  |
+| ---- | --------------------------------------------------- |
+| 拉取   | `StreamMessageListenerContainer` + `StreamListener` |
+| 确认   | `autoAcknowledge(false)`；`sendNow` 成功之后才 `XACK`     |
+| 出错   | `cancelOnError` 恒为 false；一条失败不影响同批后续，也不取消订阅         |
+| 补发   | 独立调度 `XAUTOCLAIM`，不绑在读循环上                           |
+| 空闲阈值 | 30 秒，大于 `sendImmediate` 最坏耗时                        |
+| 看门狗  | 订阅不在跑时重新注册；仍在跑时不重复注册                                |
+| 开关   | `redis-hot-enabled=false` 时容器不自动启动，补发和看门狗不跑         |
+| 职责   | Relay 仍然只发 RocketMQ                                 |
+
+
+
 
 ### 1.2 非目标
 
 不改 Lua `XADD`。不改 `StockSyncMqListener` / `applyDelta`。Relay 不写 MySQL。不把坏消息丢进死信或直接 `XACK` 丢掉。不支持多个进程共用同一个消费者名 `relay`。不把读取和发送拆成线程池。
 
 ---
+
+
 
 ## 2. 架构
 
@@ -83,7 +89,11 @@ RedisStockOutboxRelay.onMessage
 
 ---
 
+
+
 ## 3. 组件与数据流
+
+
 
 ### 3.1 订阅
 
@@ -91,16 +101,18 @@ RedisStockOutboxRelay.onMessage
 
 注册参数：
 
-| 项 | 值 |
-|----|----|
-| Stream | `RedisStockKeys.OUTBOX` |
-| 偏移 | `ReadOffset.lastConsumed()`（`>`） |
-| 消费者 | `Consumer.from(outboxGroup, outboxConsumer)`，默认消费者名 `relay` |
-| 批量 | `outbox-batch-size`，默认 16 |
-| 阻塞 | `outbox-block-ms`，默认 2000 |
-| 序列化 | key、hash key、hash value 均为字符串，回调类型 `MapRecord<String, String, String>` |
-| 自动确认 | false |
-| `cancelOnError` | `throwable -> false` |
+
+| 项               | 值                                                                      |
+| --------------- | ---------------------------------------------------------------------- |
+| Stream          | `RedisStockKeys.OUTBOX`                                                |
+| 偏移              | `ReadOffset.lastConsumed()`（`>`）                                       |
+| 消费者             | `Consumer.from(outboxGroup, outboxConsumer)`，默认消费者名 `relay`            |
+| 批量              | `outbox-batch-size`，默认 16                                              |
+| 阻塞              | `outbox-block-ms`，默认 2000                                              |
+| 序列化             | key、hash key、hash value 均为字符串，回调类型 `MapRecord<String, String, String>` |
+| 自动确认            | false                                                                  |
+| `cancelOnError` | `throwable -> false`                                                   |
+
 
 `onMessage` 解析字段 `productId`、`orderId`、`optType`、`qty`、`idempotentKey`、`seq`，组装 `StockSyncEvent`，调用 `StockSyncEventPublisher.sendNow`。`sendNow` 返回后，对这条记录的 id 执行 `XACK`。
 
@@ -108,11 +120,13 @@ RedisStockOutboxRelay.onMessage
 
 Relay 自己持有调度器，在 `start` 时启动，在 `stop` 时关闭。不用全局 `@Scheduled`，避免热路径关闭后仍然领 PEL。
 
-| 参数 | 默认 | 配置 |
-|------|------|------|
-| 间隔 | 10 秒 | `app.product.stock.outbox-claim-interval-ms` |
-| 最小空闲 | 30 秒 | `app.product.stock.outbox-claim-min-idle-ms` |
-| 每批条数 | 与 `outbox-batch-size` 相同 | 已有 `outbox-batch-size` |
+
+| 参数   | 默认                       | 配置                                           |
+| ---- | ------------------------ | -------------------------------------------- |
+| 间隔   | 10 秒                     | `app.product.stock.outbox-claim-interval-ms` |
+| 最小空闲 | 30 秒                     | `app.product.stock.outbox-claim-min-idle-ms` |
+| 每批条数 | 与 `outbox-batch-size` 相同 | 已有 `outbox-batch-size`                       |
+
 
 调用 Spring Data Redis `StreamOperations.autoClaim`，对应 Redis `XAUTOCLAIM`：组、新所有者都是当前消费者，起点 `0-0`，`min-idle` 取上面的 30 秒，`COUNT` 取 `outbox-batch-size`。不写 `COUNT` 时 Redis 默认最多领 100 条，那不是本规范的批量。领到的每条记录调用同一个 `onMessage`。
 
@@ -130,21 +144,27 @@ Relay 已 `stop` 时看门狗必须直接返回，不得再把容器拉起来。
 
 ---
 
+
+
 ## 4. 失败处理
 
-| 情况 | 行为 |
-|------|------|
-| `sendNow` 抛错 | 不 `XACK`。容器继续同批后续记录，订阅保持。记录留在 PEL，空闲超过 30 秒后由补发再走 `onMessage` |
-| 字段缺失或解析失败 | 不 `XACK`，不进死信，不丢弃。打错误日志。补发每 30 秒重试 |
-| `sendNow` 已成功，随后 `XACK` 失败 | 不在同一次调用里再发。记录留在 PEL。补发会再发一次 RocketMQ。`applyDelta` 靠幂等键只落一次账 |
-| 补发批里某一条失败 | 只跳过这一条，同批其余继续 `onMessage` |
-| Redis 读取抛错 | 订阅不取消，下一轮继续 `XREADGROUP` |
-| 订阅被取消，或轮询 `Future` 已结束而 `isActive()` 仍为 true | 看门狗先去掉旧订阅，再重新注册并启动 |
-| 热路径关闭或 `stop` | 停止容器、补发和看门狗。已进入 PEL 的记录留在 Redis，下次开启再领 |
+
+| 情况                                           | 行为                                                            |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| `sendNow` 抛错                                 | 不 `XACK`。容器继续同批后续记录，订阅保持。记录留在 PEL，空闲超过 30 秒后由补发再走 `onMessage` |
+| 字段缺失或解析失败                                    | 不 `XACK`，不进死信，不丢弃。打错误日志。补发每 30 秒重试                            |
+| `sendNow` 已成功，随后 `XACK` 失败                   | 不在同一次调用里再发。记录留在 PEL。补发会再发一次 RocketMQ。`applyDelta` 靠幂等键只落一次账   |
+| 补发批里某一条失败                                    | 只跳过这一条，同批其余继续 `onMessage`                                     |
+| Redis 读取抛错                                   | 订阅不取消，下一轮继续 `XREADGROUP`                                      |
+| 订阅被取消，或轮询 `Future` 已结束而 `isActive()` 仍为 true | 看门狗先去掉旧订阅，再重新注册并启动                                            |
+| 热路径关闭或 `stop`                                | 停止容器、补发和看门狗。已进入 PEL 的记录留在 Redis，下次开启再领                        |
+
 
 坏消息会按 30 秒重复打错误日志。这是故意留下的，避免把库存增量确认掉之后 MySQL 永远收不到。
 
 ---
+
+
 
 ## 5. 测试
 
@@ -160,11 +180,15 @@ Relay 已 `stop` 时看门狗必须直接返回，不得再把容器拉起来。
 
 ---
 
+
+
 ## 6. 文档
 
 实现时把 [2026-08-27 规范](./2026-08-27-redis-stock-consistency-design.md) 第 6 节里 Relay 的手写 `XREADGROUP` 循环，改成指向本文。该规范里 Lua、`applyDelta`、对账章节不动。`README.md` 热库存一节的 Relay 描述改成：容器拉新消息，发送成功才 `XACK`，空闲 PEL 由独立 `XAUTOCLAIM` 补发。
 
 ---
+
+
 
 ## 7. 验收
 
@@ -172,3 +196,4 @@ Relay 已 `stop` 时看门狗必须直接返回，不得再把容器拉起来。
 - 发送失败时该 id 留在 PEL；空闲超过 30 秒后被 `XAUTOCLAIM` 再次发送。
 - 同批中一条发送失败，其余记录仍会发送。
 - 关掉热路径后，容器不自动启动，补发调度不跑。
+

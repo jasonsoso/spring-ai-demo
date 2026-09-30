@@ -17,7 +17,7 @@ if redis.call('SETNX', ticket, qty) == 0 then
   return {0, 'CONFLICT'}                             -- 已有票但数量不同
 end
 
-local left = redis.call('HINCRBY', stock, 'avail', -qty) -- 只减可售
+local left = redis.call('HINCRBY', stock, 'avail', -qty) -- 只减可售,left代表减qty之后的数值（最新结果）
 if left < 0 then                                     -- 减成负数 = 超卖
   redis.call('HINCRBY', stock, 'avail', qty)         -- 加回去
   redis.call('DEL', ticket)                          -- 撕掉刚写的票
