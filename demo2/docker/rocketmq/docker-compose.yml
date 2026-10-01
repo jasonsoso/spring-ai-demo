@@ -1,6 +1,7 @@
-# RocketMQ（Remoting：NameServer + Broker）
+# RocketMQ（Remoting：NameServer + Broker + Dashboard）
 # 启动：docker compose -f demo2/docker/rocketmq/docker-compose.yml up -d
 # 停止：docker compose -f demo2/docker/rocketmq/docker-compose.yml down
+# 控制台：http://127.0.0.1:8088
 services:
   demo2-rocketmq-namesrv:
     container_name: demo2-rocketmq-namesrv
@@ -17,6 +18,7 @@ services:
       - "10909:10909"
       - "10911:10911"
       - "10912:10912"
+      - "8088:8080"
     environment:
       NAMESRV_ADDR: demo2-rocketmq-namesrv:9876
     volumes:
@@ -24,4 +26,15 @@ services:
     depends_on:
       - demo2-rocketmq-namesrv
     command: sh mqbroker -n demo2-rocketmq-namesrv:9876 -c /home/rocketmq/rocketmq-5.3.2/conf/broker.conf
+    restart: unless-stopped
+
+  # 与 Broker 共用网络：brokerIP1=127.0.0.1 时，独立容器访问不到 Broker
+  demo2-rocketmq-dashboard:
+    container_name: demo2-rocketmq-dashboard
+    image: apacherocketmq/rocketmq-dashboard:2.0.0
+    network_mode: "service:demo2-rocketmq-broker"
+    environment:
+      JAVA_OPTS: "-Drocketmq.config.namesrvAddr=demo2-rocketmq-namesrv:9876 -Drocketmq.namesrv.addr=demo2-rocketmq-namesrv:9876"
+    depends_on:
+      - demo2-rocketmq-broker
     restart: unless-stopped
