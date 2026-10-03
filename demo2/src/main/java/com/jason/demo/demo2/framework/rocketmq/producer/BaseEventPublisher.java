@@ -123,10 +123,7 @@ public class BaseEventPublisher implements ApplicationContextAware {
         TransactionUtils.afterCommitSyncExecute(() -> {
             for (int i = 0; i < maxTryTimes; i++) {
                 try {
-                    SendResult sendResult = producer.send(message, (List<MessageQueue> mqs, Message msg, Object arg) -> {
-                        int index = Math.floorMod(arg.hashCode(), mqs.size());
-                        return mqs.get(index);
-                    }, shardingKey);
+                    SendResult sendResult = producer.send(message, BaseEventPublisher::selectQueue, shardingKey);
                     log.info("orderly send success, attempt:{}, result:{}", i + 1, sendResult);
                     return;
                 } catch (Exception e) {
@@ -167,6 +164,35 @@ public class BaseEventPublisher implements ApplicationContextAware {
             }
         }
         throw new IllegalStateException("rocketmq immediate send failed after retries", last);
+    }
+
+    /**
+     * 立即同步发送，并按 shardingKey 哈希选择队列。
+     * 不走 afterCommit。重试耗尽后抛异常，供出箱 Relay 据此不 XACK。
+     */
+    protected void sendImmediateByKey(Object messageBodyObj, String shardingKey, String... keys) {
+        Message message = buildMessage(messageBodyObj, keys);
+        Exception last = null;
+        for (int i = 0; i < maxTryTimes; i++) {
+            try {
+                SendResult sendResult = producer.send(message, BaseEventPublisher::selectQueue, shardingKey);
+                log.info("immediate send by key success, attempt:{}, result:{}", i + 1, sendResult);
+                return;
+            } catch (Exception e) {
+                last = e;
+                log.error("immediate send by key error, attempt:{}, message:{}", i + 1, messageBodyObj, e);
+                if (i < maxTryTimes - 1) {
+                    sleepQuietly(100L * (i + 1));
+                }
+            }
+        }
+        throw new IllegalStateException("rocketmq immediate send failed after retries", last);
+    }
+
+    /** message 只为匹配 MessageQueueSelector，下标只由 shardingKey 决定。 */
+    private static MessageQueue selectQueue(List<MessageQueue> queues, Message message, Object shardingKey) {
+        int index = Math.floorMod(shardingKey.hashCode(), queues.size());
+        return queues.get(index);
     }
 
     /** 同步发送核心：事务后提交 + 有限次重试。 */
