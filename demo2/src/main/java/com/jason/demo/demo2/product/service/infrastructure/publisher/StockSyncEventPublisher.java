@@ -12,8 +12,9 @@ public class StockSyncEventPublisher extends BaseEventPublisher {
         super(PRODUCER_ID);
     }
 
-    /** 出箱专用：同步发送、不走 afterCommit，失败抛给 Relay 以便不 XACK。 */
+    /** 出箱专用：按 productId 选队列同步发送。失败抛给 Relay，以便不 XACK。 */
     public void sendNow(StockSyncEvent event) {
-        sendImmediate(event, String.valueOf(event.getProductId()), event.getIdempotentKey());
+        String productId = String.valueOf(event.getProductId());
+        sendImmediateByKey(event, productId, productId, event.getIdempotentKey());
     }
 }
