@@ -19,12 +19,16 @@ import org.springframework.data.redis.connection.stream.PendingMessages;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.stream.StreamMessageListenerContainer;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -56,7 +60,7 @@ class RedisStockOutboxRelayTest {
     @BeforeEach
     void setUp() {
         properties = new ProductStockProperties();
-        relay = new RedisStockOutboxRelay(redis, publisher, properties);
+        relay = new RedisStockOutboxRelay(redis, publisher, properties, "relay-testhost-1");
         lenient().when(redis.opsForStream()).thenReturn(streamOps);
         lenient().when(streamOps.acknowledgeAndDelete(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"),
                 any(RedisStreamCommands.XDelOptions.class), any(String[].class)))
@@ -129,6 +133,49 @@ class RedisStockOutboxRelayTest {
         assertTrue(relay.isAutoStartup());
         properties.setRedisHotEnabled(false);
         assertFalse(relay.isAutoStartup());
+    }
+
+    @Test
+    void consumerName_isInjectedNotBarePrefix() {
+        assertEquals("relay-testhost-1", relay.consumerName());
+        assertNotEquals("relay", relay.consumerName());
+    }
+
+    @Test
+    void readRequest_manualAck_andNeverCancelsOnError() {
+        var request = relay.newReadRequest();
+        assertTrue(request instanceof StreamMessageListenerContainer.ConsumerStreamReadRequest<?>);
+        var consumerRequest = (StreamMessageListenerContainer.ConsumerStreamReadRequest<String>) request;
+        assertFalse(consumerRequest.isAutoAcknowledge());
+        assertFalse(consumerRequest.getCancelSubscriptionOnError().test(new RuntimeException("x")));
+        assertEquals("demo2-stock-relay", consumerRequest.getConsumer().getGroup());
+        assertEquals("relay-testhost-1", consumerRequest.getConsumer().getName());
+    }
+
+    @Test
+    void pollExecutor_isExecutorService() {
+        assertTrue(relay.pollExecutor() instanceof ExecutorService);
+    }
+
+    @Test
+    void ensureGroup_busyGroup_isIgnored() {
+        doThrow(new RuntimeException("BUSYGROUP Consumer Group name already exists"))
+                .when(streamOps).createGroup(eq(RedisStockKeys.OUTBOX), any(), eq("demo2-stock-relay"));
+        relay.ensureGroup();
+    }
+
+    @Test
+    void ensureGroup_otherError_propagates() {
+        doThrow(new IllegalStateException("NOGROUP")).when(streamOps)
+                .createGroup(eq(RedisStockKeys.OUTBOX), any(), eq("demo2-stock-relay"));
+        assertThrows(IllegalStateException.class, () -> relay.ensureGroup());
+    }
+
+    @Test
+    void onMessage_sendSuccess_acksGroupNotConsumer() {
+        MapRecord<String, String, String> record = MapRecord.create(RedisStockKeys.OUTBOX, sampleFields()).withId(RecordId.of("1-0"));
+        relay.onMessage(record);
+        verify(streamOps).acknowledgeAndDelete(RedisStockKeys.OUTBOX, "demo2-stock-relay", acked(), "1-0");
     }
 
     private static RedisStreamCommands.XDelOptions acked() {
