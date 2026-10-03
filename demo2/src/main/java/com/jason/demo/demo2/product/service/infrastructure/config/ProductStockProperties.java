@@ -15,4 +15,7 @@ public class ProductStockProperties {
     private int outboxBatchSize = 16;
     private String outboxGroup = "demo2-stock-relay";
     private String outboxConsumer = "relay";
+    private long outboxClaimIntervalMs = 10000;
+    private long outboxClaimMinIdleMs = 30000;
+    private long outboxWatchdogIntervalMs = 10000;
 }
