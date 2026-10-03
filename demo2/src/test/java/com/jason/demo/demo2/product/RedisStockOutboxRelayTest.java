@@ -172,6 +172,14 @@ class RedisStockOutboxRelayTest {
     }
 
     @Test
+    void start_createGroupFails_doesNotMarkRunning() {
+        doThrow(new IllegalStateException("NOGROUP")).when(streamOps)
+                .createGroup(eq(RedisStockKeys.OUTBOX), any(), eq("demo2-stock-relay"));
+        assertThrows(IllegalStateException.class, () -> relay.start());
+        assertFalse(relay.isRunning());
+    }
+
+    @Test
     void onMessage_sendSuccess_acksGroupNotConsumer() {
         MapRecord<String, String, String> record = MapRecord.create(RedisStockKeys.OUTBOX, sampleFields()).withId(RecordId.of("1-0"));
         relay.onMessage(record);

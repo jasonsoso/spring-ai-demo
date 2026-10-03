@@ -95,7 +95,6 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         if (running) {
             return;
         }
-        running = true;
         ensureGroup();
         if (container == null) {
             var options = StreamMessageListenerContainer.StreamMessageListenerContainerOptions.builder()
@@ -108,6 +107,7 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         }
         subscription = container.register(newReadRequest(), this);
         container.start();
+        running = true;
     }
 
     @Override
