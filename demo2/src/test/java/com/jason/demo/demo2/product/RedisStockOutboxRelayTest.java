@@ -74,6 +74,18 @@ class RedisStockOutboxRelayTest {
     }
 
     @Test
+    void onRecord_ackNotDeleted_doesNotThrow() {
+        when(streamOps.acknowledgeAndDelete(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"),
+                any(RedisStreamCommands.XDelOptions.class), eq("1-0")))
+                .thenReturn(List.of(StreamEntryDeletionResult.NOT_FOUND));
+
+        relay.onRecord(sampleFields(), "1-0");
+
+        verify(publisher).sendNow(any());
+        verify(streamOps).acknowledgeAndDelete(RedisStockKeys.OUTBOX, "demo2-stock-relay", acked(), "1-0");
+    }
+
+    @Test
     void onRecord_sendFails_doesNotAck() {
         doThrow(new IllegalStateException("mq down")).when(publisher).sendNow(any());
 
