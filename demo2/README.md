@@ -811,7 +811,7 @@ mvn spring-boot:run
                       ▼
               Stream demo2:stock:outbox
                       ▼
-         RedisStockOutboxRelay ──sendNow 按 productId 选队列──► RocketMQ
+         StreamMessageListenerContainer → RedisStockOutboxRelay.sendNow 按 productId 选队列 ──► RocketMQ
                       ▼
               StockSyncMqListener 按 productId 加锁后 applyDelta
                       ▼
@@ -824,7 +824,7 @@ mvn spring-boot:run
 |-----------|------|
 | `demo2:stock:{productId}` | Hash：`avail`、`seq` |
 | `demo2:stock:reserve:{orderId}:{productId}` | 预占票 = qty |
-| `demo2:stock:outbox` | 出箱 Stream；Relay **发 MQ 成功才 XACK** |
+| `demo2:stock:outbox` | 出箱 Stream；容器只拉新消息；**发 MQ 成功才** `XACKDEL(ACKED)`；空闲 PEL 由独立调度 `pending`+`claim` 到 `{outbox-consumer}-{hostname}-{pid}` |
 
 C 端列表/详情：热路径开启且 Hash 存在时，`availableStock` overlay Redis `avail`；**不要改** `sellStock`（仍 MySQL）。
 
@@ -840,14 +840,20 @@ C 端列表/详情：热路径开启且 Hash 存在时，`availableStock` overla
 app.product.stock.redis-hot-enabled=true
 app.product.stock.reconcile-interval-ms=60000
 app.product.stock.reconcile-lag-alarm-ms=300000
+app.product.stock.outbox-block-ms=2000
+app.product.stock.outbox-batch-size=16
 app.product.stock.outbox-group=demo2-stock-relay
+app.product.stock.outbox-consumer=relay
+app.product.stock.outbox-claim-interval-ms=10000
+app.product.stock.outbox-claim-min-idle-ms=30000
+app.product.stock.outbox-watchdog-interval-ms=10000
 rocketmq.producers.stockSyncProducer.enabled=true
 rocketmq.producers.stockSyncProducer.topic=DEMO_STOCK_TOPIC
 rocketmq.consumers.stockSync.enabled=true
 rocketmq.consumers.stockSync.listenerBeanName=stockSyncMqListener
 ```
 
-`redis-hot-enabled=false` 时预占/实扣/释放直写 MySQL；Hash 未加载时热路径预占返回 **40010**，**不会**用当时的 `mysql.stock` 灌 Redis。
+`outbox-consumer` 仅为前缀，运行时消费者名为 `{prefix}-{hostname}-{pid}`。`redis-hot-enabled=false` 时预占/实扣/释放直写 MySQL；Hash 未加载时热路径预占返回 **40010**，**不会**用当时的 `mysql.stock` 灌 Redis。
 
 ### Demo HTTP（无登录）
 

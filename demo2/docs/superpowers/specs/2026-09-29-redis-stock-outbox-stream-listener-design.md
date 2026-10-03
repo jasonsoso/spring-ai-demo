@@ -3,7 +3,7 @@
 **日期**: 2026-09-29  
 **修订**: 2026-10-03（对齐 `XACKDEL` / `sendNow`；多机用唯一消费者名）  
 **项目**: spring-ai-demo / demo2  
-**状态**: 待实现  
+**状态**: 已实现  
 **前置**: [2026-08-27-redis-stock-consistency-design.md](./2026-08-27-redis-stock-consistency-design.md)  
 **相关**: [2026-09-30-stock-sync-product-serial-consume-design.md](./2026-09-30-stock-sync-product-serial-consume-design.md)（已实现；本规范不改消费侧）
 

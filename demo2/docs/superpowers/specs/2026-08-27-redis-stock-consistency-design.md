@@ -393,21 +393,21 @@ return {1, 'OK'}
 
 ## 6. 出箱与对账
 
-职责拆开，**Relay 不写 MySQL**：
+职责拆开，**Relay 不写 MySQL**。拉流、确认与 idle PEL 补发细节见 [2026-09-29-redis-stock-outbox-stream-listener-design.md](./2026-09-29-redis-stock-outbox-stream-listener-design.md)（已实现）。
 
 ```text
 Lua XADD Stream
-    → RedisStockOutboxRelay XREADGROUP（product.app.listener）
+    → StreamMessageListenerContainer + RedisStockOutboxRelay（product.app.listener）
     → StockSyncEventPublisher.sendNow（product.service.infrastructure.publisher）
     → send RocketMQ DEMO_STOCK_TOPIC
-    → 发送成功才 XACK Stream     ← 失败不 ACK，消息留在 PEL，下次再发
+    → 发送成功才 XACKDEL(ACKED)     ← 失败不确认、不删除，消息留在 PEL
     → StockSyncMqListener（product.app.listener，沿用 AbstractConcurrentlyRocketListener）
     → applyDelta 写 MySQL
 ```
 
 消息体 `StockSyncEvent` 与 Publisher 同包：`com.jason.demo.demo2.product.service.infrastructure.publisher`。不要放到全局 `com.jason.demo.demo2.mq`。
 
-- 发 MQ 失败：不 `XACK`，Stream 可重投；`XAUTOCLAIM` 收回挂死的 pending。
+- 发 MQ 失败：不 `XACKDEL`，Stream 可重投；独立调度 `pending`+`claim` 收回 idle PEL（见 2026-09-29 规范）。
 - 消费失败（含 seq 缺口）：返回 `ConsumeConcurrentlyStatus.RECONSUME_LATER`，Broker 稍后重投。幂等键保证重复消息只落一次账。
 - 业务成功或「已投影跳过」：`CONSUME_SUCCESS`。
 
