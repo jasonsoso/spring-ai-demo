@@ -811,9 +811,9 @@ mvn spring-boot:run
                       ▼
               Stream demo2:stock:outbox
                       ▼
-         RedisStockOutboxRelay ──sendImmediate──► RocketMQ
+         RedisStockOutboxRelay ──sendNow 按 productId 选队列──► RocketMQ
                       ▼
-              StockSyncMqListener.applyDelta
+              StockSyncMqListener 按 productId 加锁后 applyDelta
                       ▼
               MySQL stock_seq = seq-1（无行锁）
 

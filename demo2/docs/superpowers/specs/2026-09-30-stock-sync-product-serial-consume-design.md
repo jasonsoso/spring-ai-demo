@@ -2,7 +2,7 @@
 
 **日期**: 2026-09-30  
 **项目**: spring-ai-demo / demo2  
-**状态**: 待实现  
+**状态**: 已实现  
 **前置**: [2026-08-27-redis-stock-consistency-design.md](./2026-08-27-redis-stock-consistency-design.md)
 
 ---
