@@ -37,3 +37,6 @@ node_modules
 demo2/.agentscope/
 
 .worktrees/
+
+# SDD scratch (keep local; do not commit reports)
+.superpowers/sdd/task-6-report.md

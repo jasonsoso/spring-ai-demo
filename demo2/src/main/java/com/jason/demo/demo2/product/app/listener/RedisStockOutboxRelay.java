@@ -56,6 +56,7 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
     private final String consumerName;
     private ExecutorService pollExecutor;
 
+    private final Object lifecycle = new Object();
     private StreamMessageListenerContainer<String, MapRecord<String, String, String>> container;
     private Subscription subscription;
     private volatile Future<?> pollFuture;
@@ -89,58 +90,64 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
 
     @Override
     public void start() {
-        if (running) {
-            return;
-        }
-        ensureGroup();
-        if (pollExecutor == null || pollExecutor.isShutdown()) {
-            pollExecutor = newPollExecutor();
-        }
-        if (container == null) {
-            var options = StreamMessageListenerContainer.StreamMessageListenerContainerOptions.builder()
-                    .pollTimeout(Duration.ofMillis(properties.getOutboxBlockMs()))
-                    .batchSize(properties.getOutboxBatchSize())
-                    .executor(trackingExecutor())
-                    .serializer(RedisSerializer.string())
-                    .build();
-            container = StreamMessageListenerContainer.create(redis.getConnectionFactory(), options);
-        }
-        subscription = container.register(newReadRequest(), this);
-        container.start();
-        running = true;
-        if (scheduler == null) {
-            scheduler = Executors.newScheduledThreadPool(2, r -> {
-                Thread t = new Thread(r, "stock-outbox-scheduler");
-                t.setDaemon(true);
-                return t;
-            });
-        }
-        long interval = properties.getOutboxClaimIntervalMs();
-        scheduler.scheduleWithFixedDelay(() -> {
+        synchronized (lifecycle) {
             if (running) {
-                claimIdlePending();
+                return;
             }
-        }, interval, interval, TimeUnit.MILLISECONDS);
-        long watchdog = properties.getOutboxWatchdogIntervalMs();
-        scheduler.scheduleWithFixedDelay(this::watchOnce, watchdog, watchdog, TimeUnit.MILLISECONDS);
+            ensureGroup();
+            if (pollExecutor == null || pollExecutor.isShutdown()) {
+                pollExecutor = newPollExecutor();
+            }
+            if (container == null) {
+                var options = StreamMessageListenerContainer.StreamMessageListenerContainerOptions.builder()
+                        .pollTimeout(Duration.ofMillis(properties.getOutboxBlockMs()))
+                        .batchSize(properties.getOutboxBatchSize())
+                        .executor(trackingExecutor())
+                        .serializer(RedisSerializer.string())
+                        .build();
+                container = StreamMessageListenerContainer.create(redis.getConnectionFactory(), options);
+            }
+            subscription = container.register(newReadRequest(), this);
+            container.start();
+            running = true;
+            if (scheduler == null) {
+                scheduler = Executors.newScheduledThreadPool(2, r -> {
+                    Thread t = new Thread(r, "stock-outbox-scheduler");
+                    t.setDaemon(true);
+                    return t;
+                });
+            }
+            long interval = properties.getOutboxClaimIntervalMs();
+            scheduler.scheduleWithFixedDelay(() -> runScheduled("claim", () -> {
+                if (running) {
+                    claimIdlePending();
+                }
+            }), interval, interval, TimeUnit.MILLISECONDS);
+            long watchdog = properties.getOutboxWatchdogIntervalMs();
+            scheduler.scheduleWithFixedDelay(
+                    () -> runScheduled("watchdog", this::watchOnce),
+                    watchdog, watchdog, TimeUnit.MILLISECONDS);
+        }
     }
 
     @Override
     public void stop() {
-        running = false;
-        if (scheduler != null) {
-            scheduler.shutdownNow();
-            scheduler = null;
-        }
-        if (subscription != null && container != null) {
-            container.remove(subscription);
-            subscription = null;
-        }
-        if (container != null) {
-            container.stop();
-        }
-        if (pollExecutor != null) {
-            pollExecutor.shutdownNow();
+        synchronized (lifecycle) {
+            running = false;
+            if (scheduler != null) {
+                scheduler.shutdownNow();
+                scheduler = null;
+            }
+            if (subscription != null && container != null) {
+                container.remove(subscription);
+                subscription = null;
+            }
+            if (container != null) {
+                container.stop();
+            }
+            if (pollExecutor != null) {
+                pollExecutor.shutdownNow();
+            }
         }
     }
 
@@ -231,12 +238,17 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         if (!shouldReregister(subscription, pollFuture)) {
             return;
         }
-        if (subscription != null) {
-            container.remove(subscription);
-        }
-        subscription = container.register(newReadRequest(), this);
-        if (!container.isRunning()) {
-            container.start();
+        synchronized (lifecycle) {
+            if (!running) {
+                return;
+            }
+            if (subscription != null) {
+                container.remove(subscription);
+            }
+            subscription = container.register(newReadRequest(), this);
+            if (!container.isRunning()) {
+                container.start();
+            }
         }
     }
 
@@ -271,6 +283,16 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
 
     Executor trackingExecutor() {
         return command -> pollFuture = pollExecutor.submit(command);
+    }
+
+    private static void runScheduled(String task, Runnable action) {
+        try {
+            action.run();
+        } catch (RuntimeException ex) {
+            log.warn("stock outbox {} scheduled task failed", task, ex);
+        } catch (Exception ex) {
+            log.warn("stock outbox {} scheduled task failed", task, ex);
+        }
     }
 
     private static ExecutorService newPollExecutor() {

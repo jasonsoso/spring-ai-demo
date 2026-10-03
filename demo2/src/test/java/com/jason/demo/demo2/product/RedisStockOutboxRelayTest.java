@@ -128,6 +128,22 @@ class RedisStockOutboxRelayTest {
     }
 
     @Test
+    void claimIdlePending_pendingThrows_stillAllowsSecondCall() {
+        PendingMessages empty = mock(PendingMessages.class);
+        when(empty.isEmpty()).thenReturn(true);
+        when(streamOps.pending(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"), any(Range.class),
+                eq(16L), eq(Duration.ofSeconds(30))))
+                .thenThrow(new RuntimeException("redis down"))
+                .thenReturn(empty);
+
+        assertThrows(RuntimeException.class, () -> relay.claimIdlePending());
+        relay.claimIdlePending();
+
+        verify(streamOps, times(2)).pending(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"),
+                any(Range.class), eq(16L), eq(Duration.ofSeconds(30)));
+    }
+
+    @Test
     void autoStartup_followsHotFlag() {
         properties.setRedisHotEnabled(true);
         assertTrue(relay.isAutoStartup());
