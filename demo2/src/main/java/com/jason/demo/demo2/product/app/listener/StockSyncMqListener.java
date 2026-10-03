@@ -6,6 +6,8 @@ import com.jason.demo.demo2.product.service.common.ProductErrorCodeEnum;
 import com.jason.demo.demo2.product.service.common.StockSeqGapException;
 import com.jason.demo.demo2.product.service.core.ProductStockDomainService;
 import com.jason.demo.demo2.product.service.infrastructure.publisher.StockSyncEvent;
+import java.util.concurrent.ConcurrentHashMap;
+
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
 import org.apache.rocketmq.common.message.MessageExt;
@@ -20,6 +22,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class StockSyncMqListener extends RocketMessageConcurrentlyListener<StockSyncEvent> {
 
     private final ProductStockDomainService productStockDomainService;
+    private final ConcurrentHashMap<Long, Object> productLocks = new ConcurrentHashMap<>();
 
     public StockSyncMqListener(JsonMapper jsonMapper, ProductStockDomainService productStockDomainService) {
         super(jsonMapper);
@@ -29,7 +32,7 @@ public class StockSyncMqListener extends RocketMessageConcurrentlyListener<Stock
     @Override
     protected ConsumeConcurrentlyStatus handleMessage(StockSyncEvent payload, String message, MessageExt messageExt) {
         try {
-            productStockDomainService.applyDelta(payload);
+            runApplyDelta(payload);
             return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
         } catch (StockSeqGapException ex) {
             log.warn("stock seq gap, will retry, keys={}", messageExt.getKeys(), ex);
@@ -40,6 +43,18 @@ public class StockSyncMqListener extends RocketMessageConcurrentlyListener<Stock
                 return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
             }
             throw ex;
+        }
+    }
+
+    private void runApplyDelta(StockSyncEvent payload) {
+        Long productId = payload.getProductId();
+        if (productId == null) {
+            productStockDomainService.applyDelta(payload);
+            return;
+        }
+        Object lock = productLocks.computeIfAbsent(productId, id -> new Object());
+        synchronized (lock) {
+            productStockDomainService.applyDelta(payload);
         }
     }
 }
