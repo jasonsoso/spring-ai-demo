@@ -22,6 +22,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -32,12 +33,12 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,8 +52,6 @@ class RedisStockOutboxRelayTest {
     @SuppressWarnings("rawtypes")
     @Mock
     private StreamOperations streamOps;
-    @Mock
-    private PendingMessage pendingMessage;
 
     private ProductStockProperties properties;
     private RedisStockOutboxRelay relay;
@@ -99,32 +98,31 @@ class RedisStockOutboxRelayTest {
     }
 
     @Test
-    void claimIdle_sendFails_doesNotAck() {
-        RecordId id = RecordId.of("2-0");
-        when(pendingMessage.getId()).thenReturn(id);
-        when(pendingMessage.getElapsedTimeSinceLastDelivery()).thenReturn(Duration.ofMinutes(1));
+    void claimIdle_oneSendFails_stillSendsRest() {
+        RecordId id1 = RecordId.of("2-0");
+        RecordId id2 = RecordId.of("3-0");
+        PendingMessage p1 = mock(PendingMessage.class);
+        PendingMessage p2 = mock(PendingMessage.class);
+        when(p1.getId()).thenReturn(id1);
+        when(p2.getId()).thenReturn(id2);
         PendingMessages pending = mock(PendingMessages.class);
         when(pending.isEmpty()).thenReturn(false);
-        when(pending.iterator()).thenReturn(List.of(pendingMessage).iterator());
-        when(streamOps.pending(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"), any(Range.class), anyLong()))
-                .thenReturn(pending);
-        Map<Object, Object> body = new java.util.LinkedHashMap<>();
-        body.put("productId", "9001");
-        body.put("orderId", "100");
-        body.put("optType", "RESERVE");
-        body.put("qty", "2");
-        body.put("idempotentKey", "100:9001:RESERVE");
-        body.put("seq", "4");
-        @SuppressWarnings("unchecked")
-        MapRecord<String, Object, Object> claimed = MapRecord.create(RedisStockKeys.OUTBOX, body).withId(id);
-        when(streamOps.claim(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"), eq("relay"),
-                eq(Duration.ofSeconds(30)), eq(id)))
-                .thenReturn(List.of(claimed));
-        doThrow(new IllegalStateException("mq down")).when(publisher).sendNow(any());
+        when(pending.iterator()).thenReturn(List.of(p1, p2).iterator());
+        when(streamOps.pending(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"), any(Range.class),
+                eq(16L), eq(Duration.ofSeconds(30)))).thenReturn(pending);
 
-        assertThrows(IllegalStateException.class, () -> relay.claimIdlePending());
+        MapRecord<String, Object, Object> rec1 = MapRecord.create(RedisStockKeys.OUTBOX, body()).withId(id1);
+        MapRecord<String, Object, Object> rec2 = MapRecord.create(RedisStockKeys.OUTBOX, body()).withId(id2);
+        when(streamOps.claim(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"), eq("relay-testhost-1"),
+                eq(Duration.ofSeconds(30)), eq(id1), eq(id2))).thenReturn(List.of(rec1, rec2));
+        doThrow(new IllegalStateException("mq down")).doNothing().when(publisher).sendNow(any());
 
-        verify(streamOps, never()).acknowledgeAndDelete(any(), any(), any(), any(String[].class));
+        relay.claimIdlePending();
+
+        verify(publisher, times(2)).sendNow(any());
+        verify(streamOps, never()).acknowledgeAndDelete(any(), any(), any(), eq("2-0"));
+        verify(streamOps).acknowledgeAndDelete(eq(RedisStockKeys.OUTBOX), eq("demo2-stock-relay"),
+                any(RedisStreamCommands.XDelOptions.class), eq("3-0"));
     }
 
     @Test
@@ -198,5 +196,16 @@ class RedisStockOutboxRelayTest {
                 "qty", "2",
                 "idempotentKey", "100:9001:RESERVE",
                 "seq", "4");
+    }
+
+    private static Map<Object, Object> body() {
+        Map<Object, Object> body = new LinkedHashMap<>();
+        body.put("productId", "9001");
+        body.put("orderId", "100");
+        body.put("optType", "RESERVE");
+        body.put("qty", "2");
+        body.put("idempotentKey", "100:9001:RESERVE");
+        body.put("seq", "4");
+        return body;
     }
 }

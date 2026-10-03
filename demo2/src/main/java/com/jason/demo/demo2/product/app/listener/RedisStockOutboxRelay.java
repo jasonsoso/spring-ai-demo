@@ -34,6 +34,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Redis Stream 出箱 → RocketMQ。只负责发消息，禁止调 applyDelta。
@@ -43,8 +45,6 @@ import java.util.concurrent.Future;
 @Component
 public class RedisStockOutboxRelay implements SmartLifecycle,
         StreamListener<String, MapRecord<String, String, String>> {
-
-    private static final Duration CLAIM_MIN_IDLE = Duration.ofSeconds(30);
 
     /** 本组确认后，仅当所有消费组都已确认才删正文。需要 Redis 8.2+ 的 XACKDEL。 */
     private static final RedisStreamCommands.XDelOptions ACKED = RedisStreamCommands.XDelOptions
@@ -59,6 +59,7 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
     private StreamMessageListenerContainer<String, MapRecord<String, String, String>> container;
     private Subscription subscription;
     private volatile Future<?> pollFuture;
+    private ScheduledExecutorService scheduler;
     private volatile boolean running;
 
     @Autowired
@@ -108,6 +109,19 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         subscription = container.register(newReadRequest(), this);
         container.start();
         running = true;
+        if (scheduler == null) {
+            scheduler = Executors.newScheduledThreadPool(2, r -> {
+                Thread t = new Thread(r, "stock-outbox-scheduler");
+                t.setDaemon(true);
+                return t;
+            });
+        }
+        long interval = properties.getOutboxClaimIntervalMs();
+        scheduler.scheduleWithFixedDelay(() -> {
+            if (running) {
+                claimIdlePending();
+            }
+        }, interval, interval, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -154,32 +168,39 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
     }
 
     public void claimIdlePending() {
+        Duration minIdle = Duration.ofMillis(properties.getOutboxClaimMinIdleMs());
         StreamOperations<String, Object, Object> ops = redis.opsForStream();
-        PendingMessages pending = ops.pending(RedisStockKeys.OUTBOX, properties.getOutboxGroup(), Range.unbounded(), 100L);
+        PendingMessages pending = ops.pending(
+                RedisStockKeys.OUTBOX,
+                properties.getOutboxGroup(),
+                Range.unbounded(),
+                properties.getOutboxBatchSize(),
+                minIdle);
         if (pending == null || pending.isEmpty()) {
             return;
         }
-        List<RecordId> idleIds = new ArrayList<>();
+        List<RecordId> ids = new ArrayList<>();
         for (PendingMessage message : pending) {
-            Duration idle = message.getElapsedTimeSinceLastDelivery();
-            if (idle != null && idle.compareTo(CLAIM_MIN_IDLE) >= 0) {
-                idleIds.add(message.getId());
-            }
+            ids.add(message.getId());
         }
-        if (idleIds.isEmpty()) {
+        if (ids.isEmpty()) {
             return;
         }
         List<MapRecord<String, Object, Object>> claimed = ops.claim(
                 RedisStockKeys.OUTBOX,
                 properties.getOutboxGroup(),
-                properties.getOutboxConsumer(),
-                CLAIM_MIN_IDLE,
-                idleIds.toArray(RecordId[]::new));
+                consumerName,
+                minIdle,
+                ids.toArray(RecordId[]::new));
         if (claimed == null) {
             return;
         }
         for (MapRecord<String, Object, Object> record : claimed) {
-            onRecord(stringify(record.getValue()), record.getId().getValue());
+            try {
+                onRecord(stringify(record.getValue()), record.getId().getValue());
+            } catch (RuntimeException ex) {
+                log.warn("stock outbox claim send failed, recordId={}", record.getId(), ex);
+            }
         }
     }
 
