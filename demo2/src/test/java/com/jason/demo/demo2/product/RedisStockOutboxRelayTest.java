@@ -20,12 +20,14 @@ import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.core.StreamOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer;
+import org.springframework.data.redis.stream.Subscription;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -182,6 +184,29 @@ class RedisStockOutboxRelayTest {
         MapRecord<String, String, String> record = MapRecord.create(RedisStockKeys.OUTBOX, sampleFields()).withId(RecordId.of("1-0"));
         relay.onMessage(record);
         verify(streamOps).acknowledgeAndDelete(RedisStockKeys.OUTBOX, "demo2-stock-relay", acked(), "1-0");
+    }
+
+    @Test
+    void shouldReregister_whenSubscriptionInactiveOrFutureDone() {
+        Subscription active = mock(Subscription.class);
+        when(active.isActive()).thenReturn(true);
+        Future<?> live = mock(Future.class);
+        when(live.isDone()).thenReturn(false);
+        assertFalse(relay.shouldReregister(active, live));
+        assertTrue(relay.shouldReregister(null, live));
+        when(active.isActive()).thenReturn(false);
+        assertTrue(relay.shouldReregister(active, live));
+        when(active.isActive()).thenReturn(true);
+        when(live.isDone()).thenReturn(true);
+        assertTrue(relay.shouldReregister(active, live));
+    }
+
+    @Test
+    void watchOnce_whenStopped_doesNotChangeConsumerName() {
+        relay.stop();
+        String before = relay.consumerName();
+        relay.watchOnce();
+        assertEquals(before, relay.consumerName());
     }
 
     private static RedisStreamCommands.XDelOptions acked() {

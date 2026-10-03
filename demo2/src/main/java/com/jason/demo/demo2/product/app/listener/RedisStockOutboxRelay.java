@@ -54,7 +54,7 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
     private final StockSyncEventPublisher publisher;
     private final ProductStockProperties properties;
     private final String consumerName;
-    private final ExecutorService pollExecutor;
+    private ExecutorService pollExecutor;
 
     private StreamMessageListenerContainer<String, MapRecord<String, String, String>> container;
     private Subscription subscription;
@@ -79,11 +79,7 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         this.publisher = publisher;
         this.properties = properties;
         this.consumerName = consumerName;
-        this.pollExecutor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "stock-outbox-poll");
-            t.setDaemon(true);
-            return t;
-        });
+        this.pollExecutor = newPollExecutor();
     }
 
     @Override
@@ -97,6 +93,9 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
             return;
         }
         ensureGroup();
+        if (pollExecutor == null || pollExecutor.isShutdown()) {
+            pollExecutor = newPollExecutor();
+        }
         if (container == null) {
             var options = StreamMessageListenerContainer.StreamMessageListenerContainerOptions.builder()
                     .pollTimeout(Duration.ofMillis(properties.getOutboxBlockMs()))
@@ -122,11 +121,17 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
                 claimIdlePending();
             }
         }, interval, interval, TimeUnit.MILLISECONDS);
+        long watchdog = properties.getOutboxWatchdogIntervalMs();
+        scheduler.scheduleWithFixedDelay(this::watchOnce, watchdog, watchdog, TimeUnit.MILLISECONDS);
     }
 
     @Override
     public void stop() {
         running = false;
+        if (scheduler != null) {
+            scheduler.shutdownNow();
+            scheduler = null;
+        }
         if (subscription != null && container != null) {
             container.remove(subscription);
             subscription = null;
@@ -134,7 +139,9 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         if (container != null) {
             container.stop();
         }
-        pollExecutor.shutdownNow();
+        if (pollExecutor != null) {
+            pollExecutor.shutdownNow();
+        }
     }
 
     @Override
@@ -204,6 +211,35 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         }
     }
 
+    public boolean shouldReregister(Subscription sub, Future<?> poll) {
+        if (sub == null) {
+            return true;
+        }
+        if (!sub.isActive()) {
+            return true;
+        }
+        return poll != null && poll.isDone();
+    }
+
+    public void watchOnce() {
+        if (!running) {
+            return;
+        }
+        if (container == null) {
+            return;
+        }
+        if (!shouldReregister(subscription, pollFuture)) {
+            return;
+        }
+        if (subscription != null) {
+            container.remove(subscription);
+        }
+        subscription = container.register(newReadRequest(), this);
+        if (!container.isRunning()) {
+            container.start();
+        }
+    }
+
     public String consumerName() {
         return consumerName;
     }
@@ -235,6 +271,14 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
 
     Executor trackingExecutor() {
         return command -> pollFuture = pollExecutor.submit(command);
+    }
+
+    private static ExecutorService newPollExecutor() {
+        return Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "stock-outbox-poll");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     private static boolean isBusyGroup(Throwable ex) {
