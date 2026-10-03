@@ -147,7 +147,7 @@ public class BaseEventPublisher implements ApplicationContextAware {
     /**
      * 立即同步发送：不走 afterCommit。重试耗尽后抛异常，供出箱 Relay 据此不 XACK。
      */
-    protected void sendImmediate(Object messageBodyObj, String... keys) {
+    /*protected void sendImmediate(Object messageBodyObj, String... keys) {
         Message message = buildMessage(messageBodyObj, keys);
         Exception last = null;
         for (int i = 0; i < maxTryTimes; i++) {
@@ -164,7 +164,7 @@ public class BaseEventPublisher implements ApplicationContextAware {
             }
         }
         throw new IllegalStateException("rocketmq immediate send failed after retries", last);
-    }
+    }*/
 
     /**
      * 立即同步发送，并按 shardingKey 哈希选择队列。
