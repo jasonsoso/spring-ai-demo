@@ -38,24 +38,30 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Redis Stream 出箱 → RocketMQ。只负责发消息，禁止调 applyDelta。
- * sendNow 成功才 XACKDEL（ACKED）；失败留在 PEL，由 claim 补发。
+ * Redis Stream 出箱 Relay：读 {@code demo2:stock:outbox}，发 RocketMQ，再 XACKDEL。
+ * <p>
+ * 只投递，禁止调 {@code applyDelta}（MySQL 投影由 {@link StockSyncMqListener} 做）。
+ * 新消息走 {@link StreamMessageListenerContainer}；卡住的 PEL 由独立 {@code pending+claim} 补发。
+ * 多实例共用同一消费组、各自唯一 consumerName，避免 PEL 被抢乱。
  */
 @Slf4j
 @Component
 public class RedisStockOutboxRelay implements SmartLifecycle,
         StreamListener<String, MapRecord<String, String, String>> {
 
-    /** 本组确认后，仅当所有消费组都已确认才删正文。需要 Redis 8.2+ 的 XACKDEL。 */
+    /** XACKDEL ACKED：本组 ACK 后，仅当所有组都已确认才删 Stream 正文。需要 Redis 8.2+。 */
     private static final RedisStreamCommands.XDelOptions ACKED = RedisStreamCommands.XDelOptions
             .deletionPolicy(RedisStreamCommands.StreamDeletionPolicy.ACKNOWLEDGED);
 
     private final StringRedisTemplate redis;
     private final StockSyncEventPublisher publisher;
     private final ProductStockProperties properties;
+    /** {@code {prefix}-{hostname}-{pid}}，同组多机互不覆盖 PEL。 */
     private final String consumerName;
+    /** 容器 poll 线程；看门狗用 {@link #pollFuture} 判断这条任务是否已死。 */
     private ExecutorService pollExecutor;
 
+    /** 串行化 start/stop/watchOnce，避免停机时还在重注册。 */
     private final Object lifecycle = new Object();
     private StreamMessageListenerContainer<String, MapRecord<String, String, String>> container;
     private Subscription subscription;
@@ -94,6 +100,7 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
             if (running) {
                 return;
             }
+            // 先建组再 mark running：组失败时不要留下半启动状态
             ensureGroup();
             if (pollExecutor == null || pollExecutor.isShutdown()) {
                 pollExecutor = newPollExecutor();
@@ -117,6 +124,7 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
                     return t;
                 });
             }
+            // 容器只读 '>'；PEL 超时条目必须另开 pending+claim（SDR 4.1 无 autoClaim）
             long interval = properties.getOutboxClaimIntervalMs();
             scheduler.scheduleWithFixedDelay(() -> runScheduled("claim", () -> {
                 if (running) {
@@ -133,6 +141,7 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
     @Override
     public void stop() {
         synchronized (lifecycle) {
+            // 先清 running，避免 watchdog 在拆容器时又 register
             running = false;
             if (scheduler != null) {
                 scheduler.shutdownNow();
@@ -163,6 +172,10 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         onRecord(fields, message.getId().getValue());
     }
 
+    /**
+     * 投递成功才 ACK。{@code sendNow} 抛错则条目仍在 PEL，由 claim 补发，
+     * 避免 Redis 已删、RocketMQ/MySQL 永远收不到。
+     */
     public void onRecord(Map<String, String> fields, String recordId) {
         StockSyncEvent event = new StockSyncEvent(
                 Long.parseLong(required(fields, "productId")),
@@ -172,15 +185,19 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
                 required(fields, "idempotentKey"),
                 Long.parseLong(required(fields, "seq")));
         publisher.sendNow(event);
-        // 必须先 send 再 XACKDEL：抛错则本条仍 pending，避免 Redis 已成功、MySQL 永远收不到
         List<StreamEntryDeletionResult> results = redis.opsForStream().acknowledgeAndDelete(
                 RedisStockKeys.OUTBOX, properties.getOutboxGroup(), ACKED, recordId);
         StreamEntryDeletionResult result = results == null || results.isEmpty() ? null : results.get(0);
+        // ACKED 下 NOT_FOUND / NOT_ACKED 不抛：可能已被别的实例删，重试只会打转
         if (result != StreamEntryDeletionResult.DELETED) {
             log.warn("outbox entry not deleted after ack, recordId={}, result={}", recordId, result);
         }
     }
 
+    /**
+     * 等价于 XAUTOCLAIM：列出空闲超过 minIdle 的 PEL，claim 到本 consumer 再走 {@link #onRecord}。
+     * 单条失败只记日志，不中断本批，让周期任务下次再捞。
+     */
     public void claimIdlePending() {
         Duration minIdle = Duration.ofMillis(properties.getOutboxClaimMinIdleMs());
         StreamOperations<String, Object, Object> ops = redis.opsForStream();
@@ -218,6 +235,7 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         }
     }
 
+    /** 订阅没了、inactive，或 poll Future 已结束，说明容器读循环挂了，需要同名重注册。 */
     public boolean shouldReregister(Subscription sub, Future<?> poll) {
         if (sub == null) {
             return true;
@@ -228,6 +246,10 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         return poll != null && poll.isDone();
     }
 
+    /**
+     * 看门狗：容器默认 cancelOnError=true 会停订阅。
+     * 同名重注册（不 DELCONSUMER），PEL 仍归本进程，由 claim 消化。
+     */
     public void watchOnce() {
         if (!running) {
             return;
@@ -260,6 +282,10 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         return pollExecutor;
     }
 
+    /**
+     * 覆盖 SDR 默认：手动 ACK；{@code cancelOnError=false} 避免 {@code onMessage} 一抛就拆订阅。
+     * {@code lastConsumed()} 即 XREADGROUP {@code >}，只拉从未投递给本组的新条目。
+     */
     public StreamMessageListenerContainer.StreamReadRequest<String> newReadRequest() {
         return StreamMessageListenerContainer.StreamReadRequest.builder(
                         StreamOffset.create(RedisStockKeys.OUTBOX, ReadOffset.lastConsumed()))
@@ -274,6 +300,7 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
             redis.opsForStream().createGroup(
                     RedisStockKeys.OUTBOX, ReadOffset.from("0-0"), properties.getOutboxGroup());
         } catch (RuntimeException ex) {
+            // 组已存在是常态（多实例 / 重启），不能当启动失败
             if (isBusyGroup(ex)) {
                 return;
             }
@@ -281,10 +308,15 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
         }
     }
 
+    /** 把容器 poll 提交到单线程池，并记下 Future，给看门狗探测「读循环是否已退出」。 */
     Executor trackingExecutor() {
         return command -> pollFuture = pollExecutor.submit(command);
     }
 
+    /**
+     * ScheduledThreadPoolExecutor 默认「任务抛错即取消后续周期」。
+     * claim/watchdog 必须自己吞异常，否则补发和重注册会永久停掉。
+     */
     private static void runScheduled(String task, Runnable action) {
         try {
             action.run();
