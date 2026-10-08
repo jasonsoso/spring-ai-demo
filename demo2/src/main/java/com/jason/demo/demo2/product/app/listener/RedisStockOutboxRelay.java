@@ -154,8 +154,21 @@ public class RedisStockOutboxRelay implements SmartLifecycle,
             if (container != null) {
                 container.stop();
             }
+            // 订阅已取消。poll 线程多半还堵在 XREADGROUP BLOCK 里。
+            // shutdownNow 会打断这次 get()，Redisson 把 InterruptedException 包成数据访问异常，
+            // StreamPollTask 只会把裸中断当正常停止，包过的异常会打成 ERROR。
+            // 等这次阻塞读自己返回（最多 outboxBlockMs）再退出。
             if (pollExecutor != null) {
-                pollExecutor.shutdownNow();
+                pollExecutor.shutdown();
+                try {
+                    long waitMs = Math.max(0, properties.getOutboxBlockMs()) + 1000;
+                    if (!pollExecutor.awaitTermination(waitMs, TimeUnit.MILLISECONDS)) {
+                        pollExecutor.shutdownNow();
+                    }
+                } catch (InterruptedException ex) {
+                    pollExecutor.shutdownNow();
+                    Thread.currentThread().interrupt();
+                }
             }
         }
     }
