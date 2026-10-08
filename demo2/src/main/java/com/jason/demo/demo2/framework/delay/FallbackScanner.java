@@ -55,7 +55,11 @@ public class FallbackScanner {
         try {
             doScan();
         } finally {
-            releaseQuietly(lockInfo);
+            try {
+                lockTemplate.releaseLock(lockInfo);
+            } catch (Exception e) {
+                log.warn("release fallback scanner lock failed", e);
+            }
         }
     }
 
@@ -72,11 +76,4 @@ public class FallbackScanner {
         }
     }
 
-    private void releaseQuietly(LockInfo lockInfo) {
-        try {
-            lockTemplate.releaseLock(lockInfo);
-        } catch (Exception e) {
-            log.warn("release fallback scanner lock failed", e);
-        }
-    }
 }

@@ -9,6 +9,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -18,12 +20,13 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,6 +34,8 @@ import static org.mockito.Mockito.when;
 class OrderPlaceTokenStoreTest {
 
     @Mock StringRedisTemplate redis;
+    @Mock RedissonClient redisson;
+    @Mock RLock lock;
     @Mock ValueOperations<String, String> values;
     JsonMapper jsonMapper = JsonMapper.builder().build();
     OrderProperties properties = new OrderProperties();
@@ -39,7 +44,7 @@ class OrderPlaceTokenStoreTest {
     void getPreview_blank_returnsEmpty() {
         when(redis.opsForValue()).thenReturn(values);
         when(values.get("demo:order:preview:t")).thenReturn(null);
-        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, jsonMapper, properties);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
         assertTrue(store.getPreview("t").isEmpty());
     }
 
@@ -54,7 +59,7 @@ class OrderPlaceTokenStoreTest {
     void getPreview_invalidJson_returnsEmpty() {
         when(redis.opsForValue()).thenReturn(values);
         when(values.get("demo:order:preview:t")).thenReturn("not-json");
-        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, jsonMapper, properties);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
         assertTrue(store.getPreview("t").isEmpty());
     }
 
@@ -63,7 +68,7 @@ class OrderPlaceTokenStoreTest {
         when(redis.opsForValue()).thenReturn(values);
         when(values.get("demo:order:preview:t"))
                 .thenReturn("{\"memberId\":1,\"items\":[{\"productId\":1,\"qty\":2,\"sellPrice\":18.00}]}");
-        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, jsonMapper, properties);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
 
         Optional<OrderPlaceTokenPayload> preview = store.getPreview("t");
 
@@ -77,7 +82,7 @@ class OrderPlaceTokenStoreTest {
 
     @Test
     void savePreview_usesSetExLua() {
-        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, jsonMapper, properties);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
         OrderPlaceTokenPayload payload = new OrderPlaceTokenPayload(
                 1L,
                 List.of(new OrderPlaceTokenPayload.Item(1L, 2, new BigDecimal("18.00"))));
@@ -99,37 +104,64 @@ class OrderPlaceTokenStoreTest {
     }
 
     @Test
-    void tryLock_returnsTrueWhenOk() {
-        when(redis.execute(any(DefaultRedisScript.class), eq(List.of("demo:order:place:lock:abc")), eq("abc"), eq("30")))
-                .thenReturn("OK");
-        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, jsonMapper, properties);
+    void tryLock_returnsTrueWhenAcquired() throws InterruptedException {
+        when(redisson.getLock("demo:order:place:lock:abc")).thenReturn(lock);
+        when(lock.tryLock(0, 30_000L, TimeUnit.MILLISECONDS)).thenReturn(true);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
 
         assertTrue(store.tryLock("abc", Duration.ofSeconds(30)));
     }
 
     @Test
-    void tryLock_returnsFalseWhenNotOk() {
-        when(redis.execute(any(DefaultRedisScript.class), eq(List.of("demo:order:place:lock:abc")), eq("abc"), eq("30")))
-                .thenReturn(null);
-        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, jsonMapper, properties);
+    void tryLock_returnsFalseWhenNotAcquired() throws InterruptedException {
+        when(redisson.getLock("demo:order:place:lock:abc")).thenReturn(lock);
+        when(lock.tryLock(0, 30_000L, TimeUnit.MILLISECONDS)).thenReturn(false);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
 
         assertFalse(store.tryLock("abc", Duration.ofSeconds(30)));
     }
 
     @Test
-    void unlock_deletesLockKey() {
-        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, jsonMapper, properties);
+    void tryLock_interrupted_returnsFalseAndRestoresInterrupt() throws InterruptedException {
+        when(redisson.getLock("demo:order:place:lock:abc")).thenReturn(lock);
+        when(lock.tryLock(0, 30_000L, TimeUnit.MILLISECONDS)).thenThrow(new InterruptedException("stop"));
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
+
+        try {
+            assertFalse(store.tryLock("abc", Duration.ofSeconds(30)));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void unlock_releasesWhenHeldByCurrentThread() {
+        when(redisson.getLock("demo:order:place:lock:abc")).thenReturn(lock);
+        when(lock.isHeldByCurrentThread()).thenReturn(true);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
 
         store.unlock("abc");
 
-        verify(redis).delete("demo:order:place:lock:abc");
+        verify(lock).unlock();
+    }
+
+    @Test
+    void unlock_skipsWhenNotHeldByCurrentThread() {
+        when(redisson.getLock("demo:order:place:lock:abc")).thenReturn(lock);
+        when(lock.isHeldByCurrentThread()).thenReturn(false);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
+
+        store.unlock("abc");
+
+        verify(lock, never()).unlock();
     }
 
     @Test
     void getResult_missing_returnsEmpty() {
         when(redis.opsForValue()).thenReturn(values);
         when(values.get("demo:order:place:result:t")).thenReturn(null);
-        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, jsonMapper, properties);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
 
         assertTrue(store.getResult("t").isEmpty());
     }
@@ -138,14 +170,14 @@ class OrderPlaceTokenStoreTest {
     void getResult_parsesLong() {
         when(redis.opsForValue()).thenReturn(values);
         when(values.get("demo:order:place:result:t")).thenReturn("55");
-        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, jsonMapper, properties);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
 
         assertEquals(Optional.of(55L), store.getResult("t"));
     }
 
     @Test
     void saveResult_usesSetExLuaWith24h() {
-        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, jsonMapper, properties);
+        OrderPlaceTokenStore store = new OrderPlaceTokenStore(redis, redisson, jsonMapper, properties);
 
         store.saveResult("abc", 55L, Duration.ofHours(24));
 
